@@ -1,0 +1,5 @@
+cat > .easignore << 'EOF'
+.cargo/
+**/.cargo/
+node_modules/
+EOF
