@@ -120,3 +120,4 @@
 /Users/olaslaptop/learningss/Moviespaces/src/backend/backend/obj/Debug/net10.0/backend.pdb
 /Users/olaslaptop/learningss/Moviespaces/src/backend/backend/obj/Debug/net10.0/backend.genruntimeconfig.cache
 /Users/olaslaptop/learningss/Moviespaces/src/backend/backend/obj/Debug/net10.0/ref/backend.dll
+/Users/olaslaptop/learningss/Moviespaces/src/backend/backend/obj/Debug/net10.0/backend.sourcelink.json

@@ -6,9 +6,10 @@ import {
   StyleSheet,
   ActivityIndicator,
   TouchableOpacity,
+  TextInput,
+  Modal,
 } from "react-native";
-import { useLocalSearchParams } from "expo-router";
-import * as WebBrowser from "expo-web-browser";
+import { useLocalSearchParams, router } from "expo-router";
 
 interface Showtime {
   start_time: string;
@@ -23,10 +24,18 @@ interface Film {
 }
 
 export default function ShowtimesScreen() {
-  const { cinemaId, cinemaName } = useLocalSearchParams();
+  const { cinemaId, cinemaName } = useLocalSearchParams<{
+    cinemaId: string;
+    cinemaName: string;
+  }>();
   const [films, setFilms] = useState<Film[]>([]);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
+  const [modalVisible, setModalVisible] = useState(false);
+  const [selectedFilm, setSelectedFilm] = useState<Film | null>(null);
+  const [selectedTime, setSelectedTime] = useState("");
+  const [hostName, setHostName] = useState("");
+  const [creating, setCreating] = useState(false);
 
   const today = new Date().toISOString().split("T")[0];
 
@@ -44,13 +53,38 @@ export default function ShowtimesScreen() {
       });
   }, []);
 
-  const handleBook = async (filmId: number, time: string) => {
-    const url = `${process.env.EXPO_PUBLIC_API_URL}/api/movieglu/booking?cinemaId=${cinemaId}&filmId=${filmId}&time=${time}&date=${today}`;
-    const res = await fetch(url);
+  const openCreateGroup = (film: Film, time: string) => {
+    setSelectedFilm(film);
+    setSelectedTime(time);
+    setModalVisible(true);
+  };
+
+  const handleCreateGroup = async () => {
+    if (!hostName.trim() || !selectedFilm) return;
+    setCreating(true);
+
+    const res = await fetch(`${process.env.EXPO_PUBLIC_API_URL}/api/group`, {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({
+        hostName,
+        cinemaId: parseInt(cinemaId),
+        cinemaName,
+        filmId: selectedFilm.film_id,
+        filmName: selectedFilm.film_name,
+        showTime: selectedTime,
+        showDate: today,
+        bookingUrl: "",
+      }),
+    });
+
     const data = await res.json();
-    if (data.booking_url) {
-      await WebBrowser.openBrowserAsync(data.booking_url);
-    }
+    setCreating(false);
+    setModalVisible(false);
+    router.push({
+      pathname: "/group",
+      params: { groupId: data.groupId, hostName },
+    });
   };
 
   if (loading) return <ActivityIndicator size="large" style={{ flex: 1 }} />;
@@ -76,7 +110,7 @@ export default function ShowtimesScreen() {
                 <TouchableOpacity
                   key={t.start_time}
                   style={styles.timeButton}
-                  onPress={() => handleBook(item.film_id, t.start_time)}
+                  onPress={() => openCreateGroup(item, t.start_time)}
                 >
                   <Text style={styles.timeText}>{t.display_start_time}</Text>
                 </TouchableOpacity>
@@ -85,6 +119,39 @@ export default function ShowtimesScreen() {
           </View>
         )}
       />
+
+      <Modal visible={modalVisible} transparent animationType="slide">
+        <View style={styles.modalOverlay}>
+          <View style={styles.modal}>
+            <Text style={styles.modalTitle}>Create a Group</Text>
+            <Text style={styles.modalSubtitle}>
+              {selectedFilm?.film_name} • {selectedTime}
+            </Text>
+            <TextInput
+              style={styles.input}
+              placeholder="Your name"
+              value={hostName}
+              onChangeText={setHostName}
+              placeholderTextColor="#888"
+            />
+            <TouchableOpacity
+              style={styles.createButton}
+              onPress={handleCreateGroup}
+              disabled={creating}
+            >
+              <Text style={styles.buttonText}>
+                {creating ? "Creating..." : "Create Group"}
+              </Text>
+            </TouchableOpacity>
+            <TouchableOpacity
+              style={styles.cancelButton}
+              onPress={() => setModalVisible(false)}
+            >
+              <Text style={styles.cancelText}>Cancel</Text>
+            </TouchableOpacity>
+          </View>
+        </View>
+      </Modal>
     </View>
   );
 }
@@ -109,4 +176,37 @@ const styles = StyleSheet.create({
   times: { flexDirection: "row", flexWrap: "wrap", gap: 8 },
   timeButton: { backgroundColor: "#007AFF", padding: 8, borderRadius: 6 },
   timeText: { color: "#fff", fontWeight: "600" },
+  modalOverlay: {
+    flex: 1,
+    backgroundColor: "rgba(0,0,0,0.5)",
+    justifyContent: "flex-end",
+  },
+  modal: {
+    backgroundColor: "#fff",
+    padding: 24,
+    borderTopLeftRadius: 16,
+    borderTopRightRadius: 16,
+  },
+  modalTitle: { fontSize: 22, fontWeight: "bold", marginBottom: 4 },
+  modalSubtitle: { fontSize: 14, color: "#666", marginBottom: 24 },
+  input: {
+    borderWidth: 1,
+    borderColor: "#E5E5E5",
+    borderRadius: 8,
+    padding: 12,
+    fontSize: 16,
+    backgroundColor: "#fafafa",
+    marginBottom: 16,
+    color: "#000",
+  },
+  createButton: {
+    backgroundColor: "#007AFF",
+    padding: 14,
+    borderRadius: 8,
+    alignItems: "center",
+    marginBottom: 12,
+  },
+  cancelButton: { alignItems: "center", padding: 8 },
+  buttonText: { color: "#fff", fontWeight: "600", fontSize: 16 },
+  cancelText: { color: "#666", fontSize: 16 },
 });
