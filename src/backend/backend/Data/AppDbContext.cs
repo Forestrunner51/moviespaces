@@ -1,4 +1,5 @@
 using Microsoft.EntityFrameworkCore;
+using Backend.Models;
 
 namespace Backend.Data;
 
@@ -18,4 +19,6 @@ public class AppDbContext : DbContext
 
     // This property automatically maps to a "MovieSpaces" table in Postgres
     public DbSet<MovieSpace> MovieSpaces => Set<MovieSpace>();
+    public DbSet<Group> Groups { get; set; }
+    public DbSet<GroupMember> GroupMembers { get; set; }
 }

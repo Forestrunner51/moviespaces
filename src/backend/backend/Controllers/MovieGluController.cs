@@ -4,7 +4,9 @@ using System.Text;
 
 namespace Backend.Controllers
 {
+
     [ApiController]
+
     [Route("api/[controller]")]
     public class MovieGluController : ControllerBase
     {
@@ -61,6 +63,26 @@ namespace Backend.Controllers
 
             return Content(content, "application/json");
         }
+        [HttpGet("filmssoon")]
+        public async Task<IActionResult> GetFilmsComingSoon()
+        {
+            var client = _httpClientFactory.CreateClient();
+            var request = new HttpRequestMessage(HttpMethod.Get,
+                "https://api-gate2.movieglu.com/filmsComingSoon/?n=10");
+
+            request.Headers.Add("x-api-key", _apiKey);
+            request.Headers.Authorization = new AuthenticationHeaderValue("Basic",
+                Convert.ToBase64String(Encoding.UTF8.GetBytes($"{_username}:{_password}")));
+            request.Headers.Add("client", "INDE_6");
+            request.Headers.Add("api-version", "v201");
+            request.Headers.Add("territory", "XX");
+            request.Headers.Add("device-datetime", DateTime.UtcNow.ToString("yyyy-MM-ddTHH:mm:ss.fffZ"));
+            request.Headers.Add("geolocation", "-22.0;14.0");
+
+            var response = await client.SendAsync(request);
+            var content = await response.Content.ReadAsStringAsync();
+            return Content(content, "application/json");
+        }
 
         [HttpGet("showtimes")]
         public async Task<IActionResult> GetShowtimes([FromQuery] int cinemaId, [FromQuery] string date)
@@ -89,12 +111,36 @@ namespace Backend.Controllers
             var content = await response.Content.ReadAsStringAsync();
             return Content(content, "application/json");
         }
-        [HttpGet("booking")]
-        public async Task<IActionResult> GetBookingUrl([FromQuery] int cinemaId, [FromQuery] int filmId, [FromQuery] string time, [FromQuery] string date)
+
+
+        [HttpGet("filmshowtimes")]
+        public async Task<IActionResult> GetFilmShowTimes([FromQuery] int filmId, [FromQuery] string date)
         {
             var client = _httpClientFactory.CreateClient();
             var request = new HttpRequestMessage(HttpMethod.Get,
-                $"https://api-gate2.movieglu.com/purchaseConfirmation/?cinema_id={cinemaId}&film_id={filmId}&show_time={time}&show_date={date}");
+                $"https://api-gate2.movieglu.com/filmShowTimes/?film_id={filmId}&date={date}&n=10");
+
+            request.Headers.Add("x-api-key", _apiKey);
+            request.Headers.Authorization = new AuthenticationHeaderValue("Basic",
+                Convert.ToBase64String(Encoding.UTF8.GetBytes($"{_username}:{_password}")));
+            request.Headers.Add("client", "INDE_6");
+            request.Headers.Add("api-version", "v201");
+            request.Headers.Add("territory", "XX");
+            request.Headers.Add("device-datetime", DateTime.UtcNow.ToString("yyyy-MM-ddTHH:mm:ss.fffZ"));
+            request.Headers.Add("geolocation", "-22.0;14.0");
+
+            var response = await client.SendAsync(request);
+            var content = await response.Content.ReadAsStringAsync();
+            Console.WriteLine($"Film showtimes response: {content}");
+            return Content(content, "application/json");
+        }
+
+        [HttpGet("films")]
+        public async Task<IActionResult> GetFilmsNowShowing()
+        {
+            var client = _httpClientFactory.CreateClient();
+            var request = new HttpRequestMessage(HttpMethod.Get,
+                "https://api-gate2.movieglu.com/filmsNowShowing/?n=10");
 
             request.Headers.Add("x-api-key", _apiKey);
             request.Headers.Authorization = new AuthenticationHeaderValue("Basic",
@@ -109,5 +155,28 @@ namespace Backend.Controllers
             var content = await response.Content.ReadAsStringAsync();
             return Content(content, "application/json");
         }
-    }
-}
+
+        [HttpGet("booking")]
+        public async Task<IActionResult> GetBookingUrl([FromQuery] int cinemaId, [FromQuery] int filmId, [FromQuery] string time, [FromQuery] string date)
+        {
+            var url = $"https://api-gate2.movieglu.com/purchaseConfirmation/?cinema_id={cinemaId}&film_id={filmId}&show_time={time}&show_date={date}";
+            Console.WriteLine($"Booking URL being sent: {url}");
+            var client = _httpClientFactory.CreateClient();
+
+            var request = new HttpRequestMessage(HttpMethod.Get, url);
+            request.Headers.Add("x-api-key", _apiKey);
+            request.Headers.Authorization = new AuthenticationHeaderValue("Basic",
+                Convert.ToBase64String(Encoding.UTF8.GetBytes($"{_username}:{_password}")));
+            request.Headers.Add("client", "INDE_6");
+            request.Headers.Add("api-version", "v201");
+            request.Headers.Add("territory", "XX");
+            request.Headers.Add("device-datetime", DateTime.UtcNow.ToString("yyyy-MM-ddTHH:mm:ss.fffZ"));
+            request.Headers.Add("geolocation", "-22.0;14.0");
+
+            var response = await client.SendAsync(request);
+            var content = await response.Content.ReadAsStringAsync();
+            Console.WriteLine($"Booking response: {content}");
+            return Content(content, "application/json");
+        }
+    } // closes class
+} //

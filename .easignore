@@ -1,5 +1,10 @@
 cat > .easignore << 'EOF'
+node_modules/
+.expo/
+ios/build/
+android/build/
 .cargo/
 **/.cargo/
-node_modules/
+bin/
+obj/
 EOF

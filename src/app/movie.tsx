@@ -11,28 +11,37 @@ import {
 } from "react-native";
 import { useLocalSearchParams, router } from "expo-router";
 
-interface Showtime {
-  start_time: string;
-  display_start_time: string;
+interface Space {
+  id: string;
+  hostName: string;
+  cinemaName: string;
+  showTime: string;
+  showDate: string;
+  members: { id: string; name: string; confirmed: boolean }[];
 }
 
-interface Film {
-  film_id: number;
-  film_name: string;
-  duration_hrs_mins: string;
-  showings: { Standard: { times: Showtime[] } };
+interface Cinema {
+  cinema_id: number;
+  cinema_name: string;
+  address: string;
+  showings: {
+    Standard: {
+      times: { start_time: string; end_time: string }[];
+    };
+  };
 }
 
-export default function ShowtimesScreen() {
-  const { cinemaId, cinemaName } = useLocalSearchParams<{
-    cinemaId: string;
-    cinemaName: string;
+export default function MovieScreen() {
+  const { filmId, filmName } = useLocalSearchParams<{
+    filmId: string;
+    filmName: string;
   }>();
-  const [films, setFilms] = useState<Film[]>([]);
+
+  const [spaces, setSpaces] = useState<Space[]>([]);
+  const [cinemas, setCinemas] = useState<Cinema[]>([]);
   const [loading, setLoading] = useState(true);
-  const [error, setError] = useState<string | null>(null);
   const [modalVisible, setModalVisible] = useState(false);
-  const [selectedFilm, setSelectedFilm] = useState<Film | null>(null);
+  const [selectedCinema, setSelectedCinema] = useState<Cinema | null>(null);
   const [selectedTime, setSelectedTime] = useState("");
   const [hostName, setHostName] = useState("");
   const [creating, setCreating] = useState(false);
@@ -40,27 +49,29 @@ export default function ShowtimesScreen() {
   const today = new Date().toISOString().split("T")[0];
 
   useEffect(() => {
-    const url = `${process.env.EXPO_PUBLIC_API_URL}/api/movieglu/showtimes?cinemaId=${cinemaId}&date=${today}`;
-    fetch(url)
-      .then((res) => res.json())
-      .then((data) => {
-        setFilms(data.films || []);
+    const base = process.env.EXPO_PUBLIC_API_URL;
+    Promise.all([
+      fetch(`${base}/api/group/search?filmId=${filmId}`).then((r) => r.json()),
+      fetch(
+        `${base}/api/movieglu/filmshowtimes?filmId=${filmId}&date=${today}`,
+      ).then((r) => r.json()),
+    ])
+      .then(([spacesData, showtimesData]) => {
+        setSpaces(spacesData);
+        setCinemas(showtimesData.cinemas || []);
         setLoading(false);
       })
-      .catch(() => {
-        setError("Could not load showtimes.");
-        setLoading(false);
-      });
+      .catch(() => setLoading(false));
   }, []);
 
-  const openCreateGroup = (film: Film, time: string) => {
-    setSelectedFilm(film);
+  const openCreateGroup = (cinema: Cinema, time: string) => {
+    setSelectedCinema(cinema);
     setSelectedTime(time);
     setModalVisible(true);
   };
 
-  const handleCreateGroup = async () => {
-    if (!hostName.trim() || !selectedFilm) return;
+  const handleCreateSpace = async () => {
+    if (!hostName.trim() || !selectedCinema) return;
     setCreating(true);
 
     const res = await fetch(`${process.env.EXPO_PUBLIC_API_URL}/api/group`, {
@@ -68,10 +79,10 @@ export default function ShowtimesScreen() {
       headers: { "Content-Type": "application/json" },
       body: JSON.stringify({
         hostName,
-        cinemaId: parseInt(cinemaId),
-        cinemaName,
-        filmId: selectedFilm.film_id,
-        filmName: selectedFilm.film_name,
+        cinemaId: selectedCinema.cinema_id,
+        cinemaName: selectedCinema.cinema_name,
+        filmId: parseInt(filmId),
+        filmName,
         showTime: selectedTime,
         showDate: today,
         bookingUrl: "",
@@ -88,31 +99,53 @@ export default function ShowtimesScreen() {
   };
 
   if (loading) return <ActivityIndicator size="large" style={{ flex: 1 }} />;
-  if (error)
-    return (
-      <View style={styles.center}>
-        <Text>{error}</Text>
-      </View>
-    );
 
   return (
     <View style={styles.container}>
-      <Text style={styles.title}>{cinemaName}</Text>
+      <Text style={styles.title}>{filmName}</Text>
+
+      {spaces.length > 0 && (
+        <View style={styles.section}>
+          <Text style={styles.sectionTitle}>Open Spaces ({spaces.length})</Text>
+          {spaces.map((space) => (
+            <TouchableOpacity
+              key={space.id}
+              style={styles.spaceCard}
+              onPress={() =>
+                router.push({
+                  pathname: "/group",
+                  params: { groupId: space.id, hostName: "" },
+                })
+              }
+            >
+              <Text style={styles.spaceHost}>Hosted by {space.hostName}</Text>
+              <Text style={styles.spaceDetails}>
+                {space.cinemaName} • {space.showTime}
+              </Text>
+              <Text style={styles.spaceMembers}>
+                {space.members.length} member(s)
+              </Text>
+            </TouchableOpacity>
+          ))}
+        </View>
+      )}
+
+      <Text style={styles.sectionTitle}>Showtimes</Text>
       <FlatList
-        data={films}
-        keyExtractor={(item) => item.film_id.toString()}
+        data={cinemas}
+        keyExtractor={(item) => item.cinema_id.toString()}
         renderItem={({ item }) => (
-          <View style={styles.card}>
-            <Text style={styles.filmName}>{item.film_name}</Text>
-            <Text style={styles.duration}>{item.duration_hrs_mins}</Text>
+          <View style={styles.cinemaCard}>
+            <Text style={styles.cinemaName}>{item.cinema_name}</Text>
+            <Text style={styles.cinemaAddress}>{item.address}</Text>
             <View style={styles.times}>
-              {item.showings.Standard.times.map((t) => (
+              {item.showings.Standard.times.slice(0, 6).map((t) => (
                 <TouchableOpacity
                   key={t.start_time}
                   style={styles.timeButton}
                   onPress={() => openCreateGroup(item, t.start_time)}
                 >
-                  <Text style={styles.timeText}>{t.display_start_time}</Text>
+                  <Text style={styles.timeText}>{t.start_time}</Text>
                 </TouchableOpacity>
               ))}
             </View>
@@ -123,9 +156,9 @@ export default function ShowtimesScreen() {
       <Modal visible={modalVisible} transparent animationType="slide">
         <View style={styles.modalOverlay}>
           <View style={styles.modal}>
-            <Text style={styles.modalTitle}>Create a Group</Text>
+            <Text style={styles.modalTitle}>Create a Space</Text>
             <Text style={styles.modalSubtitle}>
-              {selectedFilm?.film_name} • {selectedTime}
+              {filmName} • {selectedTime} at {selectedCinema?.cinema_name}
             </Text>
             <TextInput
               style={styles.input}
@@ -136,11 +169,11 @@ export default function ShowtimesScreen() {
             />
             <TouchableOpacity
               style={styles.createButton}
-              onPress={handleCreateGroup}
+              onPress={handleCreateSpace}
               disabled={creating}
             >
               <Text style={styles.buttonText}>
-                {creating ? "Creating..." : "Create Group"}
+                {creating ? "Creating..." : "Create Space"}
               </Text>
             </TouchableOpacity>
             <TouchableOpacity
@@ -163,19 +196,41 @@ const styles = StyleSheet.create({
     padding: 16,
     paddingTop: 60,
   },
-  title: { fontSize: 22, fontWeight: "bold", marginBottom: 16 },
-  center: { flex: 1, justifyContent: "center", alignItems: "center" },
-  card: {
+  title: {
+    fontSize: 24,
+    fontWeight: "bold",
+    color: "#1A1A1A",
+    marginBottom: 16,
+  },
+  section: { marginBottom: 16 },
+  sectionTitle: {
+    fontSize: 18,
+    fontWeight: "700",
+    color: "#1A1A1A",
+    marginBottom: 12,
+  },
+  spaceCard: {
+    backgroundColor: "#fff",
+    padding: 12,
+    borderRadius: 8,
+    marginBottom: 8,
+    borderLeftWidth: 3,
+    borderLeftColor: "#007AFF",
+  },
+  spaceHost: { fontSize: 14, fontWeight: "600", color: "#333" },
+  spaceDetails: { fontSize: 13, color: "#666", marginTop: 2 },
+  spaceMembers: { fontSize: 12, color: "#007AFF", marginTop: 4 },
+  cinemaCard: {
     backgroundColor: "#fff",
     padding: 16,
     borderRadius: 8,
     marginBottom: 12,
   },
-  filmName: { fontSize: 18, fontWeight: "bold", color: "#333" },
-  duration: { fontSize: 14, color: "#666", marginTop: 4, marginBottom: 8 },
+  cinemaName: { fontSize: 16, fontWeight: "700", color: "#333" },
+  cinemaAddress: { fontSize: 13, color: "#666", marginBottom: 8 },
   times: { flexDirection: "row", flexWrap: "wrap", gap: 8 },
   timeButton: { backgroundColor: "#007AFF", padding: 8, borderRadius: 6 },
-  timeText: { color: "#fff", fontWeight: "600" },
+  timeText: { color: "#fff", fontWeight: "600", fontSize: 13 },
   modalOverlay: {
     flex: 1,
     backgroundColor: "rgba(0,0,0,0.5)",
