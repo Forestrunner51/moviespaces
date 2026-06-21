@@ -1,139 +1,104 @@
 import { useState, useEffect } from "react";
 import {
-  StyleSheet,
-  Text,
   View,
-  TextInput,
-  TouchableOpacity,
+  Text,
   FlatList,
+  StyleSheet,
   ActivityIndicator,
+  TouchableOpacity,
+  TextInput,
+  Image,
 } from "react-native";
+import { router } from "expo-router";
 
-interface MovieSpace {
-  id: number;
-  title: string;
-  description: string;
-  createdAt: string;
+interface Film {
+  film_id: number;
+  film_name: string;
+  synopsis_long: string;
+  images: {
+    poster: {
+      1: {
+        medium: {
+          film_image: string;
+        };
+      };
+    };
+  };
 }
 
-const BACKEND_URL = `${process.env.EXPO_PUBLIC_API_URL}/api/moviespaces`;
-
-export default function Page() {
-  // Form States
-  const [title, setTitle] = useState("");
-  const [description, setDescription] = useState("");
-  const [submitting, setSubmitting] = useState(false);
-
-  // Data States
-  const [spaces, setSpaces] = useState<MovieSpace[]>([]);
+export default function HomeScreen() {
+  const [films, setFilms] = useState<Film[]>([]);
+  const [filtered, setFiltered] = useState<Film[]>([]);
   const [loading, setLoading] = useState(true);
-
-  // Fetch spaces on load
-  const fetchSpaces = async () => {
-    try {
-      const response = await fetch(BACKEND_URL);
-      const data = await response.json();
-      setSpaces(data);
-    } catch (error) {
-      console.error("Error fetching spaces:", error);
-    } finally {
-      setLoading(false);
-    }
-  };
+  const [search, setSearch] = useState("");
 
   useEffect(() => {
-    fetchSpaces();
+    fetch(`${process.env.EXPO_PUBLIC_API_URL}/api/movieglu/films`)
+      .then((res) => res.json())
+      .then((data) => {
+        setFilms(data.films || []);
+        setFiltered(data.films || []);
+        setLoading(false);
+      })
+      .catch(() => setLoading(false));
   }, []);
 
-  // Handle Form Submit
-  const handleSubmit = async () => {
-    if (!title.trim() || !description.trim()) return;
-
-    setSubmitting(true);
-    try {
-      const response = await fetch(BACKEND_URL, {
-        method: "POST",
-        headers: {
-          "Content-Type": "application/json",
-        },
-        body: JSON.stringify({ title, description }),
-      });
-
-      if (response.ok) {
-        setTitle("");
-        setDescription("");
-        fetchSpaces(); // Refresh the list
-      }
-    } catch (error) {
-      console.error("Error saving space:", error);
-    } finally {
-      setSubmitting(false);
+  useEffect(() => {
+    if (!search.trim()) {
+      setFiltered(films);
+    } else {
+      setFiltered(
+        films.filter((f) =>
+          f.film_name.toLowerCase().includes(search.toLowerCase()),
+        ),
+      );
     }
-  };
+  }, [search, films]);
+
+  if (loading) return <ActivityIndicator size="large" style={{ flex: 1 }} />;
 
   return (
     <View style={styles.container}>
-      <Text style={styles.headerTitle}>Movie Meetup Spaces</Text>
-
-      {/* Input Form Section */}
-      <View style={styles.formContainer}>
-        <TextInput
-          style={styles.input}
-          placeholder="Enter Space Title..."
-          value={title}
-          onChangeText={setTitle}
-          placeholderTextColor="#888"
-        />
-        <TextInput
-          style={[styles.input, styles.textArea]}
-          placeholder="Enter Description..."
-          value={description}
-          onChangeText={setDescription}
-          multiline
-          numberOfLines={3}
-          placeholderTextColor="#888"
-        />
-        <TouchableOpacity
-          style={styles.button}
-          onPress={handleSubmit}
-          disabled={submitting}
-        >
-          <Text style={styles.buttonText}>
-            {submitting ? "Saving..." : "Create Space"}
-          </Text>
-        </TouchableOpacity>
-      </View>
-
-      {/* List Section */}
-      <Text style={styles.sectionTitle}>Active Spaces</Text>
-
-      {loading ? (
-        <ActivityIndicator
-          size="large"
-          color="#007AFF"
-          style={{ marginTop: 20 }}
-        />
-      ) : (
-        <FlatList
-          data={spaces}
-          keyExtractor={(item) => item.id.toString()}
-          contentContainerStyle={styles.listContainer}
-          renderItem={({ item }) => (
-            <View style={styles.spaceCard}>
-              <Text style={styles.spaceTitle}>{item.title}</Text>
-              <Text style={styles.spaceDescription}>{item.description}</Text>
-              <Text style={styles.spaceDate}>
-                {new Date(item.createdAt).toLocaleDateString()}
+      <Text style={styles.title}>MovieSpace</Text>
+      <TextInput
+        style={styles.search}
+        placeholder="Search for a movie..."
+        value={search}
+        onChangeText={setSearch}
+        placeholderTextColor="#888"
+      />
+      <FlatList
+        data={filtered}
+        keyExtractor={(item) => item.film_id.toString()}
+        renderItem={({ item }) => (
+          <TouchableOpacity
+            style={styles.card}
+            onPress={() =>
+              router.push({
+                pathname: "/movie",
+                params: {
+                  filmId: item.film_id,
+                  filmName: item.film_name,
+                  posterUrl:
+                    item.images?.poster?.["1"]?.medium?.film_image ?? "",
+                },
+              })
+            }
+          >
+            <Image
+              source={{ uri: item.images?.poster?.["1"]?.medium?.film_image }}
+              style={styles.poster}
+            />
+            <View style={styles.info}>
+              <Text style={styles.filmName}>{item.film_name}</Text>
+              <Text style={styles.synopsis} numberOfLines={2}>
+                {item.synopsis_long?.replace(/<[^>]*>/g, "")}
               </Text>
+              <Text style={styles.cta}>View Spaces & Showtimes →</Text>
             </View>
-          )}
-          ListEmptyComponent={
-            <Text style={styles.emptyText}>
-              No spaces created yet. Be the first!
-            </Text>
-          }
-        />
-      )}
+          </TouchableOpacity>
+        )}
+      />
     </View>
   );
 }
@@ -141,90 +106,46 @@ export default function Page() {
 const styles = StyleSheet.create({
   container: {
     flex: 1,
-    backgroundColor: "#F8F9FA",
+    backgroundColor: "#f5f5f5",
     paddingTop: 60,
-    paddingHorizontal: 20,
+    paddingHorizontal: 16,
   },
-  headerTitle: {
+  title: {
     fontSize: 28,
     fontWeight: "bold",
     color: "#1A1A1A",
-    marginBottom: 20,
+    marginBottom: 16,
   },
-  formContainer: {
-    backgroundColor: "#FFF",
-    padding: 16,
-    borderRadius: 12,
-    shadowColor: "#000",
-    shadowOffset: { width: 0, height: 2 },
-    shadowOpacity: 0.05,
-    shadowRadius: 8,
-    elevation: 2,
-    marginBottom: 24,
-  },
-  input: {
-    borderWidth: 1,
-    borderColor: "#E5E5E5",
-    borderRadius: 8,
+  search: {
+    backgroundColor: "#fff",
+    borderRadius: 10,
     padding: 12,
     fontSize: 16,
-    backgroundColor: "#FAFAFA",
-    marginBottom: 12,
+    marginBottom: 16,
+    borderWidth: 1,
+    borderColor: "#E5E5E5",
     color: "#000",
   },
-  textArea: {
-    height: 80,
-    textAlignVertical: "top",
+  card: {
+    backgroundColor: "#fff",
+    borderRadius: 12,
+    marginBottom: 16,
+    flexDirection: "row",
+    overflow: "hidden",
+    shadowColor: "#000",
+    shadowOffset: { width: 0, height: 2 },
+    shadowOpacity: 0.08,
+    shadowRadius: 4,
+    elevation: 2,
   },
-  button: {
-    backgroundColor: "#007AFF",
-    padding: 14,
-    borderRadius: 8,
-    alignItems: "center",
-  },
-  buttonText: {
-    color: "#FFF",
+  poster: { width: 90, height: 130 },
+  info: { flex: 1, padding: 12, justifyContent: "space-between" },
+  filmName: {
     fontSize: 16,
-    fontWeight: "600",
-  },
-  sectionTitle: {
-    fontSize: 20,
     fontWeight: "700",
     color: "#1A1A1A",
-    marginBottom: 12,
-  },
-  listContainer: {
-    paddingBottom: 40,
-  },
-  spaceCard: {
-    backgroundColor: "#FFF",
-    padding: 16,
-    borderRadius: 10,
-    marginBottom: 12,
-    borderWidth: 1,
-    borderColor: "#EAEAEA",
-  },
-  spaceTitle: {
-    fontSize: 18,
-    fontWeight: "600",
-    color: "#333",
     marginBottom: 4,
   },
-  spaceDescription: {
-    fontSize: 14,
-    color: "#666",
-    marginBottom: 8,
-    lineHeight: 20,
-  },
-  spaceDate: {
-    fontSize: 12,
-    color: "#999",
-    textAlign: "right",
-  },
-  emptyText: {
-    textAlign: "center",
-    color: "#888",
-    marginTop: 20,
-    fontSize: 16,
-  },
+  synopsis: { fontSize: 13, color: "#666", lineHeight: 18, flex: 1 },
+  cta: { fontSize: 13, color: "#007AFF", fontWeight: "600", marginTop: 8 },
 });

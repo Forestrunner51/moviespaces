@@ -7,6 +7,7 @@ import {
   TouchableOpacity,
   ActivityIndicator,
   Share,
+  Alert,
 } from "react-native";
 import { useLocalSearchParams, router } from "expo-router";
 import * as WebBrowser from "expo-web-browser";
@@ -16,11 +17,12 @@ interface Member {
   name: string;
   confirmed: boolean;
 }
-
 interface Group {
   id: string;
   hostName: string;
+  cinemaId: number;
   cinemaName: string;
+  filmId: number;
   filmName: string;
   showTime: string;
   showDate: string;
@@ -70,33 +72,23 @@ export default function GroupScreen() {
   };
 
   const handleBook = async () => {
-    // 1. Grab all members who haven't confirmed yet
-    const pendingMembers = groupMembers.filter((m) => !m.confirmed);
+    if (!group) return;
 
-    // 2. If there are pending members, block the action and show an alert
-    if (pendingMembers.length > 0) {
-      const names = pendingMembers.map((m) => m.name).join(", ");
+    // Mark group as booked
+    await fetch(
+      `${process.env.EXPO_PUBLIC_API_URL}/api/group/${groupId}/book`,
+      {
+        method: "POST",
+      },
+    );
 
-      Alert.alert(
-        "Booking Locked",
-        `Everyone needs to accept or decline before booking.\n\nWaiting on: ${names}`,
-        [{ text: "Got it", style: "cancel" }],
-      );
-      return; // Stop execution here
-    }
+    await fetchGroup();
 
-    // 3. If everyone is confirmed, proceed with booking
-    if (group?.bookingUrl) {
-      try {
-        await fetch(
-          `${process.env.EXPO_PUBLIC_API_URL}/api/group/${groupId}/book`,
-          { method: "POST" },
-        );
-        await WebBrowser.openBrowserAsync(group.bookingUrl);
-      } catch (err) {
-        console.error("Booking failed:", err);
-      }
-    }
+    Alert.alert(
+      "🎉 Group Confirmed!",
+      `Your group is booked for ${group.filmName} at ${group.showTime} on ${group.showDate}.\n\nHead to ${group.cinemaName} to purchase tickets!`,
+      [{ text: "OK" }],
+    );
   };
 
   // 1. Initial Loading State Guard

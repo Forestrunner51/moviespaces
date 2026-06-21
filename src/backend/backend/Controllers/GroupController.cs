@@ -2,6 +2,7 @@ using Microsoft.AspNetCore.Mvc;
 using Microsoft.EntityFrameworkCore;
 using Backend.Data;
 using Backend.Models;
+using Microsoft.EntityFrameworkCore;
 
 namespace Backend.Controllers
 {
@@ -44,6 +45,18 @@ namespace Backend.Controllers
             await _db.SaveChangesAsync();
 
             return Ok(new { groupId = group.Id });
+        }
+
+        [HttpGet("search")]
+        public async Task<IActionResult> SearchSpaces([FromQuery] int filmId)
+        {
+            var spaces = await _db.Groups
+                .Include(g => g.Members)
+                .Where(g => g.FilmId == filmId && g.Status == "pending")
+                .OrderByDescending(g => g.CreatedAt)
+                .ToListAsync();
+
+            return Ok(spaces);
         }
 
         // Get group details

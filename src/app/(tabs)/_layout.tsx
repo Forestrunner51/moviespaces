@@ -12,6 +12,7 @@ export default function TabsLayout() {
       <Tabs.Screen name="group" options={{ title: "Movie Group" }} />
       <Tabs.Screen name="join" options={{ title: "Join Group" }} />
       <Tabs.Screen name="confirm" options={{ title: "Confirm" }} />
+      <Tabs.Screen name="movie" options={{ title: "Movie" }} />
     </Tabs>
   );
 }

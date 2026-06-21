@@ -1,203 +1,249 @@
-import { Image } from "expo-image";
-import { SymbolView } from "expo-symbols";
-import { Platform, Pressable, ScrollView, StyleSheet } from "react-native";
-import { useSafeAreaInsets } from "react-native-safe-area-context";
-
-import { ExternalLink } from "@/frontend/components/external-link";
-import { ThemedText } from "@/frontend/components/themed-text";
-import { ThemedView } from "@/frontend/components/themed-view";
-import { Collapsible } from "@/frontend/components/ui/collapsible";
-import { WebBadge } from "@/frontend/components/web-badge";
+import { useState, useEffect } from "react";
 import {
-  BottomTabInset,
-  MaxContentWidth,
-  Spacing,
-} from "@/frontend/constants/theme";
-import { useTheme } from "@/frontend/hooks/use-theme";
+  View,
+  Text,
+  FlatList,
+  StyleSheet,
+  ActivityIndicator,
+  TouchableOpacity,
+  Image,
+} from "react-native";
+import { router } from "expo-router";
+import AsyncStorage from "@react-native-async-storage/async-storage";
 
-export default function TabTwoScreen() {
-  const safeAreaInsets = useSafeAreaInsets();
-  const insets = {
-    ...safeAreaInsets,
-    bottom: safeAreaInsets.bottom + BottomTabInset + Spacing.three,
+const GENRES = [
+  { id: 1, name: "Drama", emoji: "🎭" },
+  { id: 2, name: "Thriller", emoji: "😱" },
+  { id: 3, name: "Comedy", emoji: "😂" },
+  { id: 4, name: "Romance", emoji: "❤️" },
+  { id: 5, name: "Action/Adventure", emoji: "💥" },
+  { id: 6, name: "Horror", emoji: "👻" },
+  { id: 7, name: "Sci-Fi", emoji: "🚀" },
+  { id: 8, name: "Documentary", emoji: "🎥" },
+  { id: 9, name: "International", emoji: "🌍" },
+];
+
+interface Film {
+  film_id: number;
+  film_name: string;
+  synopsis_long: string;
+  release_dates: { release_date: string }[];
+  images: {
+    poster: {
+      1: { medium: { film_image: string } };
+    };
   };
-  const theme = useTheme();
+  age_rating: { rating: string }[];
+}
 
-  const contentPlatformStyle = Platform.select({
-    android: {
-      paddingTop: insets.top,
-      paddingLeft: insets.left,
-      paddingRight: insets.right,
-      paddingBottom: insets.bottom,
-    },
-    web: {
-      paddingTop: Spacing.six,
-      paddingBottom: Spacing.four,
-    },
-  });
+export default function ExploreScreen() {
+  const [selectedGenres, setSelectedGenres] = useState<number[]>([]);
+  const [films, setFilms] = useState<Film[]>([]);
+  const [loading, setLoading] = useState(true);
+  const [showGenrePicker, setShowGenrePicker] = useState(false);
+
+  useEffect(() => {
+    loadGenres();
+    fetchFilms();
+  }, []);
+
+  const loadGenres = async () => {
+    const saved = await AsyncStorage.getItem("selectedGenres");
+    if (saved) setSelectedGenres(JSON.parse(saved));
+    else setShowGenrePicker(true); // show picker on first visit
+  };
+
+  const fetchFilms = async () => {
+    const res = await fetch(
+      `${process.env.EXPO_PUBLIC_API_URL}/api/movieglu/filmssoon`,
+    );
+    const data = await res.json();
+    setFilms(data.films || []);
+    setLoading(false);
+  };
+
+  const toggleGenre = (id: number) => {
+    setSelectedGenres((prev) =>
+      prev.includes(id) ? prev.filter((g) => g !== id) : [...prev, id],
+    );
+  };
+
+  const saveGenres = async () => {
+    await AsyncStorage.setItem(
+      "selectedGenres",
+      JSON.stringify(selectedGenres),
+    );
+    setShowGenrePicker(false);
+  };
+
+  if (showGenrePicker) {
+    return (
+      <View style={styles.container}>
+        <Text style={styles.title}>What do you like? 🎬</Text>
+        <Text style={styles.subtitle}>
+          Pick your favourite genres and we'll recommend films for you.
+        </Text>
+        <View style={styles.genreGrid}>
+          {GENRES.map((genre) => (
+            <TouchableOpacity
+              key={genre.id}
+              style={[
+                styles.genreChip,
+                selectedGenres.includes(genre.id) && styles.genreChipSelected,
+              ]}
+              onPress={() => toggleGenre(genre.id)}
+            >
+              <Text style={styles.genreEmoji}>{genre.emoji}</Text>
+              <Text
+                style={[
+                  styles.genreName,
+                  selectedGenres.includes(genre.id) && styles.genreNameSelected,
+                ]}
+              >
+                {genre.name}
+              </Text>
+            </TouchableOpacity>
+          ))}
+        </View>
+        <TouchableOpacity
+          style={[
+            styles.saveButton,
+            selectedGenres.length === 0 && styles.disabled,
+          ]}
+          onPress={saveGenres}
+          disabled={selectedGenres.length === 0}
+        >
+          <Text style={styles.saveButtonText}>See Recommendations</Text>
+        </TouchableOpacity>
+      </View>
+    );
+  }
+
+  if (loading) return <ActivityIndicator size="large" style={{ flex: 1 }} />;
 
   return (
-    <ScrollView
-      style={[styles.scrollView, { backgroundColor: theme.background }]}
-      contentInset={insets}
-      contentContainerStyle={[styles.contentContainer, contentPlatformStyle]}
-    >
-      <ThemedView style={styles.container}>
-        <ThemedView style={styles.titleContainer}>
-          <ThemedText type="subtitle">Explore</ThemedText>
-          <ThemedText style={styles.centerText} themeColor="textSecondary">
-            This starter app includes example{"\n"}code to help you get started.
-          </ThemedText>
-
-          <ExternalLink href="https://docs.expo.dev" asChild>
-            <Pressable style={({ pressed }) => pressed && styles.pressed}>
-              <ThemedView type="backgroundElement" style={styles.linkButton}>
-                <ThemedText type="link">Expo documentation</ThemedText>
-                <SymbolView
-                  tintColor={theme.text}
-                  name={{
-                    ios: "arrow.up.right.square",
-                    android: "link",
-                    web: "link",
-                  }}
-                  size={12}
-                />
-              </ThemedView>
-            </Pressable>
-          </ExternalLink>
-        </ThemedView>
-
-        <ThemedView style={styles.sectionsWrapper}>
-          <Collapsible title="File-based routing">
-            <ThemedText type="small">
-              This app has two screens:{" "}
-              <ThemedText type="code">src/app/index.tsx</ThemedText> and{" "}
-              <ThemedText type="code">src/app/explore.tsx</ThemedText>
-            </ThemedText>
-            <ThemedText type="small">
-              The layout file in{" "}
-              <ThemedText type="code">src/app/_layout.tsx</ThemedText> sets up
-              the tab navigator.
-            </ThemedText>
-            <ExternalLink href="https://docs.expo.dev/router/introduction">
-              <ThemedText type="linkPrimary">Learn more</ThemedText>
-            </ExternalLink>
-          </Collapsible>
-
-          <Collapsible title="Android, iOS, and web support">
-            <ThemedView
-              type="backgroundElement"
-              style={styles.collapsibleContent}
-            >
-              <ThemedText type="small">
-                You can open this project on Android, iOS, and the web. To open
-                the web version, press{" "}
-                <ThemedText type="smallBold">w</ThemedText> in the terminal
-                running this project.
-              </ThemedText>
-              <Image
-                source={require("@/assets/images/tutorial-web.png")}
-                style={styles.imageTutorial}
-              />
-            </ThemedView>
-          </Collapsible>
-
-          <Collapsible title="Images">
-            <ThemedText type="small">
-              For static images, you can use the{" "}
-              <ThemedText type="code">@2x</ThemedText> and{" "}
-              <ThemedText type="code">@3x</ThemedText> suffixes to provide files
-              for different screen densities.
-            </ThemedText>
+    <View style={styles.container}>
+      <View style={styles.header}>
+        <Text style={styles.title}>Coming Soon 🍿</Text>
+        <TouchableOpacity onPress={() => setShowGenrePicker(true)}>
+          <Text style={styles.editGenres}>Edit Taste</Text>
+        </TouchableOpacity>
+      </View>
+      <Text style={styles.subtitle}>
+        Based on your taste:{" "}
+        {selectedGenres
+          .map((id) => GENRES.find((g) => g.id === id)?.emoji)
+          .join(" ")}
+      </Text>
+      <FlatList
+        data={films}
+        keyExtractor={(item) => item.film_id.toString()}
+        renderItem={({ item }) => (
+          <TouchableOpacity
+            style={styles.card}
+            onPress={() =>
+              router.push({
+                pathname: "/movie",
+                params: {
+                  filmId: item.film_id,
+                  filmName: item.film_name,
+                  posterUrl:
+                    item.images?.poster?.["1"]?.medium?.film_image ?? "",
+                },
+              })
+            }
+          >
             <Image
-              source={require("@/assets/images/react-logo.png")}
-              style={styles.imageReact}
+              source={{ uri: item.images?.poster?.["1"]?.medium?.film_image }}
+              style={styles.poster}
             />
-            <ExternalLink href="https://reactnative.dev/docs/images">
-              <ThemedText type="linkPrimary">Learn more</ThemedText>
-            </ExternalLink>
-          </Collapsible>
-
-          <Collapsible title="Light and dark mode components">
-            <ThemedText type="small">
-              This template has light and dark mode support. The{" "}
-              <ThemedText type="code">useColorScheme()</ThemedText> hook lets
-              you inspect what the user&apos;s current color scheme is, and so
-              you can adjust UI colors accordingly.
-            </ThemedText>
-            <ExternalLink href="https://docs.expo.dev/develop/user-interface/color-themes/">
-              <ThemedText type="linkPrimary">Learn more</ThemedText>
-            </ExternalLink>
-          </Collapsible>
-
-          <Collapsible title="Animations">
-            <ThemedText type="small">
-              This template includes an example of an animated component. The{" "}
-              <ThemedText type="code">
-                src/components/ui/collapsible.tsx
-              </ThemedText>{" "}
-              component uses the powerful{" "}
-              <ThemedText type="code">react-native-reanimated</ThemedText>{" "}
-              library to animate opening this hint.
-            </ThemedText>
-          </Collapsible>
-        </ThemedView>
-        {Platform.OS === "web" && <WebBadge />}
-      </ThemedView>
-    </ScrollView>
+            <View style={styles.info}>
+              <Text style={styles.filmName}>{item.film_name}</Text>
+              <Text style={styles.releaseDate}>
+                📅 {item.release_dates?.[0]?.release_date}
+              </Text>
+              <Text style={styles.rating}>{item.age_rating?.[0]?.rating}</Text>
+              <Text style={styles.synopsis} numberOfLines={2}>
+                {item.synopsis_long?.replace(/<[^>]*>/g, "")}
+              </Text>
+              <Text style={styles.cta}>View Spaces & Showtimes →</Text>
+            </View>
+          </TouchableOpacity>
+        )}
+        ListEmptyComponent={
+          <Text style={styles.empty}>No films coming soon right now.</Text>
+        }
+      />
+    </View>
   );
 }
 
 const styles = StyleSheet.create({
-  scrollView: {
-    flex: 1,
-  },
-  contentContainer: {
-    flexDirection: "row",
-    justifyContent: "center",
-  },
   container: {
-    maxWidth: MaxContentWidth,
-    flexGrow: 1,
+    flex: 1,
+    backgroundColor: "#f5f5f5",
+    paddingTop: 60,
+    paddingHorizontal: 16,
   },
-  titleContainer: {
-    gap: Spacing.three,
-    alignItems: "center",
-    paddingHorizontal: Spacing.four,
-    paddingVertical: Spacing.six,
-  },
-  centerText: {
-    textAlign: "center",
-  },
-  pressed: {
-    opacity: 0.7,
-  },
-  linkButton: {
+  header: {
     flexDirection: "row",
-    paddingHorizontal: Spacing.four,
-    paddingVertical: Spacing.two,
-    borderRadius: Spacing.five,
-    justifyContent: "center",
-    gap: Spacing.one,
+    justifyContent: "space-between",
+    alignItems: "center",
+    marginBottom: 4,
+  },
+  title: { fontSize: 28, fontWeight: "bold", color: "#1A1A1A" },
+  subtitle: { fontSize: 14, color: "#666", marginBottom: 16 },
+  editGenres: { color: "#007AFF", fontWeight: "600" },
+  genreGrid: {
+    flexDirection: "row",
+    flexWrap: "wrap",
+    gap: 12,
+    marginBottom: 24,
+  },
+  genreChip: {
+    width: "45%",
+    backgroundColor: "#fff",
+    borderRadius: 12,
+    padding: 16,
+    alignItems: "center",
+    borderWidth: 2,
+    borderColor: "#E5E5E5",
+  },
+  genreChipSelected: { borderColor: "#007AFF", backgroundColor: "#EBF5FF" },
+  genreEmoji: { fontSize: 28, marginBottom: 8 },
+  genreName: { fontSize: 14, fontWeight: "600", color: "#333" },
+  genreNameSelected: { color: "#007AFF" },
+  saveButton: {
+    backgroundColor: "#007AFF",
+    padding: 16,
+    borderRadius: 12,
     alignItems: "center",
   },
-  sectionsWrapper: {
-    gap: Spacing.five,
-    paddingHorizontal: Spacing.four,
-    paddingTop: Spacing.three,
+  saveButtonText: { color: "#fff", fontWeight: "700", fontSize: 16 },
+  disabled: { backgroundColor: "#ccc" },
+  card: {
+    backgroundColor: "#fff",
+    borderRadius: 12,
+    marginBottom: 16,
+    flexDirection: "row",
+    overflow: "hidden",
+    shadowColor: "#000",
+    shadowOffset: { width: 0, height: 2 },
+    shadowOpacity: 0.08,
+    shadowRadius: 4,
+    elevation: 2,
   },
-  collapsibleContent: {
-    alignItems: "center",
+  poster: { width: 90, height: 130 },
+  info: { flex: 1, padding: 12 },
+  filmName: {
+    fontSize: 16,
+    fontWeight: "700",
+    color: "#1A1A1A",
+    marginBottom: 4,
   },
-  imageTutorial: {
-    width: "100%",
-    aspectRatio: 296 / 171,
-    borderRadius: Spacing.three,
-    marginTop: Spacing.two,
-  },
-  imageReact: {
-    width: 100,
-    height: 100,
-    alignSelf: "center",
-  },
+  releaseDate: { fontSize: 12, color: "#666", marginBottom: 2 },
+  rating: { fontSize: 12, color: "#999", marginBottom: 4 },
+  synopsis: { fontSize: 13, color: "#666", lineHeight: 18 },
+  cta: { fontSize: 13, color: "#007AFF", fontWeight: "600", marginTop: 8 },
+  empty: { textAlign: "center", color: "#888", marginTop: 40, fontSize: 16 },
 });
