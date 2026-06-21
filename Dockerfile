@@ -4,8 +4,11 @@ WORKDIR /App
 
 # Copy everything and restore dependencies
 COPY . ./
-RUN dotnet restore
+# Point directly to your deeply nested project file
+RUN dotnet restore "src/backend/backend/backend.csproj"
 
+# Build and publish targeting that same folder
+RUN dotnet publish "src/backend/backend/backend.csproj" -c Release -o out
 # Build and publish a release
 RUN dotnet publish -c Release -o out
 
