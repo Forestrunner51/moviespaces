@@ -9,8 +9,6 @@ RUN dotnet restore "src/backend/backend/backend.csproj"
 
 # Build and publish targeting that same folder
 RUN dotnet publish "src/backend/backend/backend.csproj" -c Release -o out
-# Build and publish a release
-RUN dotnet publish -c Release -o out
 
 # 2. Runtime Stage
 FROM mcr.microsoft.com/dotnet/aspnet:10.0
