@@ -38,6 +38,7 @@
   },
   "scripts": {
     "start": "expo start",
+    "start:phone": "EXPO_PACKAGER_HOSTNAME=$(ipconfig getifaddr en0) npx expo start --clear",
     "reset-project": "node ./scripts/reset-project.js",
     "android": "expo run:android",
     "ios": "expo run:ios",

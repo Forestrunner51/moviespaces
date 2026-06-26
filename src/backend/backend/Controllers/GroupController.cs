@@ -59,6 +59,17 @@ namespace Backend.Controllers
             return Ok(spaces);
         }
 
+        [HttpGet("mine")]
+        public async Task<IActionResult> GetMySpaces([FromQuery] string name)
+        {
+            var spaces = await _db.Groups
+                .Include(g => g.Members)
+                .Where(g => g.Members.Any(m => m.Name == name))
+                .OrderByDescending(g => g.CreatedAt)
+                .ToListAsync();
+
+            return Ok(spaces);
+        }
         // Get group details
         [HttpGet("{id}")]
         public async Task<IActionResult> GetGroup(Guid id)
