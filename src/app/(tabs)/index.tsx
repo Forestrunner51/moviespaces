@@ -10,6 +10,7 @@ import {
   Image,
 } from "react-native";
 import { router } from "expo-router";
+import { authFetch } from "../../frontend/services/api";
 
 interface Film {
   film_id: number;
@@ -33,14 +34,33 @@ export default function HomeScreen() {
   const [search, setSearch] = useState("");
 
   useEffect(() => {
-    fetch(`${process.env.EXPO_PUBLIC_API_URL}/api/movieglu/films`)
-      .then((res) => res.json())
+    authFetch(`${process.env.EXPO_PUBLIC_API_URL}/api/movieglu/films`)
+      .then(async (res) => {
+        // 1. Check if the server actually sent back a successful status code
+        if (!res.ok) {
+          throw new Error(`Server responded with status: ${res.status}`);
+        }
+
+        // 2. Read the raw text first to guarantee it isn't an empty string
+        const rawText = await res.text();
+        if (!rawText.trim()) {
+          return { films: [] }; // Return a clean empty state fallback if response text is blank
+        }
+
+        return JSON.parse(rawText);
+      })
       .then((data) => {
         setFilms(data.films || []);
         setFiltered(data.films || []);
         setLoading(false);
       })
-      .catch(() => setLoading(false));
+      .catch((err) => {
+        console.warn("⚠️ Data Fetch bypassed or unauthorized:", err.message);
+        // Fallback: stop loading spinner and leave array empty so user can click 'Sign In'
+        setFilms([]);
+        setFiltered([]);
+        setLoading(false);
+      });
   }, []);
 
   useEffect(() => {

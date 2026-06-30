@@ -14,9 +14,7 @@ export async function authFetch(url: string, options: RequestInit = {}) {
     },
   });
 
-  if (response.status === 401) {
-    throw new Error("Unauthorized - please log in again");
-  }
-
+  // DO NOT throw a raw error here anymore!
+  // Just pass the response back down the line so the components can check res.ok safely.
   return response;
 }
