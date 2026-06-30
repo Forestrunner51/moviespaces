@@ -20,23 +20,33 @@ builder.Services.AddCors(options =>
 
 builder.Services.AddControllers();
 
-// Add JWT Authentication with Supabase
+// --- MODERN ASYMMETRIC SUPABASE JWT AUTHENTICATION SETUP ---
 var supabaseUrl = builder.Configuration["Supabase:Url"];
-var supabaseJwtSecret = builder.Configuration["Supabase:JwtSecret"];
+if (string.IsNullOrEmpty(supabaseUrl))
+{
+    throw new InvalidOperationException("CRITICAL: 'Supabase:Url' was not found in configuration!");
+}
+
+// Format the required OIDC token authority base route
+string authorityUrl = supabaseUrl.EndsWith("/") ? $"{supabaseUrl}auth/v1" : $"{supabaseUrl}/auth/v1";
 
 builder.Services.AddAuthentication(JwtBearerDefaults.AuthenticationScheme)
     .AddJwtBearer(options =>
     {
+        // Points .NET directly to Supabase's open signing key verification endpoints
+        options.Authority = authorityUrl;
+        options.MetadataAddress = $"{authorityUrl}/.well-known/openid-configuration";
+
         options.TokenValidationParameters = new TokenValidationParameters
         {
-            ValidateIssuerSigningKey = true,
-            IssuerSigningKey = new SymmetricSecurityKey(Encoding.UTF8.GetBytes(supabaseJwtSecret!)),
+            ValidateIssuerSigningKey = true, // Verifies token signatures using Supabase's public keys
             ValidateIssuer = true,
-            ValidIssuer = $"{supabaseUrl}/auth/v1",
+            ValidIssuer = authorityUrl,
             ValidateAudience = true,
-            ValidAudience = "authenticated",
+            ValidAudience = "authenticated", // Standard audience string set by Supabase Auth
             ValidateLifetime = true
         };
+
         options.Events = new JwtBearerEvents
         {
             OnChallenge = async context =>
@@ -48,6 +58,7 @@ builder.Services.AddAuthentication(JwtBearerDefaults.AuthenticationScheme)
             }
         };
     });
+// -----------------------------------------------------------
 
 builder.Services.AddAuthorization();
 
