@@ -5,7 +5,7 @@ export async function authFetch(url: string, options: RequestInit = {}) {
     data: { session },
   } = await supabase.auth.getSession();
 
-  return fetch(url, {
+  const response = await fetch(url, {
     ...options,
     headers: {
       ...options.headers,
@@ -13,4 +13,10 @@ export async function authFetch(url: string, options: RequestInit = {}) {
       Authorization: `Bearer ${session?.access_token ?? ""}`,
     },
   });
+
+  if (response.status === 401) {
+    throw new Error("Unauthorized - please log in again");
+  }
+
+  return response;
 }
