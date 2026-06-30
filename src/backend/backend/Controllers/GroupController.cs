@@ -1,13 +1,15 @@
 using Microsoft.AspNetCore.Mvc;
 using Microsoft.EntityFrameworkCore;
+using Microsoft.AspNetCore.Authorization;
 using Backend.Data;
 using Backend.Models;
-using Microsoft.EntityFrameworkCore;
+using System.Security.Claims;
 
 namespace Backend.Controllers
 {
     [ApiController]
     [Route("api/[controller]")]
+    [Authorize]
     public class GroupController : ControllerBase
     {
         private readonly AppDbContext _db;
@@ -17,13 +19,20 @@ namespace Backend.Controllers
             _db = db;
         }
 
-        // Create a new group
+        private string GetUserId() =>
+            User.FindFirstValue(ClaimTypes.NameIdentifier)
+            ?? User.FindFirstValue("sub")
+            ?? "";
+
         [HttpPost]
         public async Task<IActionResult> CreateGroup([FromBody] CreateGroupRequest req)
         {
+            var userId = GetUserId();
+
             var group = new Group
             {
                 HostName = req.HostName,
+                UserId = userId,
                 CinemaId = req.CinemaId,
                 CinemaName = req.CinemaName,
                 FilmId = req.FilmId,
@@ -33,11 +42,11 @@ namespace Backend.Controllers
                 BookingUrl = req.BookingUrl
             };
 
-            // Add host as first member
             group.Members.Add(new GroupMember
             {
                 GroupId = group.Id,
                 Name = req.HostName,
+                UserId = userId,
                 Confirmed = true
             });
 
@@ -45,6 +54,17 @@ namespace Backend.Controllers
             await _db.SaveChangesAsync();
 
             return Ok(new { groupId = group.Id });
+        }
+
+        [HttpGet("{id}")]
+        public async Task<IActionResult> GetGroup(Guid id)
+        {
+            var group = await _db.Groups
+                .Include(g => g.Members)
+                .FirstOrDefaultAsync(g => g.Id == id);
+
+            if (group == null) return NotFound();
+            return Ok(group);
         }
 
         [HttpGet("search")]
@@ -60,32 +80,23 @@ namespace Backend.Controllers
         }
 
         [HttpGet("mine")]
-        public async Task<IActionResult> GetMySpaces([FromQuery] string name)
+        public async Task<IActionResult> GetMySpaces()
         {
+            var userId = GetUserId();
+
             var spaces = await _db.Groups
                 .Include(g => g.Members)
-                .Where(g => g.Members.Any(m => m.Name == name))
+                .Where(g => g.Members.Any(m => m.UserId == userId))
                 .OrderByDescending(g => g.CreatedAt)
                 .ToListAsync();
 
             return Ok(spaces);
         }
-        // Get group details
-        [HttpGet("{id}")]
-        public async Task<IActionResult> GetGroup(Guid id)
-        {
-            var group = await _db.Groups
-                .Include(g => g.Members)
-                .FirstOrDefaultAsync(g => g.Id == id);
 
-            if (group == null) return NotFound();
-            return Ok(group);
-        }
-
-        // Join a group
         [HttpPost("{id}/join")]
         public async Task<IActionResult> JoinGroup(Guid id, [FromBody] JoinGroupRequest req)
         {
+            var userId = GetUserId();
             var group = await _db.Groups.FindAsync(id);
             if (group == null) return NotFound();
 
@@ -93,6 +104,7 @@ namespace Backend.Controllers
             {
                 GroupId = id,
                 Name = req.Name,
+                UserId = userId,
                 Confirmed = false
             };
 
@@ -102,7 +114,6 @@ namespace Backend.Controllers
             return Ok(new { memberId = member.Id });
         }
 
-        // Confirm attendance
         [HttpPost("{id}/confirm/{memberId}")]
         public async Task<IActionResult> ConfirmMember(Guid id, Guid memberId)
         {
@@ -117,7 +128,6 @@ namespace Backend.Controllers
             return Ok();
         }
 
-        // Mark group as booked
         [HttpPost("{id}/book")]
         public async Task<IActionResult> BookGroup(Guid id)
         {

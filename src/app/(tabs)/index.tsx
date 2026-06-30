@@ -59,7 +59,18 @@ export default function HomeScreen() {
 
   return (
     <View style={styles.container}>
-      <Text style={styles.title}>MovieSpace</Text>
+      {/* --- HEADER WITH AUTH TOGGLE --- */}
+      <View style={styles.headerRow}>
+        <Text style={styles.title}>MovieSpace</Text>
+        <TouchableOpacity
+          style={styles.profileButton}
+          onPress={() => router.push("/auth")}
+        >
+          <Text style={styles.profileButtonText}>Sign In</Text>
+        </TouchableOpacity>
+      </View>
+      {/* ------------------------------- */}
+
       <TextInput
         style={styles.search}
         placeholder="Search for a movie..."
@@ -110,11 +121,27 @@ const styles = StyleSheet.create({
     paddingTop: 60,
     paddingHorizontal: 16,
   },
+  headerRow: {
+    flexDirection: "row",
+    justifyContent: "space-between",
+    alignItems: "center",
+    marginBottom: 16,
+  },
   title: {
     fontSize: 28,
     fontWeight: "bold",
     color: "#1A1A1A",
-    marginBottom: 16,
+  },
+  profileButton: {
+    backgroundColor: "#007AFF",
+    paddingVertical: 6,
+    paddingHorizontal: 14,
+    borderRadius: 20,
+  },
+  profileButtonText: {
+    color: "#fff",
+    fontSize: 14,
+    fontWeight: "600",
   },
   search: {
     backgroundColor: "#fff",

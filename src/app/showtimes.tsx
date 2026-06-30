@@ -1,4 +1,5 @@
 import { useState, useEffect } from "react";
+import { authFetch } from "@/frontend/services/api";
 import {
   View,
   Text,
@@ -63,20 +64,22 @@ export default function ShowtimesScreen() {
     if (!hostName.trim() || !selectedFilm) return;
     setCreating(true);
 
-    const res = await fetch(`${process.env.EXPO_PUBLIC_API_URL}/api/group`, {
-      method: "POST",
-      headers: { "Content-Type": "application/json" },
-      body: JSON.stringify({
-        hostName,
-        cinemaId: parseInt(cinemaId),
-        cinemaName,
-        filmId: selectedFilm.film_id,
-        filmName: selectedFilm.film_name,
-        showTime: selectedTime,
-        showDate: today,
-        bookingUrl: "",
-      }),
-    });
+    const res = await authFetch(
+      `${process.env.EXPO_PUBLIC_API_URL}/api/group`,
+      {
+        method: "POST",
+        body: JSON.stringify({
+          hostName,
+          cinemaId: parseInt(cinemaId),
+          cinemaName,
+          filmId: selectedFilm.film_id,
+          filmName: selectedFilm.film_name,
+          showTime: selectedTime,
+          showDate: today,
+          bookingUrl: "",
+        }),
+      },
+    );
 
     const data = await res.json();
     setCreating(false);

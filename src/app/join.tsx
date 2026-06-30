@@ -7,6 +7,7 @@ import {
   StyleSheet,
 } from "react-native";
 import { useLocalSearchParams, router } from "expo-router";
+import { authFetch } from "@/frontend/services/api";
 
 export default function JoinScreen() {
   const { groupId } = useLocalSearchParams<{ groupId: string }>();
@@ -16,11 +17,10 @@ export default function JoinScreen() {
   const handleJoin = async () => {
     if (!name.trim()) return;
     setLoading(true);
-    const res = await fetch(
+    const res = await authFetch(
       `${process.env.EXPO_PUBLIC_API_URL}/api/group/${groupId}/join`,
       {
         method: "POST",
-        headers: { "Content-Type": "application/json" },
         body: JSON.stringify({ name }),
       },
     );

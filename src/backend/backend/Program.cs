@@ -1,10 +1,13 @@
 using Backend.Data;
 using Microsoft.EntityFrameworkCore;
+using Microsoft.AspNetCore.Authentication.JwtBearer;
+using Microsoft.IdentityModel.Tokens;
+using System.Text;
 
 var builder = WebApplication.CreateBuilder(args);
+
 builder.Services.AddHttpClient();
 
-// 1. First, set up the CORS configuration options
 builder.Services.AddCors(options =>
 {
     options.AddPolicy("AllowReactApp", policy =>
@@ -15,12 +18,30 @@ builder.Services.AddCors(options =>
     });
 });
 
-// 2. Register your operational controllers (ONCE only)
 builder.Services.AddControllers();
 
-// 3. Register your Database Context with validation
-var connectionString = builder.Configuration.GetConnectionString("PostgresConnection");
+// Add JWT Authentication with Supabase
+var supabaseUrl = builder.Configuration["Supabase:Url"];
+var supabaseJwtSecret = builder.Configuration["Supabase:JwtSecret"];
 
+builder.Services.AddAuthentication(JwtBearerDefaults.AuthenticationScheme)
+    .AddJwtBearer(options =>
+    {
+        options.TokenValidationParameters = new TokenValidationParameters
+        {
+            ValidateIssuerSigningKey = true,
+            IssuerSigningKey = new SymmetricSecurityKey(Encoding.UTF8.GetBytes(supabaseJwtSecret!)),
+            ValidateIssuer = true,
+            ValidIssuer = $"{supabaseUrl}/auth/v1",
+            ValidateAudience = true,
+            ValidAudience = "authenticated",
+            ValidateLifetime = true
+        };
+    });
+
+builder.Services.AddAuthorization();
+
+var connectionString = builder.Configuration.GetConnectionString("PostgresConnection");
 if (string.IsNullOrEmpty(connectionString))
 {
     throw new InvalidOperationException("CRITICAL: 'PostgresConnection' string was not found in appsettings.json!");
@@ -31,11 +52,9 @@ builder.Services.AddDbContext<AppDbContext>(options =>
 
 var app = builder.Build();
 
-// 4. PIPELINE ORDER MATTERS: UseRouting must come first implicitly, then Cors, then Authorization, then Controllers
 app.UseCors("AllowReactApp");
-
+app.UseAuthentication();
 app.UseAuthorization();
-
 app.MapControllers();
 
 using (var scope = app.Services.CreateScope())
@@ -43,9 +62,8 @@ using (var scope = app.Services.CreateScope())
     var services = scope.ServiceProvider;
     try
     {
-        var context = services.GetRequiredService<AppDbContext>(); // Replace with your actual DbContext class name
-        await context.Database.EnsureCreatedAsync();
-        // OR use: await context.Database.MigrateAsync(); if you have migrations set up
+        var context = services.GetRequiredService<AppDbContext>();
+        await context.Database.MigrateAsync();
     }
     catch (Exception ex)
     {
