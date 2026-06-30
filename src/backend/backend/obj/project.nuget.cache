@@ -1,10 +1,11 @@
 {
   "version": 2,
-  "dgSpecHash": "axf9zkLW5+4=",
+  "dgSpecHash": "WLsTCx7/l0I=",
   "success": true,
   "projectFilePath": "/Users/olaslaptop/learningss/Moviespaces/src/backend/backend/backend.csproj",
   "expectedPackageFiles": [
     "/Users/olaslaptop/.nuget/packages/humanizer.core/2.14.1/humanizer.core.2.14.1.nupkg.sha512",
+    "/Users/olaslaptop/.nuget/packages/microsoft.aspnetcore.authentication.jwtbearer/10.0.9/microsoft.aspnetcore.authentication.jwtbearer.10.0.9.nupkg.sha512",
     "/Users/olaslaptop/.nuget/packages/microsoft.aspnetcore.openapi/10.0.3/microsoft.aspnetcore.openapi.10.0.3.nupkg.sha512",
     "/Users/olaslaptop/.nuget/packages/microsoft.build.framework/18.0.2/microsoft.build.framework.18.0.2.nupkg.sha512",
     "/Users/olaslaptop/.nuget/packages/microsoft.codeanalysis.analyzers/3.11.0/microsoft.codeanalysis.analyzers.3.11.0.nupkg.sha512",
@@ -19,6 +20,12 @@
     "/Users/olaslaptop/.nuget/packages/microsoft.entityframeworkcore.design/10.0.8/microsoft.entityframeworkcore.design.10.0.8.nupkg.sha512",
     "/Users/olaslaptop/.nuget/packages/microsoft.entityframeworkcore.relational/10.0.8/microsoft.entityframeworkcore.relational.10.0.8.nupkg.sha512",
     "/Users/olaslaptop/.nuget/packages/microsoft.extensions.dependencymodel/10.0.8/microsoft.extensions.dependencymodel.10.0.8.nupkg.sha512",
+    "/Users/olaslaptop/.nuget/packages/microsoft.identitymodel.abstractions/8.0.1/microsoft.identitymodel.abstractions.8.0.1.nupkg.sha512",
+    "/Users/olaslaptop/.nuget/packages/microsoft.identitymodel.jsonwebtokens/8.0.1/microsoft.identitymodel.jsonwebtokens.8.0.1.nupkg.sha512",
+    "/Users/olaslaptop/.nuget/packages/microsoft.identitymodel.logging/8.0.1/microsoft.identitymodel.logging.8.0.1.nupkg.sha512",
+    "/Users/olaslaptop/.nuget/packages/microsoft.identitymodel.protocols/8.0.1/microsoft.identitymodel.protocols.8.0.1.nupkg.sha512",
+    "/Users/olaslaptop/.nuget/packages/microsoft.identitymodel.protocols.openidconnect/8.0.1/microsoft.identitymodel.protocols.openidconnect.8.0.1.nupkg.sha512",
+    "/Users/olaslaptop/.nuget/packages/microsoft.identitymodel.tokens/8.0.1/microsoft.identitymodel.tokens.8.0.1.nupkg.sha512",
     "/Users/olaslaptop/.nuget/packages/microsoft.openapi/2.0.0/microsoft.openapi.2.0.0.nupkg.sha512",
     "/Users/olaslaptop/.nuget/packages/microsoft.visualstudio.solutionpersistence/1.0.52/microsoft.visualstudio.solutionpersistence.1.0.52.nupkg.sha512",
     "/Users/olaslaptop/.nuget/packages/mono.texttemplating/3.0.0/mono.texttemplating.3.0.0.nupkg.sha512",
@@ -31,7 +38,8 @@
     "/Users/olaslaptop/.nuget/packages/system.composition.convention/9.0.0/system.composition.convention.9.0.0.nupkg.sha512",
     "/Users/olaslaptop/.nuget/packages/system.composition.hosting/9.0.0/system.composition.hosting.9.0.0.nupkg.sha512",
     "/Users/olaslaptop/.nuget/packages/system.composition.runtime/9.0.0/system.composition.runtime.9.0.0.nupkg.sha512",
-    "/Users/olaslaptop/.nuget/packages/system.composition.typedparts/9.0.0/system.composition.typedparts.9.0.0.nupkg.sha512"
+    "/Users/olaslaptop/.nuget/packages/system.composition.typedparts/9.0.0/system.composition.typedparts.9.0.0.nupkg.sha512",
+    "/Users/olaslaptop/.nuget/packages/system.identitymodel.tokens.jwt/8.0.1/system.identitymodel.tokens.jwt.8.0.1.nupkg.sha512"
   ],
   "logs": []
 }

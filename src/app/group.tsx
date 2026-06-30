@@ -1,4 +1,5 @@
 import { useState, useEffect, useCallback } from "react";
+import { authFetch } from "@/frontend/services/api";
 import {
   View,
   Text,
@@ -41,7 +42,7 @@ export default function GroupScreen() {
 
   const fetchGroup = useCallback(async () => {
     try {
-      const res = await fetch(
+      const res = await authFetch(
         `${process.env.EXPO_PUBLIC_API_URL}/api/group/${groupId}`,
       );
       const data = await res.json();
@@ -75,7 +76,7 @@ export default function GroupScreen() {
     if (!group) return;
 
     // Mark group as booked
-    await fetch(
+    await authFetch(
       `${process.env.EXPO_PUBLIC_API_URL}/api/group/${groupId}/book`,
       {
         method: "POST",

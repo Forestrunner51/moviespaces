@@ -4,6 +4,7 @@ namespace Backend.Models
     {
         public Guid Id { get; set; } = Guid.NewGuid();
         public string HostName { get; set; } = "";
+        public string UserId { get; set; } = ""; // add this
         public int CinemaId { get; set; }
         public string CinemaName { get; set; } = "";
         public int FilmId { get; set; }
@@ -11,7 +12,7 @@ namespace Backend.Models
         public string ShowTime { get; set; } = "";
         public string ShowDate { get; set; } = "";
         public string BookingUrl { get; set; } = "";
-        public string Status { get; set; } = "pending"; // pending, booked
+        public string Status { get; set; } = "pending";
         public DateTime CreatedAt { get; set; } = DateTime.UtcNow;
         public List<GroupMember> Members { get; set; } = new();
     }
@@ -21,6 +22,7 @@ namespace Backend.Models
         public Guid Id { get; set; } = Guid.NewGuid();
         public Guid GroupId { get; set; }
         public string Name { get; set; } = "";
+        public string UserId { get; set; } = ""; // add this
         public bool Confirmed { get; set; } = false;
         public DateTime JoinedAt { get; set; } = DateTime.UtcNow;
     }

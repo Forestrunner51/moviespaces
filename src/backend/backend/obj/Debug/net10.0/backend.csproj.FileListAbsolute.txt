@@ -121,3 +121,11 @@
 /Users/olaslaptop/learningss/Moviespaces/src/backend/backend/obj/Debug/net10.0/backend.genruntimeconfig.cache
 /Users/olaslaptop/learningss/Moviespaces/src/backend/backend/obj/Debug/net10.0/ref/backend.dll
 /Users/olaslaptop/learningss/Moviespaces/src/backend/backend/obj/Debug/net10.0/backend.sourcelink.json
+/Users/olaslaptop/learningss/Moviespaces/src/backend/backend/bin/Debug/net10.0/Microsoft.AspNetCore.Authentication.JwtBearer.dll
+/Users/olaslaptop/learningss/Moviespaces/src/backend/backend/bin/Debug/net10.0/Microsoft.IdentityModel.Abstractions.dll
+/Users/olaslaptop/learningss/Moviespaces/src/backend/backend/bin/Debug/net10.0/Microsoft.IdentityModel.JsonWebTokens.dll
+/Users/olaslaptop/learningss/Moviespaces/src/backend/backend/bin/Debug/net10.0/Microsoft.IdentityModel.Logging.dll
+/Users/olaslaptop/learningss/Moviespaces/src/backend/backend/bin/Debug/net10.0/Microsoft.IdentityModel.Protocols.dll
+/Users/olaslaptop/learningss/Moviespaces/src/backend/backend/bin/Debug/net10.0/Microsoft.IdentityModel.Protocols.OpenIdConnect.dll
+/Users/olaslaptop/learningss/Moviespaces/src/backend/backend/bin/Debug/net10.0/Microsoft.IdentityModel.Tokens.dll
+/Users/olaslaptop/learningss/Moviespaces/src/backend/backend/bin/Debug/net10.0/System.IdentityModel.Tokens.Jwt.dll
