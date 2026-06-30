@@ -78,19 +78,59 @@ app.UseAuthentication();
 app.UseAuthorization();
 app.MapControllers();
 
+// --- DYNAMIC DATABASE MIGRATION RECONCILIATION LOOP ---
 using (var scope = app.Services.CreateScope())
 {
     var services = scope.ServiceProvider;
     try
     {
         var context = services.GetRequiredService<AppDbContext>();
+
+        // 1. Ensure the tracking table exists explicitly in the public schema
+        await context.Database.ExecuteSqlRawAsync(@"
+            CREATE TABLE IF NOT EXISTS ""__EFMigrationsHistory"" (
+                ""MigrationId"" character varying(150) NOT NULL CONSTRAINT ""PK___EFMigrationsHistory"" PRIMARY KEY,
+                ""ProductVersion"" character varying(32) NOT NULL
+            );
+        ");
+
+        // 2. Query the metadata table via ADO.NET abstraction layer to check historical logs
+        var recordCheckCommand = context.Database.GetDbConnection().CreateCommand();
+        recordCheckCommand.CommandText = @"SELECT COUNT(1) FROM ""__EFMigrationsHistory"" WHERE ""MigrationId"" = '20260522223223_InitialCreate';";
+
+        if (context.Database.GetDbConnection().State != System.Data.ConnectionState.Open)
+        {
+            await context.Database.GetDbConnection().OpenAsync();
+        }
+
+        long historyCount = 0;
+        var result = await recordCheckCommand.ExecuteScalarAsync();
+        if (result != null)
+        {
+            historyCount = Convert.ToInt64(result);
+        }
+
+        // 3. If missing, seed it dynamically so EF Core knows the table footprint is already taken care of
+        if (historyCount == 0)
+        {
+            await context.Database.ExecuteSqlRawAsync(@"
+                INSERT INTO ""__EFMigrationsHistory"" (""MigrationId"", ""ProductVersion"")
+                VALUES ('20260522223223_InitialCreate', '10.0.8')
+                ON CONFLICT DO NOTHING;
+            ");
+            Console.WriteLine("✅ Seeded InitialCreate history log entry into Render Postgres.");
+        }
+
+        // 4. Safely run the migration engine over the rest of the pending structural delta changes
         await context.Database.MigrateAsync();
+        Console.WriteLine("🚀 All pending database migrations applied successfully!");
     }
     catch (Exception ex)
     {
         var logger = services.GetRequiredService<ILogger<Program>>();
-        logger.LogError(ex, "An error occurred creating the DB.");
+        logger.LogError(ex, "An error occurred executing database migrations.");
     }
 }
+// -----------------------------------------------------------------------
 
 app.Run("http://*:5123");
