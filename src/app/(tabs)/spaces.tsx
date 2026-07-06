@@ -1,4 +1,4 @@
-import { useState, useEffect, useCallback } from "react";
+import { useState, useCallback } from "react";
 import { authFetch } from "@/frontend/services/api";
 import {
   View,
@@ -7,10 +7,8 @@ import {
   StyleSheet,
   ActivityIndicator,
   TouchableOpacity,
-  TextInput,
 } from "react-native";
 import { router, useFocusEffect } from "expo-router";
-import AsyncStorage from "@react-native-async-storage/async-storage";
 
 interface Space {
   id: string;
@@ -25,64 +23,45 @@ interface Space {
 export default function MySpacesScreen() {
   const [spaces, setSpaces] = useState<Space[]>([]);
   const [loading, setLoading] = useState(true);
-  const [userName, setUserName] = useState<string | null>(null);
-  const [nameInput, setNameInput] = useState("");
 
-  const loadSpaces = async (name: string) => {
-    setLoading(true);
-    const res = await authFetch(
-      `${process.env.EXPO_PUBLIC_API_URL}/api/group/mine`,
-    );
-    const data = await res.json();
-    setSpaces(data);
-    setLoading(false);
+  // 1. Cleansed loadSpaces: No name parameters or query string extensions needed
+  const loadSpaces = async () => {
+    try {
+      setLoading(true);
+      const res = await authFetch(
+        `${process.env.EXPO_PUBLIC_API_URL}/api/group/mine`,
+      );
+
+      if (res.ok) {
+        const data = await res.json();
+        setSpaces(data);
+      } else {
+        console.error(
+          "Failed to pull secure user spaces status code:",
+          res.status,
+        );
+      }
+    } catch (err) {
+      console.error("Network error trying to fetch spaces:", err);
+    } finally {
+      setLoading(false);
+    }
   };
 
+  // 2. Automatically triggers the streamlined fetch when the user moves onto the tab
   useFocusEffect(
     useCallback(() => {
-      AsyncStorage.getItem("userName").then((name) => {
-        if (name) {
-          setUserName(name);
-          loadSpaces(name);
-        } else {
-          setLoading(false);
-        }
-      });
+      loadSpaces();
     }, []),
   );
 
-  const handleSaveName = async () => {
-    if (!nameInput.trim()) return;
-    await AsyncStorage.setItem("userName", nameInput);
-    setUserName(nameInput);
-    loadSpaces(nameInput);
-  };
-
   if (loading) return <ActivityIndicator size="large" style={{ flex: 1 }} />;
-
-  if (!userName) {
-    return (
-      <View style={styles.container}>
-        <Text style={styles.title}>My Spaces</Text>
-        <Text style={styles.subtitle}>Enter your name to see your spaces</Text>
-        <TextInput
-          style={styles.input}
-          placeholder="Your name"
-          value={nameInput}
-          onChangeText={setNameInput}
-          placeholderTextColor="#888"
-        />
-        <TouchableOpacity style={styles.button} onPress={handleSaveName}>
-          <Text style={styles.buttonText}>Continue</Text>
-        </TouchableOpacity>
-      </View>
-    );
-  }
 
   return (
     <View style={styles.container}>
       <Text style={styles.title}>My Spaces</Text>
-      <Text style={styles.subtitle}>Hey {userName} 👋</Text>
+      <Text style={styles.subtitle}>Your movie groups and memberships</Text>
+
       <FlatList
         data={spaces}
         keyExtractor={(item) => item.id}
@@ -92,7 +71,7 @@ export default function MySpacesScreen() {
             onPress={() =>
               router.push({
                 pathname: "/group",
-                params: { groupId: item.id, hostName: userName },
+                params: { groupId: item.id }, // 👈 Dropped explicit hostName tracking leak
               })
             }
           >
@@ -139,23 +118,6 @@ const styles = StyleSheet.create({
     marginBottom: 4,
   },
   subtitle: { fontSize: 14, color: "#666", marginBottom: 16 },
-  input: {
-    borderWidth: 1,
-    borderColor: "#E5E5E5",
-    borderRadius: 8,
-    padding: 12,
-    fontSize: 16,
-    backgroundColor: "#fff",
-    marginBottom: 16,
-    color: "#000",
-  },
-  button: {
-    backgroundColor: "#007AFF",
-    padding: 14,
-    borderRadius: 8,
-    alignItems: "center",
-  },
-  buttonText: { color: "#fff", fontWeight: "600", fontSize: 16 },
   card: {
     backgroundColor: "#fff",
     padding: 16,
