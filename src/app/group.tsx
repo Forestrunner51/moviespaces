@@ -68,7 +68,8 @@ export default function GroupScreen() {
     }
 
     await Share.share({
-      message: `Join my movie group! Open this link: ${process.env.EXPO_PUBLIC_API_URL}/join/${groupId}`,
+      // 👇 CHANGE "/join/" TO "/space/" IN THIS TEMPLATE STRING
+      message: `Join my movie group! Open this link: ${process.env.EXPO_PUBLIC_API_URL}/space/${groupId}`,
     });
   };
 

@@ -4,7 +4,7 @@ using Microsoft.AspNetCore.Authorization;
 using Backend.Data;
 using Backend.Models;
 using System.Security.Claims;
-using Microsoft.Extensions.Logging; // Added for logging
+using Microsoft.Extensions.Logging;
 
 namespace Backend.Controllers
 {
@@ -14,9 +14,8 @@ namespace Backend.Controllers
     public class GroupController : ControllerBase
     {
         private readonly AppDbContext _db;
-        private readonly ILogger<GroupController> _logger; // Added logger instance variable
+        private readonly ILogger<GroupController> _logger;
 
-        // Injected the logger alongside your DB context
         public GroupController(AppDbContext db, ILogger<GroupController> logger)
         {
             _db = db;
@@ -70,6 +69,7 @@ namespace Backend.Controllers
             if (group == null) return NotFound();
             return Ok(group);
         }
+
         [HttpGet("/space/{id}")]
         [AllowAnonymous]
         public async Task<IActionResult> SpaceInvitePage(Guid id)
@@ -103,7 +103,7 @@ namespace Backend.Controllers
                 input {{ width: 100%; padding: 14px; border-radius: 8px; border: none; background: #222; color: #fff; font-size: 16px; margin-bottom: 12px; outline: none; }}
                 input::placeholder {{ color: #555; }}
                 button {{ width: 100%; padding: 16px; border-radius: 8px; border: none; background: #E50914; color: #fff; font-size: 18px; font-weight: bold; cursor: pointer; }}
-                .app-link {{ margin-top: 16px; font-size: 12px; color: #555; }}
+                .app-link {{ margin-top: 16px; font-size: 12px; color: #555; text-decoration: none; display: block; }}
                 .confirmed {{ color: #34C759; font-size: 24px; margin-bottom: 8px; }}
             </style>
         </head>
@@ -128,13 +128,13 @@ namespace Backend.Controllers
                     <div class='confirmed'>✓ You're in!</div>
                     <p style='color:#888'>The host will be notified.</p>
                 </div>
-                <p class='app-link'>Get the MovieSpace app for the best experience</p>
+                <a href='moviespaces://space/{id}' class='app-link'>Open in the MovieSpace App</a>
             </div>
 
             <script>
-                // Try to open app if installed
-                const appLink = 'moviespaces://join?groupId={id}';
-                setTimeout(() => {{ window.location = appLink; }}, 100);
+                // App routing redirection fix: Matches your app.json scheme definition
+                const appLink = 'moviespaces://space/{id}';
+                setTimeout(() => {{ window.location = appLink; }}, 250);
 
                 async function joinSpace() {{
                     const name = document.getElementById('name').value.trim();
@@ -149,6 +149,7 @@ namespace Backend.Controllers
                     if (res.ok) {{
                         document.getElementById('form').style.display = 'none';
                         document.getElementById('success').style.display = 'block';
+                        // Optional: Refresh list or append name dynamically here
                     }}
                 }}
             </script>
@@ -176,7 +177,6 @@ namespace Backend.Controllers
         {
             try
             {
-                // 1. Extract the secure User ID directly from the validated JWT claims matrix
                 string userId = GetUserId();
 
                 if (string.IsNullOrEmpty(userId))
@@ -184,7 +184,6 @@ namespace Backend.Controllers
                     return Unauthorized(new { error = "User identity could not be extracted from the token." });
                 }
 
-                // 2. FIXED: Changed _context to _db to resolve CS0103 compile error
                 var mySpaces = await _db.Groups
                     .Include(g => g.Members)
                     .Where(g => g.UserId == userId || g.Members.Any(m => m.UserId == userId))
@@ -195,7 +194,6 @@ namespace Backend.Controllers
             }
             catch (Exception ex)
             {
-                // FIXED: _logger is now defined via the constructor dependency pipeline
                 _logger.LogError(ex, "An error occurred while fetching user spaces.");
                 return StatusCode(500, new { error = "Internal server error occurred." });
             }
@@ -255,6 +253,31 @@ namespace Backend.Controllers
             await _db.SaveChangesAsync();
 
             return Ok();
+        }
+
+        [HttpGet("/.well-known/apple-app-site-association")]
+        [AllowAnonymous]
+        public IActionResult GetAppleAppSiteAssociation()
+        {
+            var association = new
+            {
+                applinks = new
+                {
+                    apps = new string[] { },
+                    details = new[]
+                    {
+                        new
+                        {
+                            // Remember to swap this out with your exact Team ID from Xcode!
+                            appID = "277BY6SS88.com.newfahrenheit45.Moviespaces",
+                            paths = new[] { "/space/*" }
+                        }
+                    }
+                }
+            };
+
+            // Returns clean JSON stringified output with application/json header
+            return Ok(association);
         }
 
         [HttpPost("{id}/book")]
