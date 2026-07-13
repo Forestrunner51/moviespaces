@@ -36,21 +36,36 @@ interface Film {
   age_rating: { rating: string }[];
 }
 
+// Matches the Group shape returned by GET /api/group/open (and /mine, /search)
+interface OpenSpace {
+  id: string;
+  hostName: string;
+  filmName: string;
+  cinemaName: string;
+  showTime: string;
+  showDate: string;
+  status: string;
+  members: { id: string; name: string; confirmed: boolean }[];
+}
+
 export default function ExploreScreen() {
   const [selectedGenres, setSelectedGenres] = useState<number[]>([]);
   const [films, setFilms] = useState<Film[]>([]);
+  const [openSpaces, setOpenSpaces] = useState<OpenSpace[]>([]);
   const [loading, setLoading] = useState(true);
+  const [spacesLoading, setSpacesLoading] = useState(true);
   const [showGenrePicker, setShowGenrePicker] = useState(false);
 
   useEffect(() => {
     loadGenres();
     fetchFilms();
+    fetchOpenSpaces();
   }, []);
 
   const loadGenres = async () => {
     const saved = await AsyncStorage.getItem("selectedGenres");
     if (saved) setSelectedGenres(JSON.parse(saved));
-    else setShowGenrePicker(true); // show picker on first visit
+    else setShowGenrePicker(true);
   };
 
   const fetchFilms = async () => {
@@ -60,6 +75,22 @@ export default function ExploreScreen() {
     const data = await res.json();
     setFilms(data.films || []);
     setLoading(false);
+  };
+
+  const fetchOpenSpaces = async () => {
+    try {
+      const res = await fetch(
+        `${process.env.EXPO_PUBLIC_API_URL}/api/group/open`,
+      );
+      if (res.ok) {
+        const data = await res.json();
+        setOpenSpaces(data || []);
+      }
+    } catch (err) {
+      console.warn("Failed to load open spaces:", err);
+    } finally {
+      setSpacesLoading(false);
+    }
   };
 
   const toggleGenre = (id: number) => {
@@ -124,20 +155,74 @@ export default function ExploreScreen() {
   return (
     <View style={styles.container}>
       <View style={styles.header}>
-        <Text style={styles.title}>Coming Soon 🍿</Text>
+        <Text style={styles.title}>Explore 🍿</Text>
         <TouchableOpacity onPress={() => setShowGenrePicker(true)}>
           <Text style={styles.editGenres}>Edit Taste</Text>
         </TouchableOpacity>
       </View>
-      <Text style={styles.subtitle}>
-        Based on your taste:{" "}
-        {selectedGenres
-          .map((id) => GENRES.find((g) => g.id === id)?.emoji)
-          .join(" ")}
-      </Text>
+
       <FlatList
         data={films}
         keyExtractor={(item) => item.film_id.toString()}
+        ListHeaderComponent={
+          <View style={styles.spacesSection}>
+            <Text style={styles.sectionTitle}>Open Spaces Near You 🎟</Text>
+            {spacesLoading ? (
+              <ActivityIndicator style={{ marginVertical: 12 }} />
+            ) : openSpaces.length === 0 ? (
+              <Text style={styles.emptySpaces}>
+                No open spaces yet — be the first to start one!
+              </Text>
+            ) : (
+              <FlatList
+                horizontal
+                data={openSpaces}
+                keyExtractor={(item) => item.id}
+                showsHorizontalScrollIndicator={false}
+                contentContainerStyle={{ paddingRight: 8 }}
+                renderItem={({ item }) => (
+                  <TouchableOpacity
+                    style={styles.spaceCard}
+                    onPress={() =>
+                      router.push({
+                        pathname: "/group",
+                        params: { groupId: item.id },
+                      })
+                    }
+                  >
+                    <Text style={styles.spaceFilmName} numberOfLines={1}>
+                      {item.filmName}
+                    </Text>
+                    <Text style={styles.spaceDetails} numberOfLines={1}>
+                      {item.cinemaName}
+                    </Text>
+                    <Text style={styles.spaceDetails}>
+                      {item.showDate} • {item.showTime}
+                    </Text>
+                    <View style={styles.spaceFooter}>
+                      <Text style={styles.spaceMembers}>
+                        👥 {item.members.length} going
+                      </Text>
+                      <Text style={styles.spaceHost} numberOfLines={1}>
+                        by {item.hostName}
+                      </Text>
+                    </View>
+                  </TouchableOpacity>
+                )}
+              />
+            )}
+
+            <Text style={[styles.sectionTitle, { marginTop: 24 }]}>
+              Coming Soon
+            </Text>
+            <Text style={styles.subtitle}>
+              Based on your taste:{" "}
+              {selectedGenres
+                .map((id) => GENRES.find((g) => g.id === id)?.emoji)
+                .join(" ")}
+            </Text>
+          </View>
+        }
         renderItem={({ item }) => (
           <TouchableOpacity
             style={styles.card}
@@ -194,6 +279,45 @@ const styles = StyleSheet.create({
   title: { fontSize: 28, fontWeight: "bold", color: "#1A1A1A" },
   subtitle: { fontSize: 14, color: "#666", marginBottom: 16 },
   editGenres: { color: "#007AFF", fontWeight: "600" },
+  sectionTitle: {
+    fontSize: 18,
+    fontWeight: "700",
+    color: "#1A1A1A",
+    marginBottom: 12,
+  },
+  spacesSection: { marginBottom: 8 },
+  emptySpaces: {
+    color: "#888",
+    fontSize: 14,
+    marginBottom: 16,
+    fontStyle: "italic",
+  },
+  spaceCard: {
+    backgroundColor: "#fff",
+    borderRadius: 12,
+    padding: 14,
+    marginRight: 12,
+    width: 200,
+    shadowColor: "#000",
+    shadowOffset: { width: 0, height: 2 },
+    shadowOpacity: 0.08,
+    shadowRadius: 4,
+    elevation: 2,
+  },
+  spaceFilmName: {
+    fontSize: 15,
+    fontWeight: "700",
+    color: "#1A1A1A",
+    marginBottom: 4,
+  },
+  spaceDetails: { fontSize: 12, color: "#666", marginBottom: 2 },
+  spaceFooter: {
+    flexDirection: "row",
+    justifyContent: "space-between",
+    marginTop: 8,
+  },
+  spaceMembers: { fontSize: 12, color: "#007AFF", fontWeight: "600" },
+  spaceHost: { fontSize: 11, color: "#999", maxWidth: 90 },
   genreGrid: {
     flexDirection: "row",
     flexWrap: "wrap",

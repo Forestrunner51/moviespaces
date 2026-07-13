@@ -4,6 +4,7 @@ using Microsoft.AspNetCore.Authorization;
 using Backend.Data;
 using Backend.Models;
 using System.Security.Claims;
+using System.Net;
 using Microsoft.Extensions.Logging;
 
 namespace Backend.Controllers
@@ -80,15 +81,25 @@ namespace Backend.Controllers
 
             if (group == null) return NotFound();
 
+            // SECURITY: HTML-encode all user-controlled strings before interpolating into
+            // the page. FilmName / HostName / member Name are user-supplied (group creation,
+            // join, join-web) and this page is public + unauthenticated, so unescaped values
+            // here are a stored-XSS vector for every visitor who opens the invite link.
+            var filmName = WebUtility.HtmlEncode(group.FilmName);
+            var cinemaName = WebUtility.HtmlEncode(group.CinemaName);
+            var hostName = WebUtility.HtmlEncode(group.HostName);
+            var showTime = WebUtility.HtmlEncode(group.ShowTime);
+            var showDate = WebUtility.HtmlEncode(group.ShowDate);
+
             var html = $@"
         <!DOCTYPE html>
         <html>
         <head>
             <meta charset='utf-8'>
             <meta name='viewport' content='width=device-width, initial-scale=1'>
-            <title>{group.FilmName} - MovieSpace</title>
-            <meta property='og:title' content='{group.FilmName} - MovieSpace'>
-            <meta property='og:description' content='{group.HostName} is watching {group.FilmName} at {group.CinemaName} on {group.ShowDate} at {group.ShowTime}. Join them!'>
+            <title>{filmName} - MovieSpace</title>
+            <meta property='og:title' content='{filmName} - MovieSpace'>
+            <meta property='og:description' content='{hostName} is watching {filmName} at {cinemaName} on {showDate} at {showTime}. Join them!'>
             <style>
                 * {{ margin: 0; padding: 0; box-sizing: border-box; }}
                 body {{ font-family: -apple-system, sans-serif; background: #111; color: #fff; min-height: 100vh; display: flex; flex-direction: column; align-items: center; justify-content: center; padding: 24px; }}
@@ -110,14 +121,14 @@ namespace Backend.Controllers
         <body>
             <div class='card'>
                 <div class='emoji'>🎬</div>
-                <h1>{group.FilmName}</h1>
-                <p class='details'>{group.CinemaName} • {group.ShowTime}</p>
-                <p class='details'>{group.ShowDate}</p>
-                <p class='host'>Hosted by {group.HostName}</p>
+                <h1>{filmName}</h1>
+                <p class='details'>{cinemaName} • {showTime}</p>
+                <p class='details'>{showDate}</p>
+                <p class='host'>Hosted by {hostName}</p>
 
                 <div class='members'>
                     <div class='members-title'>WHO'S GOING ({group.Members.Count})</div>
-                    {string.Join("", group.Members.Select(m => $"<div class='member'>{(m.Confirmed ? "✓" : "○")} {m.Name}</div>"))}
+                    {string.Join("", group.Members.Select(m => $"<div class='member'>{(m.Confirmed ? "✓" : "○")} {WebUtility.HtmlEncode(m.Name)}</div>"))}
                 </div>
 
                 <div id='form'>
@@ -132,7 +143,6 @@ namespace Backend.Controllers
             </div>
 
             <script>
-                // App routing redirection fix: Matches your app.json scheme definition
                 const appLink = 'moviespaces://space/{id}';
                 setTimeout(() => {{ window.location = appLink; }}, 250);
 
@@ -149,7 +159,6 @@ namespace Backend.Controllers
                     if (res.ok) {{
                         document.getElementById('form').style.display = 'none';
                         document.getElementById('success').style.display = 'block';
-                        // Optional: Refresh list or append name dynamically here
                     }}
                 }}
             </script>
@@ -166,6 +175,32 @@ namespace Backend.Controllers
                 .Include(g => g.Members)
                 .Where(g => g.FilmId == filmId && g.Status == "pending")
                 .OrderByDescending(g => g.CreatedAt)
+                .ToListAsync();
+
+            return Ok(spaces);
+        }
+
+        // NEW: General "open spaces" feed for the Explore tab. Unlike SearchSpaces (which
+        // requires a filmId), this returns all open/pending spaces across films, optionally
+        // narrowed by filmId and/or cinemaId. No auth required so Explore can show this to
+        // signed-out browsers too.
+        [HttpGet("open")]
+        [AllowAnonymous]
+        public async Task<IActionResult> GetOpenSpaces([FromQuery] int? filmId, [FromQuery] int? cinemaId)
+        {
+            var query = _db.Groups
+                .Include(g => g.Members)
+                .Where(g => g.Status == "pending");
+
+            if (filmId.HasValue)
+                query = query.Where(g => g.FilmId == filmId.Value);
+
+            if (cinemaId.HasValue)
+                query = query.Where(g => g.CinemaId == cinemaId.Value);
+
+            var spaces = await query
+                .OrderByDescending(g => g.CreatedAt)
+                .Take(50)
                 .ToListAsync();
 
             return Ok(spaces);
@@ -206,6 +241,14 @@ namespace Backend.Controllers
             var group = await _db.Groups.FindAsync(id);
             if (group == null) return NotFound();
 
+            // Guard: don't add a duplicate GroupMember row if this user already joined.
+            var existing = await _db.GroupMembers
+                .FirstOrDefaultAsync(m => m.GroupId == id && m.UserId == userId);
+            if (existing != null)
+            {
+                return Ok(new { memberId = existing.Id });
+            }
+
             var member = new GroupMember
             {
                 GroupId = id,
@@ -226,6 +269,17 @@ namespace Backend.Controllers
         {
             var group = await _db.Groups.FindAsync(id);
             if (group == null) return NotFound();
+
+            // Guard: web joiners have no UserId, so de-dupe on name instead (case-insensitive)
+            // to avoid double-joins if the page reloads or the deep-link redirect races the click.
+            var existing = await _db.GroupMembers
+                .FirstOrDefaultAsync(m => m.GroupId == id
+                    && m.UserId == ""
+                    && m.Name.ToLower() == req.Name.Trim().ToLower());
+            if (existing != null)
+            {
+                return Ok(new { memberId = existing.Id });
+            }
 
             var member = new GroupMember
             {
@@ -268,16 +322,14 @@ namespace Backend.Controllers
                     {
                         new
                         {
-                            // Remember to swap this out with your exact Team ID from Xcode!
-                            appID = "277BY6SS88.com.newfahrenheit45.Moviespaces",
+                            appID = "8J48NY9S42.com.newfahrenheit45.Moviespaces",
                             paths = new[] { "/space/*" }
                         }
                     }
                 }
             };
 
-            // Returns clean JSON stringified output with application/json header
-            return Ok(association);
+            return new JsonResult(association) { ContentType = "application/json" };
         }
 
         [HttpPost("{id}/book")]
