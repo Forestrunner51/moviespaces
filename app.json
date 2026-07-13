@@ -12,7 +12,8 @@
       "bundleIdentifier": "com.newfahrenheit45.Moviespaces",
       "infoPlist": {
         "ITSAppUsesNonExemptEncryption": false
-      }
+      },
+      "associatedDomains": ["applinks:moviespaces.onrender.com"]
     },
     "android": {
       "adaptiveIcon": {
@@ -22,7 +23,21 @@
         "monochromeImage": "./assets/images/android-icon-monochrome.png"
       },
       "predictiveBackGestureEnabled": false,
-      "package": "com.newfahrenheit45.Moviespaces"
+      "package": "com.newfahrenheit45.Moviespaces",
+      "intentFilters": [
+        {
+          "action": "VIEW",
+          "autoVerify": true,
+          "data": [
+            {
+              "scheme": "https",
+              "host": "moviespaces.onrender.com",
+              "pathPrefix": "/space"
+            }
+          ],
+          "category": ["BROWSABLE", "DEFAULT"]
+        }
+      ]
     },
     "web": {
       "output": "static",
