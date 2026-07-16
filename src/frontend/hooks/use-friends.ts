@@ -104,6 +104,18 @@ export function useFriends() {
   const sendFriendRequest = async (targetUserId: string) => {
     if (!currentUserId) return { success: false, error: "Not authenticated" };
     try {
+      const { data: existing, error: lookupError } = await supabase
+        .from("friendships")
+        .select("id")
+        .or(
+          `and(requester_id.eq.${currentUserId},receiver_id.eq.${targetUserId}),and(requester_id.eq.${targetUserId},receiver_id.eq.${currentUserId})`
+        )
+        .maybeSingle();
+      if (lookupError) throw lookupError;
+      if (existing) {
+        return { success: false, error: "A friend request already exists with this user." };
+      }
+
       const { error } = await supabase.from("friendships").insert([
         {
           requester_id: currentUserId,
@@ -111,7 +123,13 @@ export function useFriends() {
           status: "pending",
         },
       ]);
-      if (error) throw error;
+      if (error) {
+        // 23505 = unique_pair violation (race with a concurrent request)
+        if (error.code === "23505") {
+          return { success: false, error: "A friend request already exists with this user." };
+        }
+        throw error;
+      }
       return { success: true };
     } catch (err: any) {
       console.error("Error sending friend request:", err);
