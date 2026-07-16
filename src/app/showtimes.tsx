@@ -1,5 +1,6 @@
 import { useState, useEffect } from "react";
 import { authFetch } from "@/frontend/services/api";
+import AsyncStorage from "@react-native-async-storage/async-storage";
 import {
   View,
   Text,
@@ -54,6 +55,14 @@ export default function ShowtimesScreen() {
       });
   }, []);
 
+  // Pre-fill hostName from the cached name saved at signup/login, so users
+  // don't have to retype it every time they create a space.
+  useEffect(() => {
+    AsyncStorage.getItem("userName").then((savedName) => {
+      if (savedName) setHostName(savedName);
+    });
+  }, []);
+
   const openCreateGroup = (film: Film, time: string) => {
     setSelectedFilm(film);
     setSelectedTime(time);
@@ -63,6 +72,10 @@ export default function ShowtimesScreen() {
   const handleCreateGroup = async () => {
     if (!hostName.trim() || !selectedFilm) return;
     setCreating(true);
+
+    // Keep the cache fresh in case the user edited the pre-filled name here
+    // (e.g. typo fix, nickname) — future spaces should use the latest value.
+    await AsyncStorage.setItem("userName", hostName.trim());
 
     const res = await authFetch(
       `${process.env.EXPO_PUBLIC_API_URL}/api/group`,

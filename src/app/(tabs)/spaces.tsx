@@ -4,11 +4,13 @@ import {
   View,
   Text,
   FlatList,
+  ScrollView,
   StyleSheet,
   ActivityIndicator,
   TouchableOpacity,
 } from "react-native";
 import { router, useFocusEffect } from "expo-router";
+import { FriendsPanel } from "@/frontend/components/friends-panel";
 
 interface Space {
   id: string;
@@ -21,17 +23,16 @@ interface Space {
 }
 
 export default function MySpacesScreen() {
+  const [tab, setTab] = useState<"spaces" | "friends">("spaces");
   const [spaces, setSpaces] = useState<Space[]>([]);
   const [loading, setLoading] = useState(true);
 
-  // 1. Cleansed loadSpaces: No name parameters or query string extensions needed
   const loadSpaces = async () => {
     try {
       setLoading(true);
       const res = await authFetch(
         `${process.env.EXPO_PUBLIC_API_URL}/api/group/mine`,
       );
-
       if (res.ok) {
         const data = await res.json();
         setSpaces(data);
@@ -48,58 +49,104 @@ export default function MySpacesScreen() {
     }
   };
 
-  // 2. Automatically triggers the streamlined fetch when the user moves onto the tab
   useFocusEffect(
     useCallback(() => {
       loadSpaces();
     }, []),
   );
 
-  if (loading) return <ActivityIndicator size="large" style={{ flex: 1 }} />;
-
   return (
     <View style={styles.container}>
       <Text style={styles.title}>My Spaces</Text>
-      <Text style={styles.subtitle}>Your movie groups and memberships</Text>
 
-      <FlatList
-        data={spaces}
-        keyExtractor={(item) => item.id}
-        renderItem={({ item }) => (
-          <TouchableOpacity
-            style={styles.card}
-            onPress={() =>
-              router.push({
-                pathname: "/group",
-                params: { groupId: item.id }, // 👈 Dropped explicit hostName tracking leak
-              })
-            }
+      <View style={styles.tabBar}>
+        <TouchableOpacity
+          style={[styles.tabBarItem, tab === "spaces" && styles.tabBarItemActive]}
+          onPress={() => setTab("spaces")}
+        >
+          <Text
+            style={[
+              styles.tabBarLabel,
+              tab === "spaces" && styles.tabBarLabelActive,
+            ]}
           >
-            <Text style={styles.filmName}>{item.filmName}</Text>
-            <Text style={styles.details}>
-              {item.cinemaName} • {item.showTime}
-            </Text>
-            <Text style={styles.date}>{item.showDate}</Text>
-            <View style={styles.footer}>
-              <Text style={styles.members}>
-                {item.members.length} member(s)
-              </Text>
-              <Text
-                style={
-                  item.status === "booked" ? styles.booked : styles.pending
+            Spaces
+          </Text>
+        </TouchableOpacity>
+        <TouchableOpacity
+          style={[styles.tabBarItem, tab === "friends" && styles.tabBarItemActive]}
+          onPress={() => setTab("friends")}
+        >
+          <Text
+            style={[
+              styles.tabBarLabel,
+              tab === "friends" && styles.tabBarLabelActive,
+            ]}
+          >
+            Friends
+          </Text>
+        </TouchableOpacity>
+      </View>
+
+      {tab === "friends" ? (
+        <ScrollView keyboardShouldPersistTaps="handled">
+          <FriendsPanel />
+        </ScrollView>
+      ) : loading ? (
+        <ActivityIndicator size="large" style={{ flex: 1 }} />
+      ) : (
+        <>
+          <Text style={styles.subtitle}>Your movie groups and memberships</Text>
+          <FlatList
+            data={spaces}
+            keyExtractor={(item) => item.id}
+            renderItem={({ item }) => (
+              <TouchableOpacity
+                style={styles.card}
+                onPress={() =>
+                  router.push({
+                    pathname: "/group",
+                    params: { groupId: item.id },
+                  })
                 }
               >
-                {item.status === "booked" ? "✓ Booked" : "Pending"}
-              </Text>
-            </View>
-          </TouchableOpacity>
-        )}
-        ListEmptyComponent={
-          <Text style={styles.empty}>
-            No spaces yet. Find a movie and create one!
-          </Text>
-        }
-      />
+                <Text style={styles.filmName}>{item.filmName}</Text>
+                <Text style={styles.details}>
+                  {item.cinemaName} • {item.showTime}
+                </Text>
+                <Text style={styles.date}>{item.showDate}</Text>
+                <View style={styles.footer}>
+                  <Text style={styles.members}>
+                    {item.members.length} member(s)
+                  </Text>
+                  <Text
+                    style={
+                      item.status === "booked" ? styles.booked : styles.pending
+                    }
+                  >
+                    {item.status === "booked" ? "✓ Booked" : "Pending"}
+                  </Text>
+                </View>
+              </TouchableOpacity>
+            )}
+            ListEmptyComponent={
+              <View style={styles.emptyState}>
+                <Text style={styles.emptyEmoji}>🎬</Text>
+                <Text style={styles.emptyTitle}>No spaces yet</Text>
+                <Text style={styles.emptySubtitle}>
+                  Find a movie and create your first space with friends
+                </Text>
+                <TouchableOpacity
+                  style={styles.emptyButton}
+                  onPress={() => router.push("/(tabs)")}
+                >
+                  <Text style={styles.emptyButtonText}>Find a Movie →</Text>
+                </TouchableOpacity>
+              </View>
+            }
+          />
+        </>
+      )}
     </View>
   );
 }
@@ -118,6 +165,29 @@ const styles = StyleSheet.create({
     marginBottom: 4,
   },
   subtitle: { fontSize: 14, color: "#666", marginBottom: 16 },
+  tabBar: {
+    flexDirection: "row",
+    backgroundColor: "#eee",
+    borderRadius: 10,
+    padding: 4,
+    marginBottom: 16,
+  },
+  tabBarItem: {
+    flex: 1,
+    paddingVertical: 8,
+    borderRadius: 8,
+    alignItems: "center",
+  },
+  tabBarItemActive: {
+    backgroundColor: "#fff",
+    shadowColor: "#000",
+    shadowOffset: { width: 0, height: 1 },
+    shadowOpacity: 0.1,
+    shadowRadius: 2,
+    elevation: 1,
+  },
+  tabBarLabel: { fontSize: 14, fontWeight: "600", color: "#888" },
+  tabBarLabelActive: { color: "#1A1A1A" },
   card: {
     backgroundColor: "#fff",
     padding: 16,
@@ -141,5 +211,29 @@ const styles = StyleSheet.create({
   members: { fontSize: 13, color: "#007AFF" },
   booked: { fontSize: 13, color: "#34C759", fontWeight: "600" },
   pending: { fontSize: 13, color: "#FF9500", fontWeight: "600" },
-  empty: { textAlign: "center", color: "#888", marginTop: 40, fontSize: 16 },
+  emptyState: {
+    alignItems: "center",
+    marginTop: 60,
+    paddingHorizontal: 24,
+  },
+  emptyEmoji: { fontSize: 48, marginBottom: 12 },
+  emptyTitle: {
+    fontSize: 18,
+    fontWeight: "700",
+    color: "#1A1A1A",
+    marginBottom: 6,
+  },
+  emptySubtitle: {
+    fontSize: 14,
+    color: "#888",
+    textAlign: "center",
+    marginBottom: 20,
+  },
+  emptyButton: {
+    backgroundColor: "#007AFF",
+    paddingVertical: 12,
+    paddingHorizontal: 24,
+    borderRadius: 24,
+  },
+  emptyButtonText: { color: "#fff", fontWeight: "700", fontSize: 15 },
 });
