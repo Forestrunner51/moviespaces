@@ -43,3 +43,7 @@ example
 /ios
 /android
 .cargo
+
+# .NET build output
+bin/
+obj/

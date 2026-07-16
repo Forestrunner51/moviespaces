@@ -78,41 +78,14 @@ app.UseAuthentication();
 app.UseAuthorization();
 app.MapControllers();
 
-// --- DYNAMIC DATABASE MIGRATION RECONCILIATION LOOP ---
+// Applies any migrations not yet recorded in __EFMigrationsHistory. The DB is
+// already fully migrated, so on a normal boot this is a single cheap check.
 using (var scope = app.Services.CreateScope())
 {
     var services = scope.ServiceProvider;
     try
     {
         var context = services.GetRequiredService<AppDbContext>();
-
-        // 1. Ensure the tracking table exists explicitly in the public schema
-        await context.Database.ExecuteSqlRawAsync(@"
-            CREATE TABLE IF NOT EXISTS ""__EFMigrationsHistory"" (
-                ""MigrationId"" character varying(150) NOT NULL CONSTRAINT ""PK___EFMigrationsHistory"" PRIMARY KEY,
-                ""ProductVersion"" character varying(32) NOT NULL
-            );
-        ");
-
-        // 2. Force-seed historical logs that we know already exist physically to prevent table creation crashes
-        var migrationsToSkip = new List<string>
-        {
-            "20260522223223_InitialCreate",
-            "20260607234143_AddGroups",
-            "20260630224159_AddUserIdToGroups" // Your laptop already ran this safely!
-        };
-
-        foreach (var migrationId in migrationsToSkip)
-        {
-            await context.Database.ExecuteSqlRawAsync($@"
-                INSERT INTO ""__EFMigrationsHistory"" (""MigrationId"", ""ProductVersion"")
-                VALUES ('{migrationId}', '10.0.8')
-                ON CONFLICT DO NOTHING;
-            ");
-        }
-        Console.WriteLine("✅ Reconciled all older historical migration records.");
-
-        // 3. Now run the migration pipeline cleanly over any future modifications!
         await context.Database.MigrateAsync();
         Console.WriteLine("🚀 Database structure is completely aligned and up-to-date!");
     }
