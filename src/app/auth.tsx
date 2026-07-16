@@ -8,43 +8,58 @@ import {
   ActivityIndicator,
   Alert,
 } from "react-native";
-import { supabase } from "../frontend/config/supabase"; // Adjust this path to match your exact supabase client location
+import AsyncStorage from "@react-native-async-storage/async-storage";
+import { supabase } from "../frontend/config/supabase";
 import { useRouter } from "expo-router";
 
 export default function AuthScreen() {
   const router = useRouter();
   const [isSignUp, setIsSignUp] = useState(false);
+  const [name, setName] = useState("");
   const [email, setEmail] = useState("");
   const [password, setPassword] = useState("");
   const [loading, setLoading] = useState(false);
 
   async function handleAuth() {
-    if (!email || !password) {
+    if (!email || !password || (isSignUp && !name)) {
       Alert.alert("Error", "Please fill in all fields.");
       return;
     }
-
     setLoading(true);
 
     if (isSignUp) {
-      // Handle Registration
+      // Handle Registration — pass name as user_metadata so it's attached
+      // to the account itself, not just this device.
       const { data, error } = await supabase.auth.signUp({
         email: email,
         password: password,
+        options: {
+          data: { full_name: name.trim() },
+        },
       });
 
-      if (error) Alert.alert("Sign Up Error", error.message);
-      else Alert.alert("Success!", "Check your email for a confirmation link.");
+      if (error) {
+        Alert.alert("Sign Up Error", error.message);
+      } else {
+        await AsyncStorage.setItem("userName", name.trim());
+        router.replace("/"); // go straight in, no confirmation needed
+      }
     } else {
       // Handle Login
-      const { error } = await supabase.auth.signInWithPassword({
+      const { data, error } = await supabase.auth.signInWithPassword({
         email: email,
         password: password,
       });
 
-      if (error) Alert.alert("Login Error", error.message);
-      else {
-        // Successful login redirects back to the main layout entry route
+      if (error) {
+        Alert.alert("Login Error", error.message);
+      } else {
+        // Pull the name back out of user_metadata and cache it locally too,
+        // so returning users on a new device also get their name pre-filled.
+        const fullName = data.user?.user_metadata?.full_name;
+        if (fullName) {
+          await AsyncStorage.setItem("userName", fullName);
+        }
         router.replace("/");
       }
     }
@@ -58,6 +73,17 @@ export default function AuthScreen() {
         {isSignUp ? "Create a new account" : "Sign in to your account"}
       </Text>
 
+      {isSignUp && (
+        <TextInput
+          style={styles.input}
+          placeholder="Your name"
+          placeholderTextColor="#aaa"
+          value={name}
+          onChangeText={setName}
+          autoCapitalize="words"
+        />
+      )}
+
       <TextInput
         style={styles.input}
         placeholder="Email"
@@ -67,7 +93,6 @@ export default function AuthScreen() {
         autoCapitalize="none"
         keyboardType="email-address"
       />
-
       <TextInput
         style={styles.input}
         placeholder="Password"
@@ -77,7 +102,6 @@ export default function AuthScreen() {
         onChangeText={setPassword}
         autoCapitalize="none"
       />
-
       <TouchableOpacity
         style={styles.button}
         onPress={handleAuth}
@@ -91,7 +115,6 @@ export default function AuthScreen() {
           </Text>
         )}
       </TouchableOpacity>
-
       <TouchableOpacity
         onPress={() => setIsSignUp(!isSignUp)}
         style={styles.switchLink}

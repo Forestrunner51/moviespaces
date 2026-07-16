@@ -24,14 +24,12 @@ export default function MySpacesScreen() {
   const [spaces, setSpaces] = useState<Space[]>([]);
   const [loading, setLoading] = useState(true);
 
-  // 1. Cleansed loadSpaces: No name parameters or query string extensions needed
   const loadSpaces = async () => {
     try {
       setLoading(true);
       const res = await authFetch(
         `${process.env.EXPO_PUBLIC_API_URL}/api/group/mine`,
       );
-
       if (res.ok) {
         const data = await res.json();
         setSpaces(data);
@@ -48,7 +46,6 @@ export default function MySpacesScreen() {
     }
   };
 
-  // 2. Automatically triggers the streamlined fetch when the user moves onto the tab
   useFocusEffect(
     useCallback(() => {
       loadSpaces();
@@ -61,7 +58,6 @@ export default function MySpacesScreen() {
     <View style={styles.container}>
       <Text style={styles.title}>My Spaces</Text>
       <Text style={styles.subtitle}>Your movie groups and memberships</Text>
-
       <FlatList
         data={spaces}
         keyExtractor={(item) => item.id}
@@ -71,7 +67,7 @@ export default function MySpacesScreen() {
             onPress={() =>
               router.push({
                 pathname: "/group",
-                params: { groupId: item.id }, // 👈 Dropped explicit hostName tracking leak
+                params: { groupId: item.id },
               })
             }
           >
@@ -95,9 +91,19 @@ export default function MySpacesScreen() {
           </TouchableOpacity>
         )}
         ListEmptyComponent={
-          <Text style={styles.empty}>
-            No spaces yet. Find a movie and create one!
-          </Text>
+          <View style={styles.emptyState}>
+            <Text style={styles.emptyEmoji}>🎬</Text>
+            <Text style={styles.emptyTitle}>No spaces yet</Text>
+            <Text style={styles.emptySubtitle}>
+              Find a movie and create your first space with friends
+            </Text>
+            <TouchableOpacity
+              style={styles.emptyButton}
+              onPress={() => router.push("/(tabs)")}
+            >
+              <Text style={styles.emptyButtonText}>Find a Movie →</Text>
+            </TouchableOpacity>
+          </View>
         }
       />
     </View>
@@ -141,5 +147,29 @@ const styles = StyleSheet.create({
   members: { fontSize: 13, color: "#007AFF" },
   booked: { fontSize: 13, color: "#34C759", fontWeight: "600" },
   pending: { fontSize: 13, color: "#FF9500", fontWeight: "600" },
-  empty: { textAlign: "center", color: "#888", marginTop: 40, fontSize: 16 },
+  emptyState: {
+    alignItems: "center",
+    marginTop: 60,
+    paddingHorizontal: 24,
+  },
+  emptyEmoji: { fontSize: 48, marginBottom: 12 },
+  emptyTitle: {
+    fontSize: 18,
+    fontWeight: "700",
+    color: "#1A1A1A",
+    marginBottom: 6,
+  },
+  emptySubtitle: {
+    fontSize: 14,
+    color: "#888",
+    textAlign: "center",
+    marginBottom: 20,
+  },
+  emptyButton: {
+    backgroundColor: "#007AFF",
+    paddingVertical: 12,
+    paddingHorizontal: 24,
+    borderRadius: 24,
+  },
+  emptyButtonText: { color: "#fff", fontWeight: "700", fontSize: 15 },
 });
