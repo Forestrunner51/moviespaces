@@ -47,6 +47,7 @@ export default function Layout() {
         <Stack.Screen name="join" options={{ title: "Join Group" }} />
         <Stack.Screen name="confirm" options={{ title: "Confirm" }} />
         <Stack.Screen name="movie" options={{ title: "Movie" }} />
+        <Stack.Screen name="chat/[userId]" options={{ title: "Chat" }} />
       </Stack>
     </ThemeProvider>
   );

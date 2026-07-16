@@ -95,21 +95,9 @@ export function useFriends() {
     if (currentUserId) {
       fetchFriendsAndRequests();
 
-      // Listen for changes on friendships table in real-time
-      const channel = supabase
-        .channel("friendships_updates")
-        .on(
-          "postgres_changes",
-          { event: "*", schema: "public", table: "friendships" },
-          () => {
-            fetchFriendsAndRequests();
-          }
-        )
-        .subscribe();
-
-      return () => {
-        supabase.removeChannel(channel);
-      };
+      // Poll instead of using Supabase Realtime.
+      const interval = setInterval(fetchFriendsAndRequests, 15000);
+      return () => clearInterval(interval);
     }
   }, [currentUserId]);
 

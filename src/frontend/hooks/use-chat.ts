@@ -48,36 +48,9 @@ export function useChat(chatTargetId: string) {
     if (currentUserId && chatTargetId) {
       fetchHistory();
 
-      // Realtime subscription
-      const channel = supabase
-        .channel(`chat_${chatTargetId}`)
-        .on(
-          "postgres_changes",
-          {
-            event: "INSERT",
-            schema: "public",
-            table: "messages",
-          },
-          (payload) => {
-            const newMsg = payload.new as Message;
-            // Only add message if it belongs to this specific chat thread
-            if (
-              (newMsg.sender_id === currentUserId && newMsg.receiver_id === chatTargetId) ||
-              (newMsg.sender_id === chatTargetId && newMsg.receiver_id === currentUserId)
-            ) {
-              setMessages((prev) => {
-                // Prevent duplicate addition if local optimistic update or quick double events
-                if (prev.some((m) => m.id === newMsg.id)) return prev;
-                return [...prev, newMsg];
-              });
-            }
-          }
-        )
-        .subscribe();
-
-      return () => {
-        supabase.removeChannel(channel);
-      };
+      // Poll instead of using Supabase Realtime.
+      const interval = setInterval(fetchHistory, 4000);
+      return () => clearInterval(interval);
     }
   }, [currentUserId, chatTargetId]);
 
