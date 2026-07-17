@@ -7,7 +7,7 @@ COPY . ./
 # Point directly to your deeply nested project file
 RUN dotnet restore "src/backend/backend/backend.csproj"
 
-# Build and publish targeting that same folderss
+# Build and publish targeting that same folders
 RUN dotnet publish "src/backend/backend/backend.csproj" -c Release -o out
 
 # 2. Runtime Stage

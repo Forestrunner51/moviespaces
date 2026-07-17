@@ -6,6 +6,7 @@ import {
   TouchableOpacity,
   TextInput,
   ActivityIndicator,
+  Alert,
 } from "react-native";
 import { router } from "expo-router";
 import { ThemedText } from "@/frontend/components/themed-text";
@@ -27,6 +28,7 @@ export function FriendsPanel() {
   const [query, setQuery] = useState("");
   const [results, setResults] = useState<Profile[]>([]);
   const [searching, setSearching] = useState(false);
+  const [requestedIds, setRequestedIds] = useState<Set<string>>(new Set());
 
   const friendIds = new Set(friends.map((f) => f.id));
 
@@ -40,6 +42,18 @@ export function FriendsPanel() {
     const found = await searchUsers(text);
     setResults(found);
     setSearching(false);
+  };
+
+  const handleAdd = async (userId: string) => {
+    const result = await sendFriendRequest(userId);
+    if (result.success) {
+      setRequestedIds((prev) => new Set(prev).add(userId));
+    } else if (result.error?.includes("already exists")) {
+      // Already friends/requested — just reflect that in the UI, no need to alert.
+      setRequestedIds((prev) => new Set(prev).add(userId));
+    } else {
+      Alert.alert("Couldn't send request", result.error || "Please try again.");
+    }
   };
 
   return (
@@ -69,10 +83,18 @@ export function FriendsPanel() {
               style={[styles.row, { backgroundColor: theme.backgroundElement }]}
             >
               <ThemedText>{user.display_name}</ThemedText>
-              {!friendIds.has(user.id) && (
+              {friendIds.has(user.id) ? (
+                <ThemedText themeColor="textSecondary" type="small">
+                  Friends
+                </ThemedText>
+              ) : requestedIds.has(user.id) ? (
+                <ThemedText themeColor="textSecondary" type="small">
+                  Requested
+                </ThemedText>
+              ) : (
                 <TouchableOpacity
                   style={styles.actionButton}
-                  onPress={() => sendFriendRequest(user.id)}
+                  onPress={() => handleAdd(user.id)}
                 >
                   <ThemedText type="smallBold">Add</ThemedText>
                 </TouchableOpacity>
