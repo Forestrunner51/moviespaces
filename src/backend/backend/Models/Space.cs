@@ -6,6 +6,7 @@ namespace Backend.Models
 {
     public class Space
     {
+        [Column("id")]
         public Guid Id { get; set; } = Guid.NewGuid();
 
         [Column("movie_id")]
@@ -58,6 +59,7 @@ namespace Backend.Models
 
     public class SpacePledge
     {
+        [Column("id")]
         public Guid Id { get; set; } = Guid.NewGuid();
 
         [Column("space_id")]
