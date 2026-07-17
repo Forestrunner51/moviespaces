@@ -11,6 +11,11 @@ import {
 } from "react-native";
 import { router, useFocusEffect } from "expo-router";
 import { FriendsPanel } from "@/frontend/components/friends-panel";
+import {
+  getMySpaces,
+  getOpenSpaces,
+  CrowdfundSpace,
+} from "@/frontend/hooks/use-crowdfund-spaces";
 
 interface Space {
   id: string;
@@ -23,9 +28,12 @@ interface Space {
 }
 
 export default function MySpacesScreen() {
-  const [tab, setTab] = useState<"spaces" | "friends">("spaces");
+  const [tab, setTab] = useState<"spaces" | "crowdfund" | "friends">("spaces");
   const [spaces, setSpaces] = useState<Space[]>([]);
   const [loading, setLoading] = useState(true);
+
+  const [crowdfunds, setCrowdfunds] = useState<CrowdfundSpace[]>([]);
+  const [crowdfundsLoading, setCrowdfundsLoading] = useState(true);
 
   const loadSpaces = async () => {
     try {
@@ -49,9 +57,24 @@ export default function MySpacesScreen() {
     }
   };
 
+  const loadCrowdfunds = async () => {
+    setCrowdfundsLoading(true);
+    try {
+      const [mine, open] = await Promise.all([getMySpaces(), getOpenSpaces()]);
+      const byId = new Map<string, CrowdfundSpace>();
+      [...mine, ...open].forEach((s) => byId.set(s.id, s));
+      setCrowdfunds(Array.from(byId.values()));
+    } catch (err) {
+      console.error("Failed to load crowdfund spaces:", err);
+    } finally {
+      setCrowdfundsLoading(false);
+    }
+  };
+
   useFocusEffect(
     useCallback(() => {
       loadSpaces();
+      loadCrowdfunds();
     }, []),
   );
 
@@ -74,6 +97,19 @@ export default function MySpacesScreen() {
           </Text>
         </TouchableOpacity>
         <TouchableOpacity
+          style={[styles.tabBarItem, tab === "crowdfund" && styles.tabBarItemActive]}
+          onPress={() => setTab("crowdfund")}
+        >
+          <Text
+            style={[
+              styles.tabBarLabel,
+              tab === "crowdfund" && styles.tabBarLabelActive,
+            ]}
+          >
+            Crowdfund
+          </Text>
+        </TouchableOpacity>
+        <TouchableOpacity
           style={[styles.tabBarItem, tab === "friends" && styles.tabBarItemActive]}
           onPress={() => setTab("friends")}
         >
@@ -92,6 +128,55 @@ export default function MySpacesScreen() {
         <ScrollView keyboardShouldPersistTaps="handled">
           <FriendsPanel />
         </ScrollView>
+      ) : tab === "crowdfund" ? (
+        <>
+          <TouchableOpacity
+            style={styles.newCrowdfundButton}
+            onPress={() => router.push("/crowdfund/create")}
+          >
+            <Text style={styles.newCrowdfundButtonText}>+ New Crowdfund</Text>
+          </TouchableOpacity>
+          {crowdfundsLoading ? (
+            <ActivityIndicator size="large" style={{ flex: 1 }} />
+          ) : (
+            <FlatList
+              data={crowdfunds}
+              keyExtractor={(item) => item.id}
+              renderItem={({ item }) => (
+                <TouchableOpacity
+                  style={styles.card}
+                  onPress={() =>
+                    router.push({ pathname: "/crowdfund/[id]", params: { id: item.id } })
+                  }
+                >
+                  <Text style={styles.filmName}>{item.movieTitle}</Text>
+                  <Text style={styles.details}>
+                    {item.theaterName} • {new Date(item.showtime).toLocaleDateString()}
+                  </Text>
+                  <View style={styles.footer}>
+                    <Text style={styles.members}>
+                      ${item.currentAmount.toFixed(0)} / ${item.targetAmount.toFixed(0)}
+                    </Text>
+                    <Text
+                      style={item.status === "successful" ? styles.booked : styles.pending}
+                    >
+                      {item.status}
+                    </Text>
+                  </View>
+                </TouchableOpacity>
+              )}
+              ListEmptyComponent={
+                <View style={styles.emptyState}>
+                  <Text style={styles.emptyEmoji}>💸</Text>
+                  <Text style={styles.emptyTitle}>No crowdfunds yet</Text>
+                  <Text style={styles.emptySubtitle}>
+                    Start one to pool money toward a private screening
+                  </Text>
+                </View>
+              }
+            />
+          )}
+        </>
       ) : loading ? (
         <ActivityIndicator size="large" style={{ flex: 1 }} />
       ) : (
@@ -188,6 +273,14 @@ const styles = StyleSheet.create({
   },
   tabBarLabel: { fontSize: 14, fontWeight: "600", color: "#888" },
   tabBarLabelActive: { color: "#1A1A1A" },
+  newCrowdfundButton: {
+    backgroundColor: "#E50914",
+    padding: 14,
+    borderRadius: 10,
+    alignItems: "center",
+    marginBottom: 12,
+  },
+  newCrowdfundButtonText: { color: "#fff", fontWeight: "700", fontSize: 15 },
   card: {
     backgroundColor: "#fff",
     padding: 16,

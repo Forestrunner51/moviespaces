@@ -13,7 +13,9 @@
       "infoPlist": {
         "ITSAppUsesNonExemptEncryption": false
       },
-      "associatedDomains": ["applinks:moviespaces.onrender.com"]
+      "associatedDomains": [
+        "applinks:moviespaces.onrender.com"
+      ]
     },
     "android": {
       "adaptiveIcon": {
@@ -35,7 +37,10 @@
               "pathPrefix": "/space"
             }
           ],
-          "category": ["BROWSABLE", "DEFAULT"]
+          "category": [
+            "BROWSABLE",
+            "DEFAULT"
+          ]
         }
       ]
     },
@@ -55,7 +60,8 @@
           }
         }
       ],
-      "expo-image"
+      "expo-image",
+      "@stripe/stripe-react-native"
     ],
     "experiments": {
       "typedRoutes": true,
