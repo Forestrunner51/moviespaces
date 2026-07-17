@@ -98,12 +98,24 @@ namespace Backend.Controllers
 
         [HttpGet("open")]
         [AllowAnonymous]
-        public async Task<IActionResult> GetOpenSpaces([FromQuery] string? movieId)
+        public async Task<IActionResult> GetOpenSpaces(
+            [FromQuery] string? movieId,
+            [FromQuery] string? theaterId,
+            [FromQuery] DateTime? showtime)
         {
             var query = _db.Spaces.Where(s => s.Status == "funding");
 
             if (!string.IsNullOrEmpty(movieId))
                 query = query.Where(s => s.MovieId == movieId);
+
+            if (!string.IsNullOrEmpty(theaterId))
+                query = query.Where(s => s.TheaterId == theaterId);
+
+            // Exact match — used by the showtime feed (movie.tsx) to find
+            // crowdfund spaces tied to one specific cinema+time slot, same as
+            // how open Groups are already scoped there.
+            if (showtime.HasValue)
+                query = query.Where(s => s.Showtime == showtime.Value);
 
             var spaces = await query
                 .OrderBy(s => s.Deadline)
