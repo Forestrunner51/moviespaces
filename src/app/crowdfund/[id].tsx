@@ -155,6 +155,22 @@ export default function CrowdfundDetailScreen() {
         <Text style={styles.deadlineText}>{interestedCount} interested</Text>
       </View>
 
+      {(isCreator || alreadyPledged) && (
+        <View style={styles.actions}>
+          <TouchableOpacity
+            style={styles.chatButton}
+            onPress={() =>
+              router.push({
+                pathname: "/group-chat/[id]",
+                params: { id: space.id, type: "crowdfund", title: space.movieTitle },
+              })
+            }
+          >
+            <Text style={styles.chatButtonText}>💬 Group Chat</Text>
+          </TouchableOpacity>
+        </View>
+      )}
+
       {space.status === "funding" && (
         <View style={styles.actions}>
           <TouchableOpacity
@@ -270,6 +286,13 @@ const styles = StyleSheet.create({
   progressText: { color: "#fff", fontSize: 15, fontWeight: "600", marginTop: 8 },
   deadlineText: { color: "#888", fontSize: 13, marginTop: 4 },
   actions: { paddingHorizontal: 16, gap: 10, marginTop: 8 },
+  chatButton: {
+    backgroundColor: "#5856D6",
+    padding: 14,
+    borderRadius: 8,
+    alignItems: "center",
+  },
+  chatButtonText: { color: "#fff", fontWeight: "bold", fontSize: 16 },
   actionButton: {
     backgroundColor: "#222",
     padding: 14,

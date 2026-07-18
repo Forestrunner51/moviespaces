@@ -53,6 +53,7 @@ export default function Layout() {
         <Stack.Screen name="chat/[userId]" options={{ title: "Chat" }} />
         <Stack.Screen name="crowdfund/create" options={{ title: "New Crowdfund" }} />
         <Stack.Screen name="crowdfund/[id]" options={{ title: "Crowdfund" }} />
+        <Stack.Screen name="group-chat/[id]" options={{ title: "Group Chat" }} />
       </Stack>
     </ThemeProvider>
   );

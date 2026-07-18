@@ -67,6 +67,12 @@
           "merchantIdentifier": "merchant.com.newfahrenheit45.Moviespaces",
           "enableGooglePay": false
         }
+      ],
+      [
+        "expo-image-picker",
+        {
+          "photosPermission": "Allow MovieSpaces to access your photos so you can set a profile picture."
+        }
       ]
     ],
     "experiments": {

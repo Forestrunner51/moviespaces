@@ -12,11 +12,13 @@ import {
 } from "react-native";
 import { useLocalSearchParams, router } from "expo-router";
 import * as WebBrowser from "expo-web-browser";
+import { supabase } from "@/frontend/config/supabase";
 
 interface Member {
   id: string;
   name: string;
   confirmed: boolean;
+  userId: string;
 }
 interface Group {
   id: string;
@@ -39,6 +41,13 @@ export default function GroupScreen() {
   }>();
   const [group, setGroup] = useState<Group | null>(null);
   const [loading, setLoading] = useState(true);
+  const [currentUserId, setCurrentUserId] = useState<string | null>(null);
+
+  useEffect(() => {
+    supabase.auth.getUser().then(({ data: { user } }) => {
+      setCurrentUserId(user?.id ?? null);
+    });
+  }, []);
 
   const fetchGroup = useCallback(async () => {
     try {
@@ -110,6 +119,8 @@ export default function GroupScreen() {
   const allConfirmed =
     groupMembers.length > 0 && groupMembers.every((m) => m.confirmed);
   const isHost = hostName === group.hostName;
+  const isMember =
+    !!currentUserId && groupMembers.some((m) => m.userId === currentUserId);
 
   return (
     <View style={styles.container}>
@@ -139,6 +150,20 @@ export default function GroupScreen() {
       <TouchableOpacity style={styles.shareButton} onPress={shareLink}>
         <Text style={styles.buttonText}>📤 Invite Friends</Text>
       </TouchableOpacity>
+
+      {(isHost || isMember) && (
+        <TouchableOpacity
+          style={styles.chatButton}
+          onPress={() =>
+            router.push({
+              pathname: "/group-chat/[id]",
+              params: { id: group.id, type: "group", title: group.filmName },
+            })
+          }
+        >
+          <Text style={styles.buttonText}>💬 Group Chat</Text>
+        </TouchableOpacity>
+      )}
 
       {isHost && (
         <TouchableOpacity
@@ -185,6 +210,13 @@ const styles = StyleSheet.create({
   pending: { color: "#FF9500", fontWeight: "600" },
   shareButton: {
     backgroundColor: "#007AFF",
+    padding: 14,
+    borderRadius: 8,
+    alignItems: "center",
+    marginBottom: 12,
+  },
+  chatButton: {
+    backgroundColor: "#5856D6",
     padding: 14,
     borderRadius: 8,
     alignItems: "center",
