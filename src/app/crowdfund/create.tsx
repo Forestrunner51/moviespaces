@@ -9,6 +9,9 @@ import {
   StyleSheet,
   ActivityIndicator,
   Alert,
+  KeyboardAvoidingView,
+  ScrollView,
+  Platform,
 } from "react-native";
 import { router } from "expo-router";
 import {
@@ -42,10 +45,30 @@ export default function CreateCrowdfundScreen() {
     setSearching(false);
   };
 
+  const parseDateOrNull = (value: string): Date | null => {
+    const parsed = new Date(value);
+    return isNaN(parsed.getTime()) ? null : parsed;
+  };
+
   const handleCreate = async () => {
     if (!selectedMovie) return;
     if (!theaterName.trim() || !showtime || !deadline || !targetAmount) {
       Alert.alert("Missing info", "Please fill in theater, showtime, deadline, and target amount.");
+      return;
+    }
+
+    const parsedShowtime = parseDateOrNull(showtime);
+    const parsedDeadline = parseDateOrNull(deadline);
+    if (!parsedShowtime || !parsedDeadline) {
+      Alert.alert(
+        "Invalid date",
+        "Please enter showtime/deadline as e.g. 2026-08-01T20:00:00.",
+      );
+      return;
+    }
+    const amount = parseFloat(targetAmount);
+    if (!amount || amount <= 0) {
+      Alert.alert("Invalid target amount", "Target amount must be a number greater than zero.");
       return;
     }
 
@@ -59,9 +82,9 @@ export default function CreateCrowdfundScreen() {
           : null,
         theaterId: theaterName.trim(),
         theaterName: theaterName.trim(),
-        showtime: new Date(showtime).toISOString(),
-        targetAmount: parseFloat(targetAmount),
-        deadline: new Date(deadline).toISOString(),
+        showtime: parsedShowtime.toISOString(),
+        targetAmount: amount,
+        deadline: parsedDeadline.toISOString(),
         maxParticipants: maxParticipants ? parseInt(maxParticipants, 10) : null,
       });
       router.replace({ pathname: "/crowdfund/[id]", params: { id: spaceId } });
@@ -74,73 +97,78 @@ export default function CreateCrowdfundScreen() {
 
   if (selectedMovie) {
     return (
-      <View style={styles.container}>
-        <TouchableOpacity onPress={() => setSelectedMovie(null)}>
-          <Text style={styles.backLink}>← Choose a different movie</Text>
-        </TouchableOpacity>
+      <KeyboardAvoidingView
+        style={styles.container}
+        behavior={Platform.OS === "ios" ? "padding" : undefined}
+      >
+        <ScrollView keyboardShouldPersistTaps="handled">
+          <TouchableOpacity onPress={() => setSelectedMovie(null)}>
+            <Text style={styles.backLink}>← Choose a different movie</Text>
+          </TouchableOpacity>
 
-        <View style={styles.selectedMovieRow}>
-          {selectedMovie.posterPath && (
-            <Image
-              source={{ uri: `https://image.tmdb.org/t/p/w92${selectedMovie.posterPath}` }}
-              style={styles.poster}
-            />
-          )}
-          <Text style={styles.movieTitle}>{selectedMovie.title}</Text>
-        </View>
+          <View style={styles.selectedMovieRow}>
+            {selectedMovie.posterPath && (
+              <Image
+                source={{ uri: `https://image.tmdb.org/t/p/w92${selectedMovie.posterPath}` }}
+                style={styles.poster}
+              />
+            )}
+            <Text style={styles.movieTitle}>{selectedMovie.title}</Text>
+          </View>
 
-        <TextInput
-          style={styles.input}
-          placeholder="Theater name"
-          placeholderTextColor="#888"
-          value={theaterName}
-          onChangeText={setTheaterName}
-        />
-        <TextInput
-          style={styles.input}
-          placeholder="Showtime (e.g. 2026-08-01T20:00:00)"
-          placeholderTextColor="#888"
-          value={showtime}
-          onChangeText={setShowtime}
-          autoCapitalize="none"
-        />
-        <TextInput
-          style={styles.input}
-          placeholder="Pledge deadline (e.g. 2026-07-30T20:00:00)"
-          placeholderTextColor="#888"
-          value={deadline}
-          onChangeText={setDeadline}
-          autoCapitalize="none"
-        />
-        <TextInput
-          style={styles.input}
-          placeholder="Target amount ($)"
-          placeholderTextColor="#888"
-          value={targetAmount}
-          onChangeText={setTargetAmount}
-          keyboardType="decimal-pad"
-        />
-        <TextInput
-          style={styles.input}
-          placeholder="Max participants (optional — leave blank for uncapped)"
-          placeholderTextColor="#888"
-          value={maxParticipants}
-          onChangeText={setMaxParticipants}
-          keyboardType="number-pad"
-        />
+          <TextInput
+            style={styles.input}
+            placeholder="Theater name"
+            placeholderTextColor="#888"
+            value={theaterName}
+            onChangeText={setTheaterName}
+          />
+          <TextInput
+            style={styles.input}
+            placeholder="Showtime (e.g. 2026-08-01T20:00:00)"
+            placeholderTextColor="#888"
+            value={showtime}
+            onChangeText={setShowtime}
+            autoCapitalize="none"
+          />
+          <TextInput
+            style={styles.input}
+            placeholder="Pledge deadline (e.g. 2026-07-30T20:00:00)"
+            placeholderTextColor="#888"
+            value={deadline}
+            onChangeText={setDeadline}
+            autoCapitalize="none"
+          />
+          <TextInput
+            style={styles.input}
+            placeholder="Target amount ($)"
+            placeholderTextColor="#888"
+            value={targetAmount}
+            onChangeText={setTargetAmount}
+            keyboardType="decimal-pad"
+          />
+          <TextInput
+            style={styles.input}
+            placeholder="Max participants (optional — leave blank for uncapped)"
+            placeholderTextColor="#888"
+            value={maxParticipants}
+            onChangeText={setMaxParticipants}
+            keyboardType="number-pad"
+          />
 
-        <TouchableOpacity
-          style={styles.createButton}
-          onPress={handleCreate}
-          disabled={creating}
-        >
-          {creating ? (
-            <ActivityIndicator color="#fff" />
-          ) : (
-            <Text style={styles.buttonText}>Create Crowdfund</Text>
-          )}
-        </TouchableOpacity>
-      </View>
+          <TouchableOpacity
+            style={styles.createButton}
+            onPress={handleCreate}
+            disabled={creating}
+          >
+            {creating ? (
+              <ActivityIndicator color="#fff" />
+            ) : (
+              <Text style={styles.buttonText}>Create Crowdfund</Text>
+            )}
+          </TouchableOpacity>
+        </ScrollView>
+      </KeyboardAvoidingView>
     );
   }
 

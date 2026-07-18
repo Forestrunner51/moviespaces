@@ -1,10 +1,19 @@
-cat > .easignore << 'EOF'
+# Node modules
 node_modules/
+
+# Native build directories (EAS generates these in the cloud)
+ios/
+android/
+
+# Expo / Packager caches
 .expo/
-ios/build/
-android/build/
-.cargo/
-**/.cargo/
+.expo-shared/
+web-build/
+
+# Local build artifacts
 bin/
 obj/
-EOF
+*.tar.gz
+
+# macOS system files
+.DS_Store

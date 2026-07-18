@@ -9,6 +9,10 @@ import {
   TouchableOpacity,
   TextInput,
   Modal,
+  KeyboardAvoidingView,
+  ScrollView,
+  Platform,
+  Alert,
 } from "react-native";
 import { useLocalSearchParams, router } from "expo-router";
 import {
@@ -20,6 +24,7 @@ import {
 interface Space {
   id: string;
   hostName: string;
+  cinemaId: number;
   cinemaName: string;
   showTime: string;
   showDate: string;
@@ -49,6 +54,7 @@ export default function MovieScreen() {
   const [loading, setLoading] = useState(true);
   const [modalVisible, setModalVisible] = useState(false);
   const [modalType, setModalType] = useState<"free" | "crowdfund">("free");
+  const [slotModalVisible, setSlotModalVisible] = useState(false);
   const [selectedCinema, setSelectedCinema] = useState<Cinema | null>(null);
   const [selectedTime, setSelectedTime] = useState("");
   const [hostName, setHostName] = useState("");
@@ -62,30 +68,56 @@ export default function MovieScreen() {
   useEffect(() => {
     const base = process.env.EXPO_PUBLIC_API_URL;
     Promise.all([
-      fetch(`${base}/api/group/search?filmId=${filmId}`).then((r) => r.json()),
-      fetch(
-        `${base}/api/movieglu/filmshowtimes?filmId=${filmId}&date=${today}`,
-      ).then((r) => r.json()),
+      fetch(`${base}/api/group/search?filmId=${filmId}`)
+        .then((r) => (r.ok ? r.json() : []))
+        .catch(() => []),
+      fetch(`${base}/api/movieglu/filmshowtimes?filmId=${filmId}&date=${today}`)
+        .then((r) => (r.ok ? r.json() : { cinemas: [] }))
+        .catch(() => ({ cinemas: [] })),
       getOpenSpaces({ movieId: filmId }),
     ])
       .then(([spacesData, showtimesData, crowdfundData]) => {
-        setSpaces(spacesData);
-        setCinemas(showtimesData.cinemas || []);
-        setCrowdfunds(crowdfundData);
+        setSpaces(Array.isArray(spacesData) ? spacesData : []);
+        setCinemas(Array.isArray(showtimesData?.cinemas) ? showtimesData.cinemas : []);
+        setCrowdfunds(Array.isArray(crowdfundData) ? crowdfundData : []);
         setLoading(false);
       })
       .catch(() => setLoading(false));
   }, []);
 
-  const openModal = (cinema: Cinema, time: string, type: "free" | "crowdfund") => {
+  const computeShowtimeIso = (time: string) =>
+    new Date(`${today}T${time}:00`).toISOString();
+
+  const showtimeIso = () => computeShowtimeIso(selectedTime);
+
+  const freeSpacesForSlot = (cinema: Cinema, time: string) =>
+    spaces.filter((s) => s.cinemaId === cinema.cinema_id && s.showTime === time);
+
+  const crowdfundsForSlot = (cinema: Cinema, time: string) => {
+    const iso = computeShowtimeIso(time);
+    return crowdfunds.filter(
+      (cf) => cf.theaterId === cinema.cinema_id.toString() && cf.showtime === iso,
+    );
+  };
+
+  const openSlot = (cinema: Cinema, time: string) => {
     setSelectedCinema(cinema);
     setSelectedTime(time);
+    setSlotModalVisible(true);
+  };
+
+  const openCreateModal = (type: "free" | "crowdfund") => {
+    setSlotModalVisible(false);
     setModalType(type);
     setModalVisible(true);
   };
 
-  const showtimeIso = () =>
-    new Date(`${today}T${selectedTime}:00`).toISOString();
+  // Free-text date entry is fragile — this rejects anything Date can't parse
+  // instead of letting toISOString() throw an uncaught RangeError later.
+  const parseDateOrNull = (value: string): Date | null => {
+    const parsed = new Date(value);
+    return isNaN(parsed.getTime()) ? null : parsed;
+  };
 
   const handleCreateFreeSpace = async () => {
     if (!hostName.trim() || !selectedCinema) return;
@@ -119,6 +151,21 @@ export default function MovieScreen() {
 
   const handleCreateCrowdfund = async () => {
     if (!selectedCinema || !targetAmount || !deadline) return;
+
+    const parsedDeadline = parseDateOrNull(deadline);
+    if (!parsedDeadline) {
+      Alert.alert(
+        "Invalid deadline",
+        "Please enter the deadline as e.g. 2026-07-30T20:00:00.",
+      );
+      return;
+    }
+    const amount = parseFloat(targetAmount);
+    if (!amount || amount <= 0) {
+      Alert.alert("Invalid target amount", "Target amount must be a number greater than zero.");
+      return;
+    }
+
     setCreating(true);
     try {
       const spaceId = await createSpace({
@@ -128,16 +175,16 @@ export default function MovieScreen() {
         theaterId: selectedCinema.cinema_id.toString(),
         theaterName: selectedCinema.cinema_name,
         showtime: showtimeIso(),
-        targetAmount: parseFloat(targetAmount),
-        deadline: new Date(deadline).toISOString(),
+        targetAmount: amount,
+        deadline: parsedDeadline.toISOString(),
         maxParticipants: maxParticipants ? parseInt(maxParticipants, 10) : null,
       });
       setCreating(false);
       setModalVisible(false);
       router.push({ pathname: "/crowdfund/[id]", params: { id: spaceId } });
-    } catch (err) {
+    } catch (err: any) {
       setCreating(false);
-      console.error("Failed to create crowdfund:", err);
+      Alert.alert("Couldn't start crowdfund", err.message || "Please try again.");
     }
   };
 
@@ -204,37 +251,140 @@ export default function MovieScreen() {
             <Text style={styles.cinemaName}>{item.cinema_name}</Text>
             <Text style={styles.cinemaAddress}>{item.address}</Text>
             <View style={styles.times}>
-              {item.showings.Standard.times.slice(0, 6).map((t) => (
-                <View key={t.start_time} style={styles.timeSlot}>
+              {item.showings.Standard.times.slice(0, 6).map((t) => {
+                const count =
+                  freeSpacesForSlot(item, t.start_time).length +
+                  crowdfundsForSlot(item, t.start_time).length;
+                return (
                   <TouchableOpacity
+                    key={t.start_time}
                     style={styles.timeButton}
-                    onPress={() => openModal(item, t.start_time, "free")}
+                    onPress={() => openSlot(item, t.start_time)}
                   >
                     <Text style={styles.timeText}>{t.start_time}</Text>
+                    {count > 0 && (
+                      <View style={styles.timeCountBadge}>
+                        <Text style={styles.timeCountBadgeText}>{count}</Text>
+                      </View>
+                    )}
                   </TouchableOpacity>
-                  <TouchableOpacity
-                    style={styles.crowdfundTimeButton}
-                    onPress={() => openModal(item, t.start_time, "crowdfund")}
-                  >
-                    <Text style={styles.crowdfundTimeText}>💸</Text>
-                  </TouchableOpacity>
-                </View>
-              ))}
+                );
+              })}
             </View>
           </View>
         )}
       />
 
-      <Modal visible={modalVisible} transparent animationType="slide">
+      <Modal
+        visible={slotModalVisible}
+        transparent
+        animationType="slide"
+        onRequestClose={() => setSlotModalVisible(false)}
+      >
         <View style={styles.modalOverlay}>
           <View style={styles.modal}>
-            <Text style={styles.modalTitle}>
-              {modalType === "free" ? "Create a Space" : "Start a Crowdfund"}
+            <View style={styles.modalHeader}>
+              <Text style={styles.modalTitle}>{selectedTime}</Text>
+              <TouchableOpacity
+                style={styles.closeButton}
+                onPress={() => setSlotModalVisible(false)}
+              >
+                <Text style={styles.closeButtonText}>✕</Text>
+              </TouchableOpacity>
+            </View>
+            <Text style={styles.modalSubtitle}>
+              {filmName} at {selectedCinema?.cinema_name}
             </Text>
+
+            <ScrollView keyboardShouldPersistTaps="handled">
+              {selectedCinema &&
+                freeSpacesForSlot(selectedCinema, selectedTime).map((space) => (
+                  <TouchableOpacity
+                    key={space.id}
+                    style={styles.spaceCard}
+                    onPress={() => {
+                      setSlotModalVisible(false);
+                      router.push({
+                        pathname: "/group",
+                        params: { groupId: space.id, hostName: "" },
+                      });
+                    }}
+                  >
+                    <Text style={styles.spaceHost}>Hosted by {space.hostName}</Text>
+                    <Text style={styles.spaceMembers}>
+                      {space.members.length} member(s)
+                    </Text>
+                  </TouchableOpacity>
+                ))}
+
+              {selectedCinema &&
+                crowdfundsForSlot(selectedCinema, selectedTime).map((cf) => (
+                  <TouchableOpacity
+                    key={cf.id}
+                    style={styles.crowdfundCard}
+                    onPress={() => {
+                      setSlotModalVisible(false);
+                      router.push({ pathname: "/crowdfund/[id]", params: { id: cf.id } });
+                    }}
+                  >
+                    <Text style={styles.crowdfundProgress}>
+                      ${cf.currentAmount.toFixed(0)} / ${cf.targetAmount.toFixed(0)} pledged
+                    </Text>
+                  </TouchableOpacity>
+                ))}
+
+              {selectedCinema &&
+                freeSpacesForSlot(selectedCinema, selectedTime).length === 0 &&
+                crowdfundsForSlot(selectedCinema, selectedTime).length === 0 && (
+                  <Text style={styles.emptySlotText}>
+                    No spaces yet for this showtime — be the first to start one.
+                  </Text>
+                )}
+
+              <TouchableOpacity
+                style={styles.createButton}
+                onPress={() => openCreateModal("free")}
+              >
+                <Text style={styles.buttonText}>Create a free Space</Text>
+              </TouchableOpacity>
+              <TouchableOpacity
+                style={styles.crowdfundCreateButton}
+                onPress={() => openCreateModal("crowdfund")}
+              >
+                <Text style={styles.buttonText}>Start a Crowdfund</Text>
+              </TouchableOpacity>
+            </ScrollView>
+          </View>
+        </View>
+      </Modal>
+
+      <Modal
+        visible={modalVisible}
+        transparent
+        animationType="slide"
+        onRequestClose={() => setModalVisible(false)}
+      >
+        <KeyboardAvoidingView
+          style={styles.modalOverlay}
+          behavior={Platform.OS === "ios" ? "padding" : undefined}
+        >
+          <View style={styles.modal}>
+            <View style={styles.modalHeader}>
+              <Text style={styles.modalTitle}>
+                {modalType === "free" ? "Create a Space" : "Start a Crowdfund"}
+              </Text>
+              <TouchableOpacity
+                style={styles.closeButton}
+                onPress={() => setModalVisible(false)}
+              >
+                <Text style={styles.closeButtonText}>✕</Text>
+              </TouchableOpacity>
+            </View>
             <Text style={styles.modalSubtitle}>
               {filmName} • {selectedTime} at {selectedCinema?.cinema_name}
             </Text>
 
+            <ScrollView keyboardShouldPersistTaps="handled">
             {modalType === "free" ? (
               <>
                 <TextInput
@@ -291,15 +441,9 @@ export default function MovieScreen() {
                 </TouchableOpacity>
               </>
             )}
-
-            <TouchableOpacity
-              style={styles.cancelButton}
-              onPress={() => setModalVisible(false)}
-            >
-              <Text style={styles.cancelText}>Cancel</Text>
-            </TouchableOpacity>
+            </ScrollView>
           </View>
-        </View>
+        </KeyboardAvoidingView>
       </Modal>
     </View>
   );
@@ -354,16 +498,38 @@ const styles = StyleSheet.create({
   cinemaName: { fontSize: 16, fontWeight: "700", color: "#333" },
   cinemaAddress: { fontSize: 13, color: "#666", marginBottom: 8 },
   times: { flexDirection: "row", flexWrap: "wrap", gap: 8 },
-  timeSlot: { flexDirection: "row", alignItems: "center", gap: 4 },
-  timeButton: { backgroundColor: "#007AFF", padding: 8, borderRadius: 6 },
-  timeText: { color: "#fff", fontWeight: "600", fontSize: 13 },
-  crowdfundTimeButton: {
-    backgroundColor: "#E50914",
-    paddingVertical: 8,
-    paddingHorizontal: 10,
+  timeButton: {
+    flexDirection: "row",
+    alignItems: "center",
+    gap: 6,
+    backgroundColor: "#007AFF",
+    padding: 8,
     borderRadius: 6,
   },
-  crowdfundTimeText: { fontSize: 13 },
+  timeText: { color: "#fff", fontWeight: "600", fontSize: 13 },
+  timeCountBadge: {
+    backgroundColor: "#fff",
+    borderRadius: 10,
+    minWidth: 18,
+    height: 18,
+    alignItems: "center",
+    justifyContent: "center",
+    paddingHorizontal: 4,
+  },
+  timeCountBadgeText: { color: "#007AFF", fontSize: 11, fontWeight: "700" },
+  emptySlotText: {
+    color: "#999",
+    fontSize: 14,
+    textAlign: "center",
+    marginVertical: 16,
+  },
+  crowdfundCreateButton: {
+    backgroundColor: "#E50914",
+    padding: 14,
+    borderRadius: 8,
+    alignItems: "center",
+    marginBottom: 12,
+  },
   modalOverlay: {
     flex: 1,
     backgroundColor: "rgba(0,0,0,0.5)",
@@ -374,9 +540,24 @@ const styles = StyleSheet.create({
     padding: 24,
     borderTopLeftRadius: 16,
     borderTopRightRadius: 16,
+    maxHeight: "85%",
   },
-  modalTitle: { fontSize: 22, fontWeight: "bold", marginBottom: 4 },
-  modalSubtitle: { fontSize: 14, color: "#666", marginBottom: 24 },
+  modalHeader: {
+    flexDirection: "row",
+    justifyContent: "space-between",
+    alignItems: "center",
+  },
+  closeButton: {
+    width: 32,
+    height: 32,
+    borderRadius: 16,
+    backgroundColor: "#f0f0f0",
+    alignItems: "center",
+    justifyContent: "center",
+  },
+  closeButtonText: { fontSize: 16, color: "#666", fontWeight: "600" },
+  modalTitle: { fontSize: 22, fontWeight: "bold" },
+  modalSubtitle: { fontSize: 14, color: "#666", marginBottom: 24, marginTop: 4 },
   input: {
     borderWidth: 1,
     borderColor: "#E5E5E5",
@@ -394,7 +575,5 @@ const styles = StyleSheet.create({
     alignItems: "center",
     marginBottom: 12,
   },
-  cancelButton: { alignItems: "center", padding: 8 },
   buttonText: { color: "#fff", fontWeight: "600", fontSize: 16 },
-  cancelText: { color: "#666", fontSize: 16 },
 });
