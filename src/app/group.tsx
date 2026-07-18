@@ -13,6 +13,9 @@ import {
 import { useLocalSearchParams, router } from "expo-router";
 import * as WebBrowser from "expo-web-browser";
 import { supabase } from "@/frontend/config/supabase";
+import { Starfield } from "@/frontend/components/starfield";
+import { SpaceTheme, SpaceStyles } from "@/frontend/constants/theme";
+import { buildTicketUrl } from "@/frontend/services/ticket-links";
 
 interface Member {
   id: string;
@@ -23,14 +26,17 @@ interface Member {
 interface Group {
   id: string;
   hostName: string;
-  cinemaId: number;
+  cinemaId: number | null;
   cinemaName: string;
-  filmId: number;
+  filmId: number | null;
   filmName: string;
   showTime: string;
   showDate: string;
   bookingUrl: string;
   status: string;
+  spaceType: "public_gathering" | "private_rental";
+  totalCostCents: number | null;
+  maxCapacity: number;
   members: Member[];
 }
 
@@ -82,6 +88,11 @@ export default function GroupScreen() {
     });
   };
 
+  const handleGetTickets = async () => {
+    if (!group) return;
+    await WebBrowser.openBrowserAsync(buildTicketUrl(group.filmName, group.bookingUrl));
+  };
+
   const handleBook = async () => {
     if (!group) return;
 
@@ -103,14 +114,22 @@ export default function GroupScreen() {
   };
 
   // 1. Initial Loading State Guard
-  if (loading) return <ActivityIndicator size="large" style={{ flex: 1 }} />;
+  if (loading) {
+    return (
+      <Starfield>
+        <ActivityIndicator size="large" color={SpaceTheme.glowCyan} style={{ flex: 1 }} />
+      </Starfield>
+    );
+  }
 
   // 2. Missing Group Guard
   if (!group) {
     return (
-      <View style={styles.center}>
-        <Text>Group not found</Text>
-      </View>
+      <Starfield>
+        <View style={styles.center}>
+          <Text style={styles.notFoundText}>Group not found</Text>
+        </View>
+      </Starfield>
     );
   }
 
@@ -123,111 +142,174 @@ export default function GroupScreen() {
     !!currentUserId && groupMembers.some((m) => m.userId === currentUserId);
 
   return (
-    <View style={styles.container}>
-      <Text style={styles.title}>{group.filmName}</Text>
-      <Text style={styles.subtitle}>
-        {group.cinemaName} • {group.showTime}
-      </Text>
-
-      <View style={styles.section}>
-        <Text style={styles.sectionTitle}>
-          Group Members ({groupMembers.length})
+    <Starfield>
+      <View style={styles.container}>
+        <Text style={[styles.title, SpaceStyles.glowText]}>{group.filmName}</Text>
+        <Text style={styles.subtitle}>
+          {group.cinemaName} • {group.showTime}
         </Text>
-        <FlatList
-          data={groupMembers}
-          keyExtractor={(item) => item.id}
-          renderItem={({ item }) => (
-            <View style={styles.memberRow}>
-              <Text style={styles.memberName}>{item.name}</Text>
-              <Text style={item.confirmed ? styles.confirmed : styles.pending}>
-                {item.confirmed ? "✓ In" : "Pending"}
-              </Text>
+
+        {group.spaceType === "private_rental" && (
+          <View style={styles.rentalCard}>
+            <View style={styles.rentalCardHeader}>
+              <Text style={styles.rentalBadge}>PRIVATE RENTAL</Text>
             </View>
-          )}
-        />
-      </View>
+            {group.totalCostCents != null && (
+              <>
+                <Text style={styles.rentalCostText}>
+                  ${(group.totalCostCents / 100).toFixed(2)} total
+                </Text>
+                <Text style={styles.rentalPerPersonText}>
+                  ${(group.totalCostCents / 100 / Math.max(groupMembers.length, 1)).toFixed(2)}{" "}
+                  per person ({groupMembers.length} going)
+                </Text>
+              </>
+            )}
+            <Text style={styles.rentalCapacityText}>
+              {groupMembers.length} / {group.maxCapacity} spots filled
+            </Text>
+          </View>
+        )}
 
-      <TouchableOpacity style={styles.shareButton} onPress={shareLink}>
-        <Text style={styles.buttonText}>📤 Invite Friends</Text>
-      </TouchableOpacity>
-
-      {(isHost || isMember) && (
-        <TouchableOpacity
-          style={styles.chatButton}
-          onPress={() =>
-            router.push({
-              pathname: "/group-chat/[id]",
-              params: { id: group.id, type: "group", title: group.filmName },
-            })
-          }
-        >
-          <Text style={styles.buttonText}>💬 Group Chat</Text>
-        </TouchableOpacity>
-      )}
-
-      {isHost && (
-        <TouchableOpacity
-          style={styles.bookButton} // Always styled brightly now
-          onPress={handleBook} // Always clickable
-        >
-          <Text style={styles.buttonText}>
-            {allConfirmed
-              ? "🎟 Book Now"
-              : `Waiting for ${groupMembers.filter((m) => !m.confirmed).length} confirmation(s)`}
+        <View style={styles.section}>
+          <Text style={styles.sectionTitle}>
+            Group Members ({groupMembers.length})
           </Text>
+          <FlatList
+            data={groupMembers}
+            keyExtractor={(item) => item.id}
+            renderItem={({ item }) => (
+              <View style={styles.memberRow}>
+                <Text style={styles.memberName}>{item.name}</Text>
+                <Text style={item.confirmed ? styles.confirmed : styles.pending}>
+                  {item.confirmed ? "✓ In" : "Pending"}
+                </Text>
+              </View>
+            )}
+          />
+        </View>
+
+        <TouchableOpacity activeOpacity={0.8} style={styles.shareButton} onPress={shareLink}>
+          <Text style={styles.buttonText}>📤 Invite Friends</Text>
         </TouchableOpacity>
-      )}
-    </View>
+
+        {(isHost || isMember) && (
+          <TouchableOpacity
+            activeOpacity={0.8}
+            style={styles.chatButton}
+            onPress={() =>
+              router.push({
+                pathname: "/group-chat/[id]",
+                params: { id: group.id, type: "group", title: group.filmName },
+              })
+            }
+          >
+            <Text style={styles.buttonText}>💬 Group Chat</Text>
+          </TouchableOpacity>
+        )}
+
+        {(isHost || isMember) && (
+          <TouchableOpacity
+            activeOpacity={0.8}
+            style={styles.ticketsButton}
+            onPress={handleGetTickets}
+          >
+            <Text style={styles.ticketsButtonText}>🎟 Get Tickets</Text>
+          </TouchableOpacity>
+        )}
+
+        {isHost && (
+          <TouchableOpacity
+            activeOpacity={0.8}
+            style={styles.bookButton}
+            onPress={handleBook}
+          >
+            <Text style={styles.buttonText}>
+              {allConfirmed
+                ? "✓ Mark Group Booked"
+                : `Waiting for ${groupMembers.filter((m) => !m.confirmed).length} confirmation(s)`}
+            </Text>
+          </TouchableOpacity>
+        )}
+      </View>
+    </Starfield>
   );
 }
 
 const styles = StyleSheet.create({
   container: {
     flex: 1,
-    backgroundColor: "#f5f5f5",
     padding: 16,
     paddingTop: 60,
   },
   center: { flex: 1, justifyContent: "center", alignItems: "center" },
-  title: { fontSize: 22, fontWeight: "bold", color: "#333" },
-  subtitle: { fontSize: 14, color: "#666", marginBottom: 24 },
-  section: {
-    backgroundColor: "#fff",
-    borderRadius: 8,
+  notFoundText: { color: SpaceTheme.mutedOrbit, fontSize: 16 },
+  title: { fontSize: 22, fontWeight: "bold", color: SpaceTheme.starWhite },
+  subtitle: { fontSize: 14, color: SpaceTheme.mutedOrbit, marginBottom: 24 },
+  rentalCard: {
+    ...SpaceStyles.glassCard,
+    borderColor: "rgba(244, 114, 182, 0.3)",
     padding: 16,
     marginBottom: 16,
   },
-  sectionTitle: { fontSize: 16, fontWeight: "700", marginBottom: 12 },
+  rentalCardHeader: { marginBottom: 8 },
+  rentalBadge: {
+    color: SpaceTheme.supernovaPink,
+    fontSize: 12,
+    fontWeight: "800",
+    letterSpacing: 0.5,
+  },
+  rentalCostText: { color: SpaceTheme.starWhite, fontSize: 20, fontWeight: "700" },
+  rentalPerPersonText: { color: SpaceTheme.mutedOrbit, fontSize: 13, marginTop: 2 },
+  rentalCapacityText: { color: SpaceTheme.glowCyan, fontSize: 13, fontWeight: "600", marginTop: 8 },
+  section: {
+    ...SpaceStyles.glassCard,
+    padding: 16,
+    marginBottom: 16,
+  },
+  sectionTitle: { fontSize: 16, fontWeight: "700", color: SpaceTheme.starWhite, marginBottom: 12 },
   memberRow: {
     flexDirection: "row",
     justifyContent: "space-between",
     paddingVertical: 8,
     borderBottomWidth: 1,
-    borderBottomColor: "#f0f0f0",
+    borderBottomColor: "rgba(255,255,255,0.08)",
   },
-  memberName: { fontSize: 16, color: "#333" },
-  confirmed: { color: "#34C759", fontWeight: "600" },
-  pending: { color: "#FF9500", fontWeight: "600" },
+  memberName: { fontSize: 16, color: SpaceTheme.starWhite },
+  confirmed: { color: "#4ADE80", fontWeight: "600" },
+  pending: { color: SpaceTheme.supernovaPink, fontWeight: "600" },
   shareButton: {
-    backgroundColor: "#007AFF",
+    backgroundColor: SpaceTheme.glowCyan,
     padding: 14,
-    borderRadius: 8,
+    borderRadius: 12,
     alignItems: "center",
     marginBottom: 12,
   },
   chatButton: {
-    backgroundColor: "#5856D6",
+    backgroundColor: "#8B5CF6",
     padding: 14,
-    borderRadius: 8,
+    borderRadius: 12,
     alignItems: "center",
     marginBottom: 12,
   },
+  ticketsButton: {
+    backgroundColor: SpaceTheme.glowCyan,
+    padding: 18,
+    borderRadius: 14,
+    alignItems: "center",
+    marginBottom: 12,
+    shadowColor: SpaceTheme.glowCyan,
+    shadowOffset: { width: 0, height: 0 },
+    shadowOpacity: 0.5,
+    shadowRadius: 10,
+    elevation: 6,
+  },
+  ticketsButtonText: { color: SpaceTheme.backgroundVoid, fontWeight: "800", fontSize: 18 },
   bookButton: {
-    backgroundColor: "#34C759",
+    backgroundColor: "#4ADE80",
     padding: 14,
-    borderRadius: 8,
+    borderRadius: 12,
     alignItems: "center",
   },
-  disabled: { backgroundColor: "#ccc" },
-  buttonText: { color: "#fff", fontWeight: "600", fontSize: 16 },
+  buttonText: { color: SpaceTheme.backgroundVoid, fontWeight: "700", fontSize: 16 },
 });

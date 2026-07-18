@@ -1,15 +1,27 @@
-import { DarkTheme, DefaultTheme, ThemeProvider } from "expo-router";
+import { DarkTheme, ThemeProvider } from "expo-router";
 import { Stack, router } from "expo-router";
-import { useColorScheme } from "react-native";
 import { useEffect, useState } from "react";
-import { StripeProvider } from "@stripe/stripe-react-native";
 import { AnimatedSplashOverlay } from "@/frontend/components/animated-icon";
 import { supabase } from "@/frontend/config/supabase";
+import { SpaceTheme } from "@/frontend/constants/theme";
 
-const stripePublishableKey = process.env.EXPO_PUBLIC_STRIPE_PUBLISHABLE_KEY ?? "";
+// Every screen uses the cosmic theme now, regardless of system light/dark
+// mode — so the native header (back button, title bar) should match rather
+// than following the device's color scheme.
+const SpaceNavigationTheme = {
+  ...DarkTheme,
+  colors: {
+    ...DarkTheme.colors,
+    primary: SpaceTheme.glowCyan,
+    background: SpaceTheme.backgroundVoid,
+    card: SpaceTheme.deepSpace,
+    text: SpaceTheme.starWhite,
+    border: "rgba(255, 255, 255, 0.08)",
+    notification: SpaceTheme.supernovaPink,
+  },
+};
 
 export default function Layout() {
-  const colorScheme = useColorScheme();
   const [session, setSession] = useState<any>(null);
   const [loading, setLoading] = useState(true);
 
@@ -39,8 +51,8 @@ export default function Layout() {
     }
   }, [session, loading]);
 
-  const content = (
-    <ThemeProvider value={colorScheme === "dark" ? DarkTheme : DefaultTheme}>
+  return (
+    <ThemeProvider value={SpaceNavigationTheme}>
       <AnimatedSplashOverlay />
       <Stack>
         <Stack.Screen name="auth" options={{ headerShown: false }} />
@@ -51,21 +63,9 @@ export default function Layout() {
         <Stack.Screen name="confirm" options={{ title: "Confirm" }} />
         <Stack.Screen name="movie" options={{ title: "Movie" }} />
         <Stack.Screen name="chat/[userId]" options={{ title: "Chat" }} />
-        <Stack.Screen name="crowdfund/create" options={{ title: "New Crowdfund" }} />
-        <Stack.Screen name="crowdfund/[id]" options={{ title: "Crowdfund" }} />
         <Stack.Screen name="group-chat/[id]" options={{ title: "Group Chat" }} />
+        <Stack.Screen name="create-space" options={{ title: "Create a Space" }} />
       </Stack>
     </ThemeProvider>
-  );
-
-  // Pledging (crowdfund/[id].tsx) is the only screen that needs Stripe — if
-  // the key isn't configured yet, degrade gracefully rather than crash the
-  // whole app; that screen alone will show a "not configured" state.
-  if (!stripePublishableKey) return content;
-
-  return (
-    <StripeProvider publishableKey={stripePublishableKey}>
-      {content}
-    </StripeProvider>
   );
 }

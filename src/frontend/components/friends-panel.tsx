@@ -1,6 +1,7 @@
 import { useState } from "react";
 import {
   View,
+  Text,
   FlatList,
   StyleSheet,
   TouchableOpacity,
@@ -9,12 +10,10 @@ import {
   Alert,
 } from "react-native";
 import { router } from "expo-router";
-import { ThemedText } from "@/frontend/components/themed-text";
-import { useTheme } from "@/frontend/hooks/use-theme";
+import { SpaceTheme, SpaceStyles } from "@/frontend/constants/theme";
 import { useFriends, Profile } from "@/frontend/hooks/use-friends";
 
 export function FriendsPanel() {
-  const theme = useTheme();
   const {
     friends,
     pendingRequests,
@@ -59,44 +58,29 @@ export function FriendsPanel() {
   return (
     <View style={styles.container}>
       <TextInput
-        style={[
-          styles.input,
-          { backgroundColor: theme.backgroundElement, color: theme.text },
-        ]}
+        style={styles.input}
         placeholder="Search users by name..."
-        placeholderTextColor={theme.textSecondary}
+        placeholderTextColor={SpaceTheme.mutedOrbit}
         value={query}
         onChangeText={handleSearch}
         autoCapitalize="none"
       />
 
-      {searching && <ActivityIndicator style={{ marginVertical: 8 }} />}
+      {searching && <ActivityIndicator color={SpaceTheme.glowCyan} style={{ marginVertical: 8 }} />}
 
       {results.length > 0 && (
         <View style={styles.section}>
-          <ThemedText type="smallBold" themeColor="textSecondary">
-            SEARCH RESULTS
-          </ThemedText>
+          <Text style={styles.sectionLabel}>SEARCH RESULTS</Text>
           {results.map((user) => (
-            <View
-              key={user.id}
-              style={[styles.row, { backgroundColor: theme.backgroundElement }]}
-            >
-              <ThemedText>{user.display_name}</ThemedText>
+            <View key={user.id} style={styles.row}>
+              <Text style={styles.rowText}>{user.display_name}</Text>
               {friendIds.has(user.id) ? (
-                <ThemedText themeColor="textSecondary" type="small">
-                  Friends
-                </ThemedText>
+                <Text style={styles.rowSubtext}>Friends</Text>
               ) : requestedIds.has(user.id) ? (
-                <ThemedText themeColor="textSecondary" type="small">
-                  Requested
-                </ThemedText>
+                <Text style={styles.rowSubtext}>Requested</Text>
               ) : (
-                <TouchableOpacity
-                  style={styles.actionButton}
-                  onPress={() => handleAdd(user.id)}
-                >
-                  <ThemedText type="smallBold">Add</ThemedText>
+                <TouchableOpacity activeOpacity={0.8} style={styles.actionButton} onPress={() => handleAdd(user.id)}>
+                  <Text style={styles.actionButtonText}>Add</Text>
                 </TouchableOpacity>
               )}
             </View>
@@ -106,29 +90,24 @@ export function FriendsPanel() {
 
       {pendingRequests.length > 0 && (
         <View style={styles.section}>
-          <ThemedText type="smallBold" themeColor="textSecondary">
-            PENDING REQUESTS
-          </ThemedText>
+          <Text style={styles.sectionLabel}>PENDING REQUESTS</Text>
           {pendingRequests.map((req) => (
-            <View
-              key={req.id}
-              style={[styles.row, { backgroundColor: theme.backgroundElement }]}
-            >
-              <ThemedText>{req.requester.display_name}</ThemedText>
+            <View key={req.id} style={styles.row}>
+              <Text style={styles.rowText}>{req.requester.display_name}</Text>
               <View style={styles.requestActions}>
                 <TouchableOpacity
+                  activeOpacity={0.8}
                   style={styles.actionButton}
                   onPress={() => acceptFriendRequest(req.id)}
                 >
-                  <ThemedText type="smallBold">Accept</ThemedText>
+                  <Text style={styles.actionButtonText}>Accept</Text>
                 </TouchableOpacity>
                 <TouchableOpacity
+                  activeOpacity={0.8}
                   style={styles.actionButton}
                   onPress={() => declineFriendRequest(req.id)}
                 >
-                  <ThemedText type="smallBold" themeColor="textSecondary">
-                    Decline
-                  </ThemedText>
+                  <Text style={styles.declineButtonText}>Decline</Text>
                 </TouchableOpacity>
               </View>
             </View>
@@ -137,24 +116,21 @@ export function FriendsPanel() {
       )}
 
       <View style={styles.section}>
-        <ThemedText type="smallBold" themeColor="textSecondary">
-          MY FRIENDS
-        </ThemedText>
+        <Text style={styles.sectionLabel}>MY FRIENDS</Text>
         {loading && friends.length === 0 ? (
-          <ActivityIndicator style={{ marginVertical: 16 }} />
+          <ActivityIndicator color={SpaceTheme.glowCyan} style={{ marginVertical: 16 }} />
         ) : (
           <FlatList
             data={friends}
             keyExtractor={(item) => item.id}
             scrollEnabled={false}
             ListEmptyComponent={
-              <ThemedText themeColor="textSecondary" style={{ marginTop: 12 }}>
-                No friends yet — search above to add some.
-              </ThemedText>
+              <Text style={styles.emptyText}>No friends yet — search above to add some.</Text>
             }
             renderItem={({ item }) => (
               <TouchableOpacity
-                style={[styles.row, { backgroundColor: theme.backgroundElement }]}
+                activeOpacity={0.8}
+                style={styles.row}
                 onPress={() =>
                   router.push({
                     pathname: "/chat/[userId]",
@@ -162,10 +138,8 @@ export function FriendsPanel() {
                   })
                 }
               >
-                <ThemedText>{item.display_name}</ThemedText>
-                <ThemedText themeColor="textSecondary" type="small">
-                  Message
-                </ThemedText>
+                <Text style={styles.rowText}>{item.display_name}</Text>
+                <Text style={styles.rowSubtext}>Message</Text>
               </TouchableOpacity>
             )}
           />
@@ -178,20 +152,27 @@ export function FriendsPanel() {
 const styles = StyleSheet.create({
   container: { flex: 1 },
   input: {
+    ...SpaceStyles.glassCard,
+    color: SpaceTheme.starWhite,
     padding: 14,
-    borderRadius: 8,
     fontSize: 16,
     marginBottom: 8,
   },
   section: { marginTop: 20 },
+  sectionLabel: { color: SpaceTheme.mutedOrbit, fontSize: 13, fontWeight: "700" },
   row: {
+    ...SpaceStyles.glassCard,
     flexDirection: "row",
     justifyContent: "space-between",
     alignItems: "center",
     padding: 14,
-    borderRadius: 8,
     marginTop: 8,
   },
+  rowText: { color: SpaceTheme.starWhite, fontSize: 16 },
+  rowSubtext: { color: SpaceTheme.mutedOrbit, fontSize: 13 },
+  emptyText: { color: SpaceTheme.mutedOrbit, marginTop: 12 },
   requestActions: { flexDirection: "row", gap: 12 },
   actionButton: { marginLeft: 12 },
+  actionButtonText: { color: SpaceTheme.glowCyan, fontWeight: "700", fontSize: 14 },
+  declineButtonText: { color: SpaceTheme.mutedOrbit, fontWeight: "700", fontSize: 14 },
 });

@@ -21,18 +21,4 @@ public class AppDbContext : DbContext
     public DbSet<MovieSpace> MovieSpaces => Set<MovieSpace>();
     public DbSet<Group> Groups { get; set; }
     public DbSet<GroupMember> GroupMembers { get; set; }
-    public DbSet<Space> Spaces => Set<Space>();
-    public DbSet<SpacePledge> SpacePledges => Set<SpacePledge>();
-
-    protected override void OnModelCreating(ModelBuilder modelBuilder)
-    {
-        base.OnModelCreating(modelBuilder);
-
-        // "spaces"/"space_pledges" are created and owned by the Supabase SQL
-        // migration (supabase/migrations/20260717_crowdfunded_spaces.sql), not
-        // by EF Core migrations — exclude them so `dotnet ef migrations add`
-        // never generates a CREATE TABLE for tables that already exist.
-        modelBuilder.Entity<Space>().ToTable("spaces", t => t.ExcludeFromMigrations());
-        modelBuilder.Entity<SpacePledge>().ToTable("space_pledges", t => t.ExcludeFromMigrations());
-    }
 }

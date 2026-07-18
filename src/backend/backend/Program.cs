@@ -3,9 +3,6 @@ using Microsoft.EntityFrameworkCore;
 using Microsoft.AspNetCore.Authentication.JwtBearer;
 using Microsoft.IdentityModel.Tokens;
 using System.Text;
-using Stripe;
-using Refit;
-using Backend.Services;
 
 var builder = WebApplication.CreateBuilder(args);
 
@@ -73,42 +70,6 @@ if (string.IsNullOrEmpty(connectionString))
 
 builder.Services.AddDbContext<AppDbContext>(options =>
     options.UseNpgsql(connectionString));
-
-// Pledge authorization for the crowdfunded-spaces feature needs this.
-var stripeSecretKey = builder.Configuration["Stripe:SecretKey"];
-if (string.IsNullOrEmpty(stripeSecretKey))
-{
-    throw new InvalidOperationException("CRITICAL: 'Stripe:SecretKey' was not found in configuration!");
-}
-StripeConfiguration.ApiKey = stripeSecretKey;
-
-// Verifies StripeWebhookController's incoming event signatures. Set this to
-// the "Signing secret" shown after creating the webhook endpoint in the
-// Stripe dashboard (Developers > Webhooks > Add endpoint, pointing at
-// <your-backend-url>/api/stripe/webhook).
-var stripeWebhookSecret = builder.Configuration["Stripe:WebhookSecret"];
-if (string.IsNullOrEmpty(stripeWebhookSecret))
-{
-    throw new InvalidOperationException("CRITICAL: 'Stripe:WebhookSecret' was not found in configuration!");
-}
-
-builder.Services.AddScoped<PledgeSettlementService>();
-builder.Services.AddHostedService<SpaceDeadlineSweepService>();
-
-// TMDB is the movie data source for crowdfunded spaces (spaces.movie_id/
-// movie_title/movie_poster_url) — using the v3 api_key (sent per-request as a
-// query param by ITmdbApi), not the v4 Bearer Read Access Token.
-var tmdbApiKey = builder.Configuration["Tmdb:ApiKey"];
-if (string.IsNullOrEmpty(tmdbApiKey))
-{
-    throw new InvalidOperationException("CRITICAL: 'Tmdb:ApiKey' was not found in configuration!");
-}
-builder.Services
-    .AddRefitClient<ITmdbApi>()
-    .ConfigureHttpClient(c =>
-    {
-        c.BaseAddress = new Uri("https://api.themoviedb.org/3");
-    });
 
 var app = builder.Build();
 

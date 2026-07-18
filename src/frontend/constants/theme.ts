@@ -25,6 +25,38 @@ export const Colors = {
 
 export type ThemeColor = keyof typeof Colors.light & keyof typeof Colors.dark;
 
+// Deep-space palette for the MovieSpaces cosmic theme — a single fixed dark
+// theme (not light/dark adaptive like Colors above), used by screens wrapped
+// in <Starfield />.
+export const SpaceTheme = {
+  backgroundVoid: "#030712",
+  deepSpace: "#0A0F24",
+  nebulaCard: "rgba(19, 26, 53, 0.8)",
+  starWhite: "#FFFFFF",
+  glowCyan: "#38BDF8",
+  supernovaPink: "#F472B6",
+  mutedOrbit: "#475569",
+} as const;
+
+// Shared glassmorphism/glow style fragments so every screen doesn't
+// redeclare the same numbers. Spread into a component's own StyleSheet, e.g.
+// `card: { ...SpaceStyles.glassCard, padding: 16 }`.
+export const SpaceStyles = {
+  glassCard: {
+    backgroundColor: SpaceTheme.nebulaCard,
+    borderRadius: 16,
+    borderWidth: 1,
+    borderColor: "rgba(255, 255, 255, 0.08)",
+  },
+  // React Native's text-glow uses textShadow*, not the View shadow* props —
+  // shadowColor/shadowRadius/shadowOpacity don't render a glow on <Text>.
+  glowText: {
+    textShadowColor: SpaceTheme.glowCyan,
+    textShadowOffset: { width: 0, height: 0 },
+    textShadowRadius: 4,
+  },
+} as const;
+
 export const Fonts = Platform.select({
   ios: {
     /** iOS `UIFontDescriptorSystemDesignDefault` */
