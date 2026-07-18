@@ -8,6 +8,8 @@ import {
 } from "react-native";
 import { useLocalSearchParams, router } from "expo-router";
 import { authFetch } from "@/frontend/services/api";
+import { Starfield } from "@/frontend/components/starfield";
+import { SpaceTheme, SpaceStyles } from "@/frontend/constants/theme";
 
 export default function JoinScreen() {
   const { groupId } = useLocalSearchParams<{ groupId: string }>();
@@ -33,53 +35,55 @@ export default function JoinScreen() {
   };
 
   return (
-    <View style={styles.container}>
-      <Text style={styles.title}>Join Movie Group</Text>
-      <Text style={styles.subtitle}>Enter your name to join</Text>
-      <TextInput
-        style={styles.input}
-        placeholder="Your name"
-        value={name}
-        onChangeText={setName}
-        placeholderTextColor="#888"
-      />
-      <TouchableOpacity
-        style={styles.button}
-        onPress={handleJoin}
-        disabled={loading}
-      >
-        <Text style={styles.buttonText}>
-          {loading ? "Joining..." : "Join Group"}
-        </Text>
-      </TouchableOpacity>
-    </View>
+    <Starfield>
+      <View style={styles.container}>
+        <Text style={[styles.title, SpaceStyles.glowText]}>Join Movie Group</Text>
+        <Text style={styles.subtitle}>Enter your name to join</Text>
+        <TextInput
+          style={styles.input}
+          placeholder="Your name"
+          value={name}
+          onChangeText={setName}
+          placeholderTextColor={SpaceTheme.mutedOrbit}
+        />
+        <TouchableOpacity
+          activeOpacity={0.8}
+          style={styles.button}
+          onPress={handleJoin}
+          disabled={loading}
+        >
+          <Text style={styles.buttonText}>
+            {loading ? "Joining..." : "Join Group"}
+          </Text>
+        </TouchableOpacity>
+      </View>
+    </Starfield>
   );
 }
 
 const styles = StyleSheet.create({
   container: {
     flex: 1,
-    backgroundColor: "#f5f5f5",
     padding: 16,
     paddingTop: 100,
   },
-  title: { fontSize: 28, fontWeight: "bold", color: "#333", marginBottom: 8 },
-  subtitle: { fontSize: 16, color: "#666", marginBottom: 32 },
+  title: { fontSize: 28, fontWeight: "bold", color: SpaceTheme.starWhite, marginBottom: 8 },
+  subtitle: { fontSize: 16, color: SpaceTheme.mutedOrbit, marginBottom: 32 },
   input: {
     borderWidth: 1,
-    borderColor: "#E5E5E5",
+    borderColor: "rgba(255, 255, 255, 0.12)",
     borderRadius: 8,
     padding: 12,
     fontSize: 16,
-    backgroundColor: "#fff",
+    backgroundColor: "rgba(255, 255, 255, 0.05)",
     marginBottom: 16,
-    color: "#000",
+    color: SpaceTheme.starWhite,
   },
   button: {
-    backgroundColor: "#007AFF",
+    backgroundColor: SpaceTheme.glowCyan,
     padding: 14,
-    borderRadius: 8,
+    borderRadius: 12,
     alignItems: "center",
   },
-  buttonText: { color: "#fff", fontWeight: "600", fontSize: 16 },
+  buttonText: { color: SpaceTheme.backgroundVoid, fontWeight: "700", fontSize: 16 },
 });

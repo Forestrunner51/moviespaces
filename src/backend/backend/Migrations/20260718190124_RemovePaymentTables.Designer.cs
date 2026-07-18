@@ -3,6 +3,7 @@ using System;
 using Backend.Data;
 using Microsoft.EntityFrameworkCore;
 using Microsoft.EntityFrameworkCore.Infrastructure;
+using Microsoft.EntityFrameworkCore.Migrations;
 using Microsoft.EntityFrameworkCore.Storage.ValueConversion;
 using Npgsql.EntityFrameworkCore.PostgreSQL.Metadata;
 
@@ -11,9 +12,11 @@ using Npgsql.EntityFrameworkCore.PostgreSQL.Metadata;
 namespace backend.Migrations
 {
     [DbContext(typeof(AppDbContext))]
-    partial class AppDbContextModelSnapshot : ModelSnapshot
+    [Migration("20260718190124_RemovePaymentTables")]
+    partial class RemovePaymentTables
     {
-        protected override void BuildModel(ModelBuilder modelBuilder)
+        /// <inheritdoc />
+        protected override void BuildTargetModel(ModelBuilder modelBuilder)
         {
 #pragma warning disable 612, 618
             modelBuilder
@@ -56,7 +59,7 @@ namespace backend.Migrations
                         .IsRequired()
                         .HasColumnType("text");
 
-                    b.Property<int?>("CinemaId")
+                    b.Property<int>("CinemaId")
                         .HasColumnType("integer");
 
                     b.Property<string>("CinemaName")
@@ -66,7 +69,7 @@ namespace backend.Migrations
                     b.Property<DateTime>("CreatedAt")
                         .HasColumnType("timestamp with time zone");
 
-                    b.Property<int?>("FilmId")
+                    b.Property<int>("FilmId")
                         .HasColumnType("integer");
 
                     b.Property<string>("FilmName")
@@ -77,10 +80,6 @@ namespace backend.Migrations
                         .IsRequired()
                         .HasColumnType("text");
 
-                    b.Property<int>("MaxCapacity")
-                        .HasColumnType("integer")
-                        .HasColumnName("max_capacity");
-
                     b.Property<string>("ShowDate")
                         .IsRequired()
                         .HasColumnType("text");
@@ -89,18 +88,9 @@ namespace backend.Migrations
                         .IsRequired()
                         .HasColumnType("text");
 
-                    b.Property<string>("SpaceType")
-                        .IsRequired()
-                        .HasColumnType("text")
-                        .HasColumnName("space_type");
-
                     b.Property<string>("Status")
                         .IsRequired()
                         .HasColumnType("text");
-
-                    b.Property<long?>("TotalCostCents")
-                        .HasColumnType("bigint")
-                        .HasColumnName("total_cost_cents");
 
                     b.Property<string>("UserId")
                         .IsRequired()

@@ -33,6 +33,10 @@ namespace Backend.Controllers
         {
             var userId = GetUserId();
 
+            var spaceType = req.SpaceType == "private_rental" ? "private_rental" : "public_gathering";
+            if (spaceType == "private_rental" && (!req.TotalCostCents.HasValue || req.TotalCostCents.Value < 0))
+                return BadRequest(new { error = "Total cost is required for a private rental." });
+
             var group = new Group
             {
                 HostName = req.HostName,
@@ -43,7 +47,10 @@ namespace Backend.Controllers
                 FilmName = req.FilmName,
                 ShowTime = req.ShowTime,
                 ShowDate = req.ShowDate,
-                BookingUrl = req.BookingUrl
+                BookingUrl = req.BookingUrl ?? "",
+                SpaceType = spaceType,
+                TotalCostCents = spaceType == "private_rental" ? req.TotalCostCents : null,
+                MaxCapacity = req.MaxCapacity ?? 40,
             };
 
             group.Members.Add(new GroupMember
@@ -347,13 +354,16 @@ namespace Backend.Controllers
 
     public record CreateGroupRequest(
         string HostName,
-        int CinemaId,
+        int? CinemaId,
         string CinemaName,
-        int FilmId,
+        int? FilmId,
         string FilmName,
         string ShowTime,
         string ShowDate,
-        string BookingUrl
+        string? BookingUrl,
+        string? SpaceType,
+        long? TotalCostCents,
+        int? MaxCapacity
     );
 
     public record JoinGroupRequest(string Name);

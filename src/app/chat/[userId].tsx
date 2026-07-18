@@ -1,6 +1,7 @@
 import { useRef, useState } from "react";
 import {
   View,
+  Text,
   FlatList,
   StyleSheet,
   TextInput,
@@ -10,9 +11,8 @@ import {
   ActivityIndicator,
 } from "react-native";
 import { useLocalSearchParams, Stack } from "expo-router";
-import { ThemedText } from "@/frontend/components/themed-text";
-import { ThemedView } from "@/frontend/components/themed-view";
-import { useTheme } from "@/frontend/hooks/use-theme";
+import { Starfield } from "@/frontend/components/starfield";
+import { SpaceTheme, SpaceStyles } from "@/frontend/constants/theme";
 import { useChat, Message } from "@/frontend/hooks/use-chat";
 
 export default function ChatScreen() {
@@ -20,7 +20,6 @@ export default function ChatScreen() {
     userId: string;
     name?: string;
   }>();
-  const theme = useTheme();
   const { currentUserId, messages, loading, sendMessage } = useChat(userId);
   const [text, setText] = useState("");
   const listRef = useRef<FlatList>(null);
@@ -39,56 +38,51 @@ export default function ChatScreen() {
       <View
         style={[
           styles.bubble,
-          {
-            alignSelf: isMe ? "flex-end" : "flex-start",
-            backgroundColor: isMe ? "#E50914" : theme.backgroundElement,
-          },
+          isMe ? styles.bubbleMe : styles.bubbleThem,
+          { alignSelf: isMe ? "flex-end" : "flex-start" },
         ]}
       >
-        <ThemedText themeColor={isMe ? "text" : "text"}>
-          {item.content}
-        </ThemedText>
+        <Text style={styles.bubbleText}>{item.content}</Text>
       </View>
     );
   };
 
   return (
-    <ThemedView style={styles.container}>
-      <Stack.Screen options={{ title: name || "Chat" }} />
-      {loading && messages.length === 0 ? (
-        <ActivityIndicator style={{ flex: 1 }} />
-      ) : (
-        <FlatList
-          ref={listRef}
-          data={messages}
-          keyExtractor={(item) => item.id}
-          renderItem={renderItem}
-          contentContainerStyle={styles.list}
-          onContentSizeChange={() => listRef.current?.scrollToEnd({ animated: false })}
-        />
-      )}
-      <KeyboardAvoidingView
-        behavior={Platform.OS === "ios" ? "padding" : undefined}
-        keyboardVerticalOffset={90}
-      >
-        <View style={styles.inputRow}>
-          <TextInput
-            style={[
-              styles.input,
-              { backgroundColor: theme.backgroundElement, color: theme.text },
-            ]}
-            placeholder="Message..."
-            placeholderTextColor={theme.textSecondary}
-            value={text}
-            onChangeText={setText}
-            multiline
+    <Starfield>
+      <View style={styles.container}>
+        <Stack.Screen options={{ title: name || "Chat" }} />
+        {loading && messages.length === 0 ? (
+          <ActivityIndicator color={SpaceTheme.glowCyan} style={{ flex: 1 }} />
+        ) : (
+          <FlatList
+            ref={listRef}
+            data={messages}
+            keyExtractor={(item) => item.id}
+            renderItem={renderItem}
+            contentContainerStyle={styles.list}
+            onContentSizeChange={() => listRef.current?.scrollToEnd({ animated: false })}
           />
-          <TouchableOpacity style={styles.sendButton} onPress={handleSend}>
-            <ThemedText type="smallBold">Send</ThemedText>
-          </TouchableOpacity>
-        </View>
-      </KeyboardAvoidingView>
-    </ThemedView>
+        )}
+        <KeyboardAvoidingView
+          behavior={Platform.OS === "ios" ? "padding" : undefined}
+          keyboardVerticalOffset={90}
+        >
+          <View style={styles.inputRow}>
+            <TextInput
+              style={styles.input}
+              placeholder="Message..."
+              placeholderTextColor={SpaceTheme.mutedOrbit}
+              value={text}
+              onChangeText={setText}
+              multiline
+            />
+            <TouchableOpacity activeOpacity={0.8} style={styles.sendButton} onPress={handleSend}>
+              <Text style={styles.sendButtonText}>Send</Text>
+            </TouchableOpacity>
+          </View>
+        </KeyboardAvoidingView>
+      </View>
+    </Starfield>
   );
 }
 
@@ -101,6 +95,9 @@ const styles = StyleSheet.create({
     borderRadius: 12,
     marginBottom: 8,
   },
+  bubbleMe: { backgroundColor: SpaceTheme.supernovaPink },
+  bubbleThem: { ...SpaceStyles.glassCard },
+  bubbleText: { color: SpaceTheme.starWhite },
   inputRow: {
     flexDirection: "row",
     alignItems: "flex-end",
@@ -114,11 +111,14 @@ const styles = StyleSheet.create({
     paddingVertical: 10,
     fontSize: 16,
     maxHeight: 100,
+    backgroundColor: "rgba(255,255,255,0.08)",
+    color: SpaceTheme.starWhite,
   },
   sendButton: {
-    backgroundColor: "#E50914",
+    backgroundColor: SpaceTheme.glowCyan,
     borderRadius: 20,
     paddingHorizontal: 18,
     paddingVertical: 10,
   },
+  sendButtonText: { color: SpaceTheme.backgroundVoid, fontWeight: "700" },
 });

@@ -1,7 +1,10 @@
 import { useState, useEffect } from "react";
 import { supabase } from "@/frontend/config/supabase";
 
-export type GroupChatType = "group" | "crowdfund";
+// Only "group" is ever written now — the "crowdfund" group_type value in the
+// DB check constraint is a leftover from the removed Stripe-based feature,
+// harmless to leave as-is in the schema.
+export type GroupChatType = "group";
 
 export interface GroupMessage {
   id: string;

@@ -11,6 +11,8 @@ import {
 import AsyncStorage from "@react-native-async-storage/async-storage";
 import { supabase } from "../frontend/config/supabase";
 import { useRouter } from "expo-router";
+import { Starfield } from "@/frontend/components/starfield";
+import { SpaceTheme, SpaceStyles } from "@/frontend/constants/theme";
 
 export default function AuthScreen() {
   const router = useRouter();
@@ -67,104 +69,105 @@ export default function AuthScreen() {
   }
 
   return (
-    <View style={styles.container}>
-      <Text style={styles.header}>MovieSpaces</Text>
-      <Text style={styles.subHeader}>
-        {isSignUp ? "Create a new account" : "Sign in to your account"}
-      </Text>
+    <Starfield>
+      <View style={styles.container}>
+        <Text style={[styles.header, SpaceStyles.glowText]}>MovieSpaces</Text>
+        <Text style={styles.subHeader}>
+          {isSignUp ? "Create a new account" : "Sign in to your account"}
+        </Text>
 
-      {isSignUp && (
+        {isSignUp && (
+          <TextInput
+            style={styles.input}
+            placeholder="Your name"
+            placeholderTextColor={SpaceTheme.mutedOrbit}
+            value={name}
+            onChangeText={setName}
+            autoCapitalize="words"
+          />
+        )}
+
         <TextInput
           style={styles.input}
-          placeholder="Your name"
-          placeholderTextColor="#aaa"
-          value={name}
-          onChangeText={setName}
-          autoCapitalize="words"
+          placeholder="Email"
+          placeholderTextColor={SpaceTheme.mutedOrbit}
+          value={email}
+          onChangeText={setEmail}
+          autoCapitalize="none"
+          keyboardType="email-address"
         />
-      )}
-
-      <TextInput
-        style={styles.input}
-        placeholder="Email"
-        placeholderTextColor="#aaa"
-        value={email}
-        onChangeText={setEmail}
-        autoCapitalize="none"
-        keyboardType="email-address"
-      />
-      <TextInput
-        style={styles.input}
-        placeholder="Password"
-        placeholderTextColor="#aaa"
-        secureTextEntry
-        value={password}
-        onChangeText={setPassword}
-        autoCapitalize="none"
-      />
-      <TouchableOpacity
-        style={styles.button}
-        onPress={handleAuth}
-        disabled={loading}
-      >
-        {loading ? (
-          <ActivityIndicator color="#fff" />
-        ) : (
-          <Text style={styles.buttonText}>
-            {isSignUp ? "Register" : "Login"}
+        <TextInput
+          style={styles.input}
+          placeholder="Password"
+          placeholderTextColor={SpaceTheme.mutedOrbit}
+          secureTextEntry
+          value={password}
+          onChangeText={setPassword}
+          autoCapitalize="none"
+        />
+        <TouchableOpacity
+          activeOpacity={0.8}
+          style={styles.button}
+          onPress={handleAuth}
+          disabled={loading}
+        >
+          {loading ? (
+            <ActivityIndicator color={SpaceTheme.backgroundVoid} />
+          ) : (
+            <Text style={styles.buttonText}>
+              {isSignUp ? "Register" : "Login"}
+            </Text>
+          )}
+        </TouchableOpacity>
+        <TouchableOpacity
+          onPress={() => setIsSignUp(!isSignUp)}
+          style={styles.switchLink}
+        >
+          <Text style={styles.switchText}>
+            {isSignUp
+              ? "Already have an account? Sign In"
+              : "Don't have an account? Sign Up"}
           </Text>
-        )}
-      </TouchableOpacity>
-      <TouchableOpacity
-        onPress={() => setIsSignUp(!isSignUp)}
-        style={styles.switchLink}
-      >
-        <Text style={styles.switchText}>
-          {isSignUp
-            ? "Already have an account? Sign In"
-            : "Don't have an account? Sign Up"}
-        </Text>
-      </TouchableOpacity>
-    </View>
+        </TouchableOpacity>
+      </View>
+    </Starfield>
   );
 }
 
 const styles = StyleSheet.create({
   container: {
     flex: 1,
-    backgroundColor: "#111",
     justifyContent: "center",
     padding: 24,
   },
   header: {
     fontSize: 32,
     fontWeight: "bold",
-    color: "#fff",
+    color: SpaceTheme.starWhite,
     textAlign: "center",
     marginBottom: 8,
   },
   subHeader: {
     fontSize: 16,
-    color: "#888",
+    color: SpaceTheme.mutedOrbit,
     textAlign: "center",
     marginBottom: 32,
   },
   input: {
-    backgroundColor: "#222",
-    color: "#fff",
+    ...SpaceStyles.glassCard,
+    color: SpaceTheme.starWhite,
     padding: 16,
-    borderRadius: 8,
     fontSize: 16,
     marginBottom: 16,
   },
   button: {
-    backgroundColor: "#E50914",
+    backgroundColor: SpaceTheme.glowCyan,
     padding: 16,
-    borderRadius: 8,
+    borderRadius: 12,
     alignItems: "center",
     marginTop: 8,
   },
-  buttonText: { color: "#fff", fontSize: 18, fontWeight: "bold" },
+  buttonText: { color: SpaceTheme.backgroundVoid, fontSize: 18, fontWeight: "bold" },
   switchLink: { marginTop: 24, alignItems: "center" },
-  switchText: { color: "#aaa", fontSize: 14 },
+  switchText: { color: SpaceTheme.mutedOrbit, fontSize: 14 },
 });

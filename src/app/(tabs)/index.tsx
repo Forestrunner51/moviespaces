@@ -11,6 +11,8 @@ import {
 } from "react-native";
 import { router } from "expo-router";
 import { authFetch } from "../../frontend/services/api";
+import { Starfield } from "@/frontend/components/starfield";
+import { SpaceTheme, SpaceStyles } from "@/frontend/constants/theme";
 
 interface Film {
   film_id: number;
@@ -75,124 +77,98 @@ export default function HomeScreen() {
     }
   }, [search, films]);
 
-  if (loading) return <ActivityIndicator size="large" style={{ flex: 1 }} />;
+  if (loading) {
+    return (
+      <Starfield>
+        <ActivityIndicator size="large" color={SpaceTheme.glowCyan} style={{ flex: 1 }} />
+      </Starfield>
+    );
+  }
 
   return (
-    <View style={styles.container}>
-      {/* --- HEADER WITH AUTH TOGGLE --- */}
-      <View style={styles.headerRow}>
-        <Text style={styles.title}>MovieSpace</Text>
-        <TouchableOpacity
-          style={styles.profileButton}
-          onPress={() => router.push("/auth")}
-        >
-          <Text style={styles.profileButtonText}>Sign In</Text>
-        </TouchableOpacity>
-      </View>
-      {/* ------------------------------- */}
+    <Starfield>
+      <View style={styles.container}>
+        <Text style={[styles.title, SpaceStyles.glowText, styles.titleSpacing]}>MovieSpace</Text>
 
-      <TextInput
-        style={styles.search}
-        placeholder="Search for a movie..."
-        value={search}
-        onChangeText={setSearch}
-        placeholderTextColor="#888"
-      />
-      <FlatList
-        data={filtered}
-        keyExtractor={(item) => item.film_id.toString()}
-        renderItem={({ item }) => (
-          <TouchableOpacity
-            style={styles.card}
-            onPress={() =>
-              router.push({
-                pathname: "/movie",
-                params: {
-                  filmId: item.film_id,
-                  filmName: item.film_name,
-                  posterUrl:
-                    item.images?.poster?.["1"]?.medium?.film_image ?? "",
-                },
-              })
-            }
-          >
-            <Image
-              source={{ uri: item.images?.poster?.["1"]?.medium?.film_image }}
-              style={styles.poster}
-            />
-            <View style={styles.info}>
-              <Text style={styles.filmName}>{item.film_name}</Text>
-              <Text style={styles.synopsis} numberOfLines={2}>
-                {item.synopsis_long?.replace(/<[^>]*>/g, "")}
-              </Text>
-              <Text style={styles.cta}>View Spaces & Showtimes →</Text>
-            </View>
-          </TouchableOpacity>
-        )}
-      />
-    </View>
+        <TextInput
+          style={styles.search}
+          placeholder="Search for a movie..."
+          value={search}
+          onChangeText={setSearch}
+          placeholderTextColor={SpaceTheme.mutedOrbit}
+        />
+        <FlatList
+          data={filtered}
+          keyExtractor={(item) => item.film_id.toString()}
+          renderItem={({ item }) => (
+            <TouchableOpacity
+              activeOpacity={0.8}
+              style={styles.card}
+              onPress={() =>
+                router.push({
+                  pathname: "/movie",
+                  params: {
+                    filmId: item.film_id,
+                    filmName: item.film_name,
+                    posterUrl:
+                      item.images?.poster?.["1"]?.medium?.film_image ?? "",
+                  },
+                })
+              }
+            >
+              <Image
+                source={{ uri: item.images?.poster?.["1"]?.medium?.film_image }}
+                style={styles.poster}
+              />
+              <View style={styles.info}>
+                <Text style={styles.filmName}>{item.film_name}</Text>
+                <Text style={styles.synopsis} numberOfLines={2}>
+                  {item.synopsis_long?.replace(/<[^>]*>/g, "")}
+                </Text>
+                <Text style={styles.cta}>View Spaces & Showtimes →</Text>
+              </View>
+            </TouchableOpacity>
+          )}
+        />
+      </View>
+    </Starfield>
   );
 }
 
 const styles = StyleSheet.create({
   container: {
     flex: 1,
-    backgroundColor: "#f5f5f5",
     paddingTop: 60,
     paddingHorizontal: 16,
-  },
-  headerRow: {
-    flexDirection: "row",
-    justifyContent: "space-between",
-    alignItems: "center",
-    marginBottom: 16,
   },
   title: {
     fontSize: 28,
     fontWeight: "bold",
-    color: "#1A1A1A",
+    color: SpaceTheme.starWhite,
   },
-  profileButton: {
-    backgroundColor: "#007AFF",
-    paddingVertical: 6,
-    paddingHorizontal: 14,
-    borderRadius: 20,
-  },
-  profileButtonText: {
-    color: "#fff",
-    fontSize: 14,
-    fontWeight: "600",
-  },
+  titleSpacing: { marginBottom: 16 },
   search: {
-    backgroundColor: "#fff",
+    ...SpaceStyles.glassCard,
     borderRadius: 10,
     padding: 12,
     fontSize: 16,
     marginBottom: 16,
-    borderWidth: 1,
-    borderColor: "#E5E5E5",
-    color: "#000",
+    color: SpaceTheme.starWhite,
   },
   card: {
-    backgroundColor: "#fff",
-    borderRadius: 12,
+    ...SpaceStyles.glassCard,
     marginBottom: 16,
     flexDirection: "row",
     overflow: "hidden",
-    shadowColor: "#000",
-    shadowOffset: { width: 0, height: 2 },
-    shadowOpacity: 0.08,
-    shadowRadius: 4,
-    elevation: 2,
   },
   poster: { width: 90, height: 130 },
   info: { flex: 1, padding: 12, justifyContent: "space-between" },
   filmName: {
     fontSize: 16,
     fontWeight: "700",
-    color: "#1A1A1A",
+    color: SpaceTheme.starWhite,
     marginBottom: 4,
   },
-  synopsis: { fontSize: 13, color: "#666", lineHeight: 18, flex: 1 },
-  cta: { fontSize: 13, color: "#007AFF", fontWeight: "600", marginTop: 8 },
+  synopsis: { fontSize: 13, color: SpaceTheme.mutedOrbit, lineHeight: 18, flex: 1 },
+  cta: { fontSize: 13, color: SpaceTheme.glowCyan, fontWeight: "600", marginTop: 8 },
 });

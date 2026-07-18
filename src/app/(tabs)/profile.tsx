@@ -12,6 +12,8 @@ import { supabase } from "@/frontend/config/supabase";
 import { useCallback, useState } from "react";
 import { useFocusEffect } from "expo-router";
 import * as ImagePicker from "expo-image-picker";
+import { Starfield } from "@/frontend/components/starfield";
+import { SpaceTheme, SpaceStyles } from "@/frontend/constants/theme";
 
 interface ProfileData {
   displayName: string;
@@ -138,135 +140,137 @@ export default function ProfileScreen() {
   };
 
   if (loading) {
-    return <ActivityIndicator size="large" style={{ flex: 1 }} />;
+    return (
+      <Starfield>
+        <ActivityIndicator size="large" color={SpaceTheme.glowCyan} style={{ flex: 1 }} />
+      </Starfield>
+    );
   }
 
   const displayedAvatar = pendingAvatarUri || profile?.avatarUrl;
   const initial = (editing ? nameInput : profile?.displayName)?.trim()?.[0]?.toUpperCase() ?? "?";
 
   return (
-    <View style={styles.container}>
-      <Text style={styles.title}>Profile</Text>
+    <Starfield>
+      <View style={styles.container}>
+        <Text style={[styles.title, SpaceStyles.glowText]}>Profile</Text>
 
-      <View style={styles.card}>
-        <TouchableOpacity
-          disabled={!editing}
-          onPress={pickAvatar}
-          style={styles.avatarWrapper}
-        >
-          {displayedAvatar ? (
-            <Image source={{ uri: displayedAvatar }} style={styles.avatar} />
-          ) : (
-            <View style={styles.avatarPlaceholder}>
-              <Text style={styles.avatarPlaceholderText}>{initial}</Text>
-            </View>
-          )}
-          {editing && (
-            <View style={styles.avatarEditBadge}>
-              <Text style={styles.avatarEditBadgeText}>Edit</Text>
-            </View>
-          )}
-        </TouchableOpacity>
-
-        {editing ? (
-          <TextInput
-            style={styles.nameInput}
-            value={nameInput}
-            onChangeText={setNameInput}
-            placeholder="Display name"
-            placeholderTextColor="#999"
-          />
-        ) : (
-          <Text style={styles.name}>{profile?.displayName}</Text>
-        )}
-
-        {profile?.email && <Text style={styles.email}>{profile.email}</Text>}
-        {profile?.joinedAt && (
-          <Text style={styles.joined}>
-            Member since{" "}
-            {new Date(profile.joinedAt).toLocaleDateString(undefined, {
-              month: "long",
-              year: "numeric",
-            })}
-          </Text>
-        )}
-
-        {editing ? (
-          <View style={styles.editActions}>
-            <TouchableOpacity
-              style={styles.saveButton}
-              onPress={handleSave}
-              disabled={saving}
-            >
-              {saving ? (
-                <ActivityIndicator color="#fff" />
-              ) : (
-                <Text style={styles.saveButtonText}>Save</Text>
-              )}
-            </TouchableOpacity>
-            <TouchableOpacity
-              style={styles.cancelEditButton}
-              onPress={() => setEditing(false)}
-              disabled={saving}
-            >
-              <Text style={styles.cancelEditButtonText}>Cancel</Text>
-            </TouchableOpacity>
-          </View>
-        ) : (
-          <TouchableOpacity style={styles.editButton} onPress={startEditing}>
-            <Text style={styles.editButtonText}>Edit Profile</Text>
+        <View style={styles.card}>
+          <TouchableOpacity
+            activeOpacity={0.8}
+            disabled={!editing}
+            onPress={pickAvatar}
+            style={styles.avatarWrapper}
+          >
+            {displayedAvatar ? (
+              <Image source={{ uri: displayedAvatar }} style={styles.avatar} />
+            ) : (
+              <View style={styles.avatarPlaceholder}>
+                <Text style={styles.avatarPlaceholderText}>{initial}</Text>
+              </View>
+            )}
+            {editing && (
+              <View style={styles.avatarEditBadge}>
+                <Text style={styles.avatarEditBadgeText}>Edit</Text>
+              </View>
+            )}
           </TouchableOpacity>
-        )}
-      </View>
 
-      <TouchableOpacity style={styles.button} onPress={handleSignOut}>
-        <Text style={styles.buttonText}>Sign Out</Text>
-      </TouchableOpacity>
-    </View>
+          {editing ? (
+            <TextInput
+              style={styles.nameInput}
+              value={nameInput}
+              onChangeText={setNameInput}
+              placeholder="Display name"
+              placeholderTextColor={SpaceTheme.mutedOrbit}
+            />
+          ) : (
+            <Text style={styles.name}>{profile?.displayName}</Text>
+          )}
+
+          {profile?.email && <Text style={styles.email}>{profile.email}</Text>}
+          {profile?.joinedAt && (
+            <Text style={styles.joined}>
+              Member since{" "}
+              {new Date(profile.joinedAt).toLocaleDateString(undefined, {
+                month: "long",
+                year: "numeric",
+              })}
+            </Text>
+          )}
+
+          {editing ? (
+            <View style={styles.editActions}>
+              <TouchableOpacity
+                activeOpacity={0.8}
+                style={styles.saveButton}
+                onPress={handleSave}
+                disabled={saving}
+              >
+                {saving ? (
+                  <ActivityIndicator color={SpaceTheme.backgroundVoid} />
+                ) : (
+                  <Text style={styles.saveButtonText}>Save</Text>
+                )}
+              </TouchableOpacity>
+              <TouchableOpacity
+                activeOpacity={0.8}
+                style={styles.cancelEditButton}
+                onPress={() => setEditing(false)}
+                disabled={saving}
+              >
+                <Text style={styles.cancelEditButtonText}>Cancel</Text>
+              </TouchableOpacity>
+            </View>
+          ) : (
+            <TouchableOpacity activeOpacity={0.8} style={styles.editButton} onPress={startEditing}>
+              <Text style={styles.editButtonText}>Edit Profile</Text>
+            </TouchableOpacity>
+          )}
+        </View>
+
+        <TouchableOpacity activeOpacity={0.8} style={styles.button} onPress={handleSignOut}>
+          <Text style={styles.buttonText}>Sign Out</Text>
+        </TouchableOpacity>
+      </View>
+    </Starfield>
   );
 }
 
 const styles = StyleSheet.create({
   container: {
     flex: 1,
-    backgroundColor: "#f5f5f5",
     paddingTop: 60,
     paddingHorizontal: 16,
   },
   title: {
     fontSize: 28,
     fontWeight: "bold",
-    color: "#1A1A1A",
+    color: SpaceTheme.starWhite,
     marginBottom: 20,
   },
   card: {
-    backgroundColor: "#fff",
-    borderRadius: 12,
+    ...SpaceStyles.glassCard,
     padding: 24,
     alignItems: "center",
     marginBottom: 32,
-    shadowColor: "#000",
-    shadowOffset: { width: 0, height: 2 },
-    shadowOpacity: 0.06,
-    shadowRadius: 4,
-    elevation: 2,
   },
   avatarWrapper: { marginBottom: 16 },
   avatar: {
     width: 84,
     height: 84,
     borderRadius: 42,
-    backgroundColor: "#eee",
+    backgroundColor: "rgba(255,255,255,0.08)",
   },
   avatarPlaceholder: {
     width: 84,
     height: 84,
     borderRadius: 42,
-    backgroundColor: "#007AFF",
+    backgroundColor: SpaceTheme.glowCyan,
     alignItems: "center",
     justifyContent: "center",
   },
-  avatarPlaceholderText: { color: "#fff", fontSize: 32, fontWeight: "700" },
+  avatarPlaceholderText: { color: SpaceTheme.backgroundVoid, fontSize: 32, fontWeight: "700" },
   avatarEditBadge: {
     position: "absolute",
     bottom: 0,
@@ -278,42 +282,43 @@ const styles = StyleSheet.create({
     paddingVertical: 4,
     alignItems: "center",
   },
-  avatarEditBadgeText: { color: "#fff", fontSize: 11, fontWeight: "700" },
-  name: { fontSize: 20, fontWeight: "700", color: "#1A1A1A" },
+  avatarEditBadgeText: { color: SpaceTheme.starWhite, fontSize: 11, fontWeight: "700" },
+  name: { fontSize: 20, fontWeight: "700", color: SpaceTheme.starWhite },
   nameInput: {
     fontSize: 18,
     fontWeight: "700",
-    color: "#1A1A1A",
+    color: SpaceTheme.starWhite,
     borderWidth: 1,
-    borderColor: "#ddd",
+    borderColor: "rgba(255,255,255,0.15)",
+    backgroundColor: "rgba(255,255,255,0.05)",
     borderRadius: 8,
     paddingHorizontal: 12,
     paddingVertical: 8,
     minWidth: 200,
     textAlign: "center",
   },
-  email: { fontSize: 15, color: "#666", marginTop: 4 },
-  joined: { fontSize: 13, color: "#999", marginTop: 8 },
+  email: { fontSize: 15, color: SpaceTheme.mutedOrbit, marginTop: 4 },
+  joined: { fontSize: 13, color: SpaceTheme.mutedOrbit, marginTop: 8 },
   editButton: { marginTop: 16, padding: 8 },
-  editButtonText: { color: "#007AFF", fontSize: 15, fontWeight: "600" },
+  editButtonText: { color: SpaceTheme.glowCyan, fontSize: 15, fontWeight: "600" },
   editActions: { flexDirection: "row", gap: 12, marginTop: 16 },
   saveButton: {
-    backgroundColor: "#007AFF",
+    backgroundColor: SpaceTheme.glowCyan,
     paddingVertical: 10,
     paddingHorizontal: 24,
     borderRadius: 8,
   },
-  saveButtonText: { color: "#fff", fontWeight: "700", fontSize: 15 },
+  saveButtonText: { color: SpaceTheme.backgroundVoid, fontWeight: "700", fontSize: 15 },
   cancelEditButton: {
     paddingVertical: 10,
     paddingHorizontal: 16,
   },
-  cancelEditButtonText: { color: "#666", fontSize: 15 },
+  cancelEditButtonText: { color: SpaceTheme.mutedOrbit, fontSize: 15 },
   button: {
-    backgroundColor: "#FF3B30",
+    backgroundColor: SpaceTheme.supernovaPink,
     padding: 14,
     borderRadius: 8,
     alignItems: "center",
   },
-  buttonText: { color: "#fff", fontWeight: "600", fontSize: 16 },
+  buttonText: { color: SpaceTheme.backgroundVoid, fontWeight: "700", fontSize: 16 },
 });

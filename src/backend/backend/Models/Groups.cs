@@ -14,14 +14,31 @@ namespace Backend.Models
         [Column("user_id")]
         public string UserId { get; set; } = "";
 
-        public int CinemaId { get; set; }
+        // Nullable — a Private Rental isn't tied to a real MovieGlu catalog
+        // entry (the theater/showtime was booked independently, outside the
+        // app), so these only have real values for Public Gatherings.
+        public int? CinemaId { get; set; }
         public string CinemaName { get; set; } = "";
-        public int FilmId { get; set; }
+        public int? FilmId { get; set; }
         public string FilmName { get; set; } = "";
         public string ShowTime { get; set; } = "";
         public string ShowDate { get; set; } = "";
         public string BookingUrl { get; set; } = "";
         public string Status { get; set; } = "pending";
+
+        // 'public_gathering' | 'private_rental'
+        [Column("space_type")]
+        public string SpaceType { get; set; } = "public_gathering";
+
+        // Cents, not dollars — avoids floating-point precision loss on money.
+        // Only set for private_rental; informational cost-splitting only,
+        // the app never collects or moves this money itself.
+        [Column("total_cost_cents")]
+        public long? TotalCostCents { get; set; }
+
+        [Column("max_capacity")]
+        public int MaxCapacity { get; set; } = 40;
+
         public DateTime CreatedAt { get; set; } = DateTime.UtcNow;
         public List<GroupMember> Members { get; set; } = new();
     }

@@ -10,8 +10,13 @@ import {
   TouchableOpacity,
   TextInput,
   Modal,
+  KeyboardAvoidingView,
+  ScrollView,
+  Platform,
 } from "react-native";
 import { useLocalSearchParams, router } from "expo-router";
+import { Starfield } from "@/frontend/components/starfield";
+import { SpaceTheme, SpaceStyles } from "@/frontend/constants/theme";
 
 interface Showtime {
   start_time: string;
@@ -103,126 +108,157 @@ export default function ShowtimesScreen() {
     });
   };
 
-  if (loading) return <ActivityIndicator size="large" style={{ flex: 1 }} />;
-  if (error)
+  if (loading) {
     return (
-      <View style={styles.center}>
-        <Text>{error}</Text>
-      </View>
+      <Starfield>
+        <ActivityIndicator size="large" color={SpaceTheme.glowCyan} style={{ flex: 1 }} />
+      </Starfield>
     );
+  }
+  if (error) {
+    return (
+      <Starfield>
+        <View style={styles.center}>
+          <Text style={styles.errorText}>{error}</Text>
+        </View>
+      </Starfield>
+    );
+  }
 
   return (
-    <View style={styles.container}>
-      <Text style={styles.title}>{cinemaName}</Text>
-      <FlatList
-        data={films}
-        keyExtractor={(item) => item.film_id.toString()}
-        renderItem={({ item }) => (
-          <View style={styles.card}>
-            <Text style={styles.filmName}>{item.film_name}</Text>
-            <Text style={styles.duration}>{item.duration_hrs_mins}</Text>
-            <View style={styles.times}>
-              {item.showings.Standard.times.map((t) => (
-                <TouchableOpacity
-                  key={t.start_time}
-                  style={styles.timeButton}
-                  onPress={() => openCreateGroup(item, t.start_time)}
-                >
-                  <Text style={styles.timeText}>{t.display_start_time}</Text>
-                </TouchableOpacity>
-              ))}
+    <Starfield>
+      <View style={styles.container}>
+        <Text style={[styles.title, SpaceStyles.glowText]}>{cinemaName}</Text>
+        <FlatList
+          data={films}
+          keyExtractor={(item) => item.film_id.toString()}
+          renderItem={({ item }) => (
+            <View style={styles.card}>
+              <Text style={styles.filmName}>{item.film_name}</Text>
+              <Text style={styles.duration}>{item.duration_hrs_mins}</Text>
+              <View style={styles.times}>
+                {item.showings.Standard.times.map((t) => (
+                  <TouchableOpacity
+                    key={t.start_time}
+                    activeOpacity={0.8}
+                    style={styles.timeButton}
+                    onPress={() => openCreateGroup(item, t.start_time)}
+                  >
+                    <Text style={styles.timeText}>{t.display_start_time}</Text>
+                  </TouchableOpacity>
+                ))}
+              </View>
             </View>
-          </View>
-        )}
-      />
+          )}
+        />
 
-      <Modal visible={modalVisible} transparent animationType="slide">
-        <View style={styles.modalOverlay}>
-          <View style={styles.modal}>
-            <Text style={styles.modalTitle}>Create a Group</Text>
-            <Text style={styles.modalSubtitle}>
-              {selectedFilm?.film_name} • {selectedTime}
-            </Text>
-            <TextInput
-              style={styles.input}
-              placeholder="Your name"
-              value={hostName}
-              onChangeText={setHostName}
-              placeholderTextColor="#888"
-            />
-            <TouchableOpacity
-              style={styles.createButton}
-              onPress={handleCreateGroup}
-              disabled={creating}
-            >
-              <Text style={styles.buttonText}>
-                {creating ? "Creating..." : "Create Group"}
+        <Modal
+          visible={modalVisible}
+          transparent
+          animationType="slide"
+          onRequestClose={() => setModalVisible(false)}
+        >
+          <KeyboardAvoidingView
+            style={styles.modalOverlay}
+            behavior={Platform.OS === "ios" ? "padding" : undefined}
+          >
+            <View style={styles.modal}>
+              <Text style={styles.modalTitle}>Create a Group</Text>
+              <Text style={styles.modalSubtitle}>
+                {selectedFilm?.film_name} • {selectedTime}
               </Text>
-            </TouchableOpacity>
-            <TouchableOpacity
-              style={styles.cancelButton}
-              onPress={() => setModalVisible(false)}
-            >
-              <Text style={styles.cancelText}>Cancel</Text>
-            </TouchableOpacity>
-          </View>
-        </View>
-      </Modal>
-    </View>
+              <ScrollView keyboardShouldPersistTaps="handled">
+                <TextInput
+                  style={styles.input}
+                  placeholder="Your name"
+                  value={hostName}
+                  onChangeText={setHostName}
+                  placeholderTextColor={SpaceTheme.mutedOrbit}
+                />
+                <TouchableOpacity
+                  activeOpacity={0.8}
+                  style={styles.createButton}
+                  onPress={handleCreateGroup}
+                  disabled={creating}
+                >
+                  <Text style={styles.buttonText}>
+                    {creating ? "Creating..." : "Create Group"}
+                  </Text>
+                </TouchableOpacity>
+                <TouchableOpacity
+                  style={styles.cancelButton}
+                  onPress={() => setModalVisible(false)}
+                >
+                  <Text style={styles.cancelText}>Cancel</Text>
+                </TouchableOpacity>
+              </ScrollView>
+            </View>
+          </KeyboardAvoidingView>
+        </Modal>
+      </View>
+    </Starfield>
   );
 }
 
 const styles = StyleSheet.create({
   container: {
     flex: 1,
-    backgroundColor: "#f5f5f5",
     padding: 16,
     paddingTop: 60,
   },
-  title: { fontSize: 22, fontWeight: "bold", marginBottom: 16 },
+  title: { fontSize: 22, fontWeight: "bold", color: SpaceTheme.starWhite, marginBottom: 16 },
   center: { flex: 1, justifyContent: "center", alignItems: "center" },
+  errorText: { color: SpaceTheme.supernovaPink, fontSize: 16 },
   card: {
-    backgroundColor: "#fff",
+    ...SpaceStyles.glassCard,
     padding: 16,
-    borderRadius: 8,
     marginBottom: 12,
   },
-  filmName: { fontSize: 18, fontWeight: "bold", color: "#333" },
-  duration: { fontSize: 14, color: "#666", marginTop: 4, marginBottom: 8 },
+  filmName: { fontSize: 18, fontWeight: "bold", color: SpaceTheme.starWhite },
+  duration: { fontSize: 14, color: SpaceTheme.mutedOrbit, marginTop: 4, marginBottom: 8 },
   times: { flexDirection: "row", flexWrap: "wrap", gap: 8 },
-  timeButton: { backgroundColor: "#007AFF", padding: 8, borderRadius: 6 },
-  timeText: { color: "#fff", fontWeight: "600" },
+  timeButton: {
+    backgroundColor: "rgba(56, 189, 248, 0.12)",
+    borderWidth: 1,
+    borderColor: "rgba(56, 189, 248, 0.4)",
+    padding: 8,
+    borderRadius: 8,
+  },
+  timeText: { color: SpaceTheme.glowCyan, fontWeight: "600" },
   modalOverlay: {
     flex: 1,
-    backgroundColor: "rgba(0,0,0,0.5)",
+    backgroundColor: "rgba(3, 7, 18, 0.85)",
     justifyContent: "flex-end",
   },
   modal: {
-    backgroundColor: "#fff",
+    backgroundColor: SpaceTheme.deepSpace,
     padding: 24,
-    borderTopLeftRadius: 16,
-    borderTopRightRadius: 16,
+    borderTopLeftRadius: 20,
+    borderTopRightRadius: 20,
+    borderWidth: 1,
+    borderColor: "rgba(255, 255, 255, 0.08)",
+    maxHeight: "85%",
   },
-  modalTitle: { fontSize: 22, fontWeight: "bold", marginBottom: 4 },
-  modalSubtitle: { fontSize: 14, color: "#666", marginBottom: 24 },
+  modalTitle: { fontSize: 22, fontWeight: "bold", color: SpaceTheme.starWhite, marginBottom: 4 },
+  modalSubtitle: { fontSize: 14, color: SpaceTheme.mutedOrbit, marginBottom: 24 },
   input: {
     borderWidth: 1,
-    borderColor: "#E5E5E5",
+    borderColor: "rgba(255, 255, 255, 0.12)",
     borderRadius: 8,
     padding: 12,
     fontSize: 16,
-    backgroundColor: "#fafafa",
+    backgroundColor: "rgba(255, 255, 255, 0.05)",
     marginBottom: 16,
-    color: "#000",
+    color: SpaceTheme.starWhite,
   },
   createButton: {
-    backgroundColor: "#007AFF",
+    backgroundColor: SpaceTheme.glowCyan,
     padding: 14,
-    borderRadius: 8,
+    borderRadius: 12,
     alignItems: "center",
     marginBottom: 12,
   },
   cancelButton: { alignItems: "center", padding: 8 },
-  buttonText: { color: "#fff", fontWeight: "600", fontSize: 16 },
-  cancelText: { color: "#666", fontSize: 16 },
+  buttonText: { color: SpaceTheme.backgroundVoid, fontWeight: "700", fontSize: 16 },
+  cancelText: { color: SpaceTheme.mutedOrbit, fontSize: 16 },
 });
