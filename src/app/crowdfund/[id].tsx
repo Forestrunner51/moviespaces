@@ -10,6 +10,8 @@ import {
   Alert,
   ScrollView,
   Modal,
+  KeyboardAvoidingView,
+  Platform,
 } from "react-native";
 import { useLocalSearchParams, useFocusEffect, Stack, router } from "expo-router";
 import { CardField, useStripe } from "@stripe/stripe-react-native";
@@ -153,6 +155,22 @@ export default function CrowdfundDetailScreen() {
         <Text style={styles.deadlineText}>{interestedCount} interested</Text>
       </View>
 
+      {(isCreator || alreadyPledged) && (
+        <View style={styles.actions}>
+          <TouchableOpacity
+            style={styles.chatButton}
+            onPress={() =>
+              router.push({
+                pathname: "/group-chat/[id]",
+                params: { id: space.id, type: "crowdfund", title: space.movieTitle },
+              })
+            }
+          >
+            <Text style={styles.chatButtonText}>💬 Group Chat</Text>
+          </TouchableOpacity>
+        </View>
+      )}
+
       {space.status === "funding" && (
         <View style={styles.actions}>
           <TouchableOpacity
@@ -193,40 +211,55 @@ export default function CrowdfundDetailScreen() {
         </View>
       )}
 
-      <Modal visible={pledgeModalVisible} transparent animationType="slide">
-        <View style={styles.modalOverlay}>
+      <Modal
+        visible={pledgeModalVisible}
+        transparent
+        animationType="slide"
+        onRequestClose={() => setPledgeModalVisible(false)}
+      >
+        <KeyboardAvoidingView
+          style={styles.modalOverlay}
+          behavior={Platform.OS === "ios" ? "padding" : undefined}
+        >
           <View style={styles.modal}>
-            <Text style={styles.modalTitle}>Pledge to this space</Text>
-            <TextInput
-              style={styles.input}
-              placeholder="Amount ($)"
-              placeholderTextColor="#888"
-              value={pledgeAmount}
-              onChangeText={setPledgeAmount}
-              keyboardType="decimal-pad"
-            />
-            <CardField
-              postalCodeEnabled={false}
-              style={styles.cardField}
-              cardStyle={{ backgroundColor: "#222", textColor: "#fff" }}
-              onCardChange={(details) => setCardComplete(details.complete)}
-            />
-            <TouchableOpacity
-              style={styles.createButton}
-              onPress={handlePledge}
-              disabled={pledging}
-            >
-              {pledging ? (
-                <ActivityIndicator color="#fff" />
-              ) : (
-                <Text style={styles.buttonText}>Authorize pledge</Text>
-              )}
-            </TouchableOpacity>
-            <TouchableOpacity onPress={() => setPledgeModalVisible(false)}>
-              <Text style={styles.cancelText}>Cancel</Text>
-            </TouchableOpacity>
+            <View style={styles.modalHeader}>
+              <Text style={styles.modalTitle}>Pledge to this space</Text>
+              <TouchableOpacity
+                style={styles.closeButton}
+                onPress={() => setPledgeModalVisible(false)}
+              >
+                <Text style={styles.closeButtonText}>✕</Text>
+              </TouchableOpacity>
+            </View>
+            <ScrollView keyboardShouldPersistTaps="handled">
+              <TextInput
+                style={styles.input}
+                placeholder="Amount ($)"
+                placeholderTextColor="#888"
+                value={pledgeAmount}
+                onChangeText={setPledgeAmount}
+                keyboardType="decimal-pad"
+              />
+              <CardField
+                postalCodeEnabled={false}
+                style={styles.cardField}
+                cardStyle={{ backgroundColor: "#222", textColor: "#fff" }}
+                onCardChange={(details) => setCardComplete(details.complete)}
+              />
+              <TouchableOpacity
+                style={styles.createButton}
+                onPress={handlePledge}
+                disabled={pledging}
+              >
+                {pledging ? (
+                  <ActivityIndicator color="#fff" />
+                ) : (
+                  <Text style={styles.buttonText}>Authorize pledge</Text>
+                )}
+              </TouchableOpacity>
+            </ScrollView>
           </View>
-        </View>
+        </KeyboardAvoidingView>
       </Modal>
     </ScrollView>
   );
@@ -253,6 +286,13 @@ const styles = StyleSheet.create({
   progressText: { color: "#fff", fontSize: 15, fontWeight: "600", marginTop: 8 },
   deadlineText: { color: "#888", fontSize: 13, marginTop: 4 },
   actions: { paddingHorizontal: 16, gap: 10, marginTop: 8 },
+  chatButton: {
+    backgroundColor: "#5856D6",
+    padding: 14,
+    borderRadius: 8,
+    alignItems: "center",
+  },
+  chatButtonText: { color: "#fff", fontWeight: "bold", fontSize: 16 },
   actionButton: {
     backgroundColor: "#222",
     padding: 14,
@@ -283,8 +323,29 @@ const styles = StyleSheet.create({
   pledgeRowText: { color: "#fff", fontSize: 15 },
   pledgeRowStatus: { color: "#888", fontSize: 13, textTransform: "capitalize" },
   modalOverlay: { flex: 1, backgroundColor: "rgba(0,0,0,0.6)", justifyContent: "flex-end" },
-  modal: { backgroundColor: "#111", padding: 24, borderTopLeftRadius: 16, borderTopRightRadius: 16 },
-  modalTitle: { color: "#fff", fontSize: 20, fontWeight: "bold", marginBottom: 16 },
+  modal: {
+    backgroundColor: "#111",
+    padding: 24,
+    borderTopLeftRadius: 16,
+    borderTopRightRadius: 16,
+    maxHeight: "85%",
+  },
+  modalHeader: {
+    flexDirection: "row",
+    justifyContent: "space-between",
+    alignItems: "center",
+    marginBottom: 16,
+  },
+  closeButton: {
+    width: 32,
+    height: 32,
+    borderRadius: 16,
+    backgroundColor: "#222",
+    alignItems: "center",
+    justifyContent: "center",
+  },
+  closeButtonText: { fontSize: 16, color: "#ccc", fontWeight: "600" },
+  modalTitle: { color: "#fff", fontSize: 20, fontWeight: "bold" },
   input: {
     backgroundColor: "#222",
     color: "#fff",
@@ -302,5 +363,4 @@ const styles = StyleSheet.create({
     marginBottom: 12,
   },
   buttonText: { color: "#fff", fontSize: 16, fontWeight: "bold" },
-  cancelText: { color: "#888", fontSize: 14, textAlign: "center" },
 });
