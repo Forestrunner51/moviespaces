@@ -39,6 +39,19 @@ namespace Backend.Models
         [Column("max_capacity")]
         public int MaxCapacity { get; set; } = 40;
 
+        // Comma-separated activity tags the host wants to do after the
+        // movie/rental (e.g. "eat_out,walk") — kept as a simple delimited
+        // string rather than a Postgres array column to avoid EF/Npgsql
+        // array-mapping complexity for what's just a handful of tags.
+        [Column("post_activities")]
+        public string? PostActivities { get; set; }
+
+        // Freeform detail alongside PostActivities (e.g. "Grabbing drinks at
+        // the bar across the street") — only meaningful when at least one
+        // activity tag is set.
+        [Column("hangout_notes")]
+        public string? HangoutNotes { get; set; }
+
         public DateTime CreatedAt { get; set; } = DateTime.UtcNow;
         public List<GroupMember> Members { get; set; } = new();
     }

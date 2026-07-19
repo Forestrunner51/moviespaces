@@ -51,6 +51,12 @@ namespace Backend.Controllers
                 SpaceType = spaceType,
                 TotalCostCents = spaceType == "private_rental" ? req.TotalCostCents : null,
                 MaxCapacity = req.MaxCapacity ?? 40,
+                PostActivities = req.PostActivities != null && req.PostActivities.Length > 0
+                    ? string.Join(",", req.PostActivities)
+                    : null,
+                HangoutNotes = req.PostActivities != null && req.PostActivities.Length > 0
+                    ? req.HangoutNotes
+                    : null,
             };
 
             group.Members.Add(new GroupMember
@@ -363,7 +369,9 @@ namespace Backend.Controllers
         string? BookingUrl,
         string? SpaceType,
         long? TotalCostCents,
-        int? MaxCapacity
+        int? MaxCapacity,
+        string[]? PostActivities,
+        string? HangoutNotes
     );
 
     public record JoinGroupRequest(string Name);

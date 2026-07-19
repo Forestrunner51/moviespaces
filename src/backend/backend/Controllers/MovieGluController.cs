@@ -33,7 +33,7 @@ namespace Backend.Controllers
             Console.WriteLine($"Base64 being sent: {base64AuthToken}");
             Console.WriteLine($"Username being sent: {_username}");
             var client = _httpClientFactory.CreateClient();
-            var request = new HttpRequestMessage(HttpMethod.Get, "https://api-gate2.movieglu.com/cinemasNearby/?n=5");
+            var request = new HttpRequestMessage(HttpMethod.Get, "https://api-gate2.movieglu.com/cinemasNearby/?n=20");
 
             // 3. Attach the required MovieGlu security & configuration headers
             request.Headers.Add("x-api-key", _apiKey);

@@ -1,4 +1,4 @@
-import { useState, useEffect } from "react";
+import { useEffect, useState } from "react";
 import {
   View,
   Text,
@@ -6,84 +6,60 @@ import {
   StyleSheet,
   ActivityIndicator,
   TouchableOpacity,
-  Image,
 } from "react-native";
 import { router } from "expo-router";
-import AsyncStorage from "@react-native-async-storage/async-storage";
+import { Ionicons } from "@expo/vector-icons";
 import { Starfield } from "@/frontend/components/starfield";
 import { SpaceTheme, SpaceStyles } from "@/frontend/constants/theme";
+import { POST_ACTIVITIES, activityEmoji, activityLabel } from "@/frontend/constants/activities";
 
-const GENRES = [
-  { id: 1, name: "Drama", emoji: "🎭" },
-  { id: 2, name: "Thriller", emoji: "😱" },
-  { id: 3, name: "Comedy", emoji: "😂" },
-  { id: 4, name: "Romance", emoji: "❤️" },
-  { id: 5, name: "Action/Adventure", emoji: "💥" },
-  { id: 6, name: "Horror", emoji: "👻" },
-  { id: 7, name: "Sci-Fi", emoji: "🚀" },
-  { id: 8, name: "Documentary", emoji: "🎥" },
-  { id: 9, name: "International", emoji: "🌍" },
-];
-
-interface Film {
-  film_id: number;
-  film_name: string;
-  synopsis_long: string;
-  release_dates: { release_date: string }[];
-  images: {
-    poster: {
-      1: { medium: { film_image: string } };
-    };
-  };
-  age_rating: { rating: string }[];
-}
-
-// Matches the Group shape returned by GET /api/group/open (and /mine, /search)
+// Matches the Group shape returned by GET /api/group/open
 interface OpenSpace {
   id: string;
   hostName: string;
   filmName: string;
   cinemaName: string;
+  cinemaId: number | null;
   showTime: string;
   showDate: string;
   status: string;
+  spaceType: string;
+  totalCostCents: number | null;
+  maxCapacity: number;
+  postActivities: string | null;
   members: { id: string; name: string; confirmed: boolean }[];
 }
 
+interface Cinema {
+  cinema_id: number;
+  cinema_name: string;
+  // MovieGlu's cinemasNearby response includes a distance (miles) per cinema.
+  distance?: number;
+}
+
+type TypeFilter = "all" | "public_gathering" | "private_rental";
+type PriceFilter = "any" | "under50" | "50to150" | "150plus";
+type DistanceFilter = "any" | "5" | "10" | "25";
+
 export default function ExploreScreen() {
-  const [selectedGenres, setSelectedGenres] = useState<number[]>([]);
-  const [films, setFilms] = useState<Film[]>([]);
   const [openSpaces, setOpenSpaces] = useState<OpenSpace[]>([]);
   const [loading, setLoading] = useState(true);
-  const [spacesLoading, setSpacesLoading] = useState(true);
-  const [showGenrePicker, setShowGenrePicker] = useState(false);
+  const [cinemaDistance, setCinemaDistance] = useState<Record<number, number>>({});
+
+  const [typeFilter, setTypeFilter] = useState<TypeFilter>("all");
+  const [priceFilter, setPriceFilter] = useState<PriceFilter>("any");
+  const [distanceFilter, setDistanceFilter] = useState<DistanceFilter>("any");
+  const [openOnly, setOpenOnly] = useState(false);
+  const [activityFilter, setActivityFilter] = useState<string | null>(null);
 
   useEffect(() => {
-    loadGenres();
-    fetchFilms();
     fetchOpenSpaces();
+    fetchCinemaDistances();
   }, []);
-
-  const loadGenres = async () => {
-    const saved = await AsyncStorage.getItem("selectedGenres");
-    if (saved) setSelectedGenres(JSON.parse(saved));
-    else setShowGenrePicker(true);
-  };
-
-  const fetchFilms = async () => {
-    const res = await fetch(
-      `${process.env.EXPO_PUBLIC_API_URL}/api/movieglu/filmssoon`,
-    );
-    const data = await res.json();
-    setFilms(data.films || []);
-    setLoading(false);
-  };
 
   const fetchOpenSpaces = async () => {
     try {
-      const res = await fetch(
-        `${process.env.EXPO_PUBLIC_API_URL}/api/group/open`,
-      );
+      const res = await fetch(`${process.env.EXPO_PUBLIC_API_URL}/api/group/open`);
       if (res.ok) {
         const data = await res.json();
         setOpenSpaces(data || []);
@@ -91,70 +67,60 @@ export default function ExploreScreen() {
     } catch (err) {
       console.warn("Failed to load open spaces:", err);
     } finally {
-      setSpacesLoading(false);
+      setLoading(false);
     }
   };
 
-  const toggleGenre = (id: number) => {
-    setSelectedGenres((prev) =>
-      prev.includes(id) ? prev.filter((g) => g !== id) : [...prev, id],
-    );
+  // Groups only store a cinemaId (not coordinates), so distance filtering is
+  // best-effort: we look up each space's cinema against a fresh "nearby
+  // cinemas" call and use the distance MovieGlu already computed for it.
+  // Spaces whose cinema isn't in that nearby set (or that have no cinemaId,
+  // e.g. a manually-typed private rental theater) have unknown distance and
+  // are never hidden by the distance filter — we don't hide content just
+  // because we can't measure it.
+  const fetchCinemaDistances = async () => {
+    try {
+      const res = await fetch(
+        `${process.env.EXPO_PUBLIC_API_URL}/api/movieglu/cinemas?lat=-22.0&lng=14.0`,
+      );
+      if (res.ok) {
+        const data = await res.json();
+        const map: Record<number, number> = {};
+        (data.cinemas || []).forEach((c: Cinema) => {
+          if (typeof c.distance === "number") map[c.cinema_id] = c.distance;
+        });
+        setCinemaDistance(map);
+      }
+    } catch (err) {
+      console.warn("Failed to load cinema distances:", err);
+    }
   };
 
-  const saveGenres = async () => {
-    await AsyncStorage.setItem(
-      "selectedGenres",
-      JSON.stringify(selectedGenres),
-    );
-    setShowGenrePicker(false);
+  const passesPriceFilter = (space: OpenSpace) => {
+    if (priceFilter === "any") return true;
+    if (space.totalCostCents == null) return true; // no price data (public gathering) — don't hide it
+    const dollars = space.totalCostCents / 100;
+    if (priceFilter === "under50") return dollars < 50;
+    if (priceFilter === "50to150") return dollars >= 50 && dollars <= 150;
+    return dollars > 150;
   };
 
-  if (showGenrePicker) {
-    return (
-      <Starfield>
-        <View style={styles.container}>
-          <Text style={[styles.title, SpaceStyles.glowText]}>What do you like? 🎬</Text>
-          <Text style={styles.subtitle}>
-            Pick your favourite genres and we'll recommend films for you.
-          </Text>
-          <View style={styles.genreGrid}>
-            {GENRES.map((genre) => (
-              <TouchableOpacity
-                key={genre.id}
-                activeOpacity={0.8}
-                style={[
-                  styles.genreChip,
-                  selectedGenres.includes(genre.id) && styles.genreChipSelected,
-                ]}
-                onPress={() => toggleGenre(genre.id)}
-              >
-                <Text style={styles.genreEmoji}>{genre.emoji}</Text>
-                <Text
-                  style={[
-                    styles.genreName,
-                    selectedGenres.includes(genre.id) && styles.genreNameSelected,
-                  ]}
-                >
-                  {genre.name}
-                </Text>
-              </TouchableOpacity>
-            ))}
-          </View>
-          <TouchableOpacity
-            activeOpacity={0.8}
-            style={[
-              styles.saveButton,
-              selectedGenres.length === 0 && styles.disabled,
-            ]}
-            onPress={saveGenres}
-            disabled={selectedGenres.length === 0}
-          >
-            <Text style={styles.saveButtonText}>See Recommendations</Text>
-          </TouchableOpacity>
-        </View>
-      </Starfield>
-    );
-  }
+  const passesDistanceFilter = (space: OpenSpace) => {
+    if (distanceFilter === "any") return true;
+    if (space.cinemaId == null) return true;
+    const distance = cinemaDistance[space.cinemaId];
+    if (distance == null) return true; // unknown — don't hide it
+    return distance <= parseInt(distanceFilter, 10);
+  };
+
+  const filteredSpaces = openSpaces.filter((space) => {
+    if (typeFilter !== "all" && space.spaceType !== typeFilter) return false;
+    if (openOnly && space.members.length >= space.maxCapacity) return false;
+    if (activityFilter && !space.postActivities?.split(",").includes(activityFilter)) return false;
+    if (!passesPriceFilter(space)) return false;
+    if (!passesDistanceFilter(space)) return false;
+    return true;
+  });
 
   if (loading) {
     return (
@@ -167,111 +133,194 @@ export default function ExploreScreen() {
   return (
     <Starfield>
       <View style={styles.container}>
-        <View style={styles.header}>
-          <Text style={[styles.title, SpaceStyles.glowText]}>Explore 🍿</Text>
-          <TouchableOpacity onPress={() => setShowGenrePicker(true)}>
-            <Text style={styles.editGenres}>Edit Taste</Text>
-          </TouchableOpacity>
-        </View>
+        <Text style={[styles.title, SpaceStyles.glowText]}>Explore Spaces</Text>
+        <Text style={styles.subtitle}>Open Spaces near you, filtered your way</Text>
 
         <FlatList
-          data={films}
-          keyExtractor={(item) => item.film_id.toString()}
+          data={filteredSpaces}
+          keyExtractor={(item) => item.id}
           ListHeaderComponent={
-            <View style={styles.spacesSection}>
-              <Text style={styles.sectionTitle}>Open Spaces Near You 🎟</Text>
-              {spacesLoading ? (
-                <ActivityIndicator color={SpaceTheme.glowCyan} style={{ marginVertical: 12 }} />
-              ) : openSpaces.length === 0 ? (
-                <Text style={styles.emptySpaces}>
-                  No open spaces yet — be the first to start one!
-                </Text>
-              ) : (
-                <FlatList
-                  horizontal
-                  data={openSpaces}
-                  keyExtractor={(item) => item.id}
-                  showsHorizontalScrollIndicator={false}
-                  contentContainerStyle={{ paddingRight: 8 }}
-                  renderItem={({ item }) => (
-                    <TouchableOpacity
-                      activeOpacity={0.8}
-                      style={styles.spaceCard}
-                      onPress={() =>
-                        router.push({
-                          pathname: "/group",
-                          params: { groupId: item.id },
-                        })
-                      }
-                    >
-                      <Text style={styles.spaceFilmName} numberOfLines={1}>
-                        {item.filmName}
-                      </Text>
-                      <Text style={styles.spaceDetails} numberOfLines={1}>
-                        {item.cinemaName}
-                      </Text>
-                      <Text style={styles.spaceDetails}>
-                        {item.showDate} • {item.showTime}
-                      </Text>
-                      <View style={styles.spaceFooter}>
-                        <Text style={styles.spaceMembers}>
-                          👥 {item.members.length} going
-                        </Text>
-                        <Text style={styles.spaceHost} numberOfLines={1}>
-                          by {item.hostName}
-                        </Text>
-                      </View>
-                    </TouchableOpacity>
-                  )}
-                />
-              )}
+            <View style={styles.filters}>
+              <Text style={styles.filterLabel}>Type</Text>
+              <View style={styles.chipRow}>
+                {(
+                  [
+                    { key: "all", label: "All" },
+                    { key: "public_gathering", label: "Movie Gatherings" },
+                    { key: "private_rental", label: "Theater Rentals" },
+                  ] as { key: TypeFilter; label: string }[]
+                ).map(({ key, label }) => (
+                  <TouchableOpacity
+                    key={key}
+                    activeOpacity={0.8}
+                    style={[styles.chip, typeFilter === key && styles.chipActive]}
+                    onPress={() => setTypeFilter(key)}
+                  >
+                    <Text style={[styles.chipText, typeFilter === key && styles.chipTextActive]}>
+                      {label}
+                    </Text>
+                  </TouchableOpacity>
+                ))}
+              </View>
 
-              <Text style={[styles.sectionTitle, { marginTop: 24 }]}>
-                Coming Soon
-              </Text>
-              <Text style={styles.subtitle}>
-                Based on your taste:{" "}
-                {selectedGenres
-                  .map((id) => GENRES.find((g) => g.id === id)?.emoji)
-                  .join(" ")}
+              <Text style={styles.filterLabel}>Price</Text>
+              <View style={styles.chipRow}>
+                {(
+                  [
+                    { key: "any", label: "Any" },
+                    { key: "under50", label: "Under $50" },
+                    { key: "50to150", label: "$50–150" },
+                    { key: "150plus", label: "$150+" },
+                  ] as { key: PriceFilter; label: string }[]
+                ).map(({ key, label }) => (
+                  <TouchableOpacity
+                    key={key}
+                    activeOpacity={0.8}
+                    style={[styles.chip, priceFilter === key && styles.chipActive]}
+                    onPress={() => setPriceFilter(key)}
+                  >
+                    <Text style={[styles.chipText, priceFilter === key && styles.chipTextActive]}>
+                      {label}
+                    </Text>
+                  </TouchableOpacity>
+                ))}
+              </View>
+
+              <Text style={styles.filterLabel}>Distance</Text>
+              <View style={styles.chipRow}>
+                {(
+                  [
+                    { key: "any", label: "Any" },
+                    { key: "5", label: "< 5 mi" },
+                    { key: "10", label: "< 10 mi" },
+                    { key: "25", label: "< 25 mi" },
+                  ] as { key: DistanceFilter; label: string }[]
+                ).map(({ key, label }) => (
+                  <TouchableOpacity
+                    key={key}
+                    activeOpacity={0.8}
+                    style={[styles.chip, distanceFilter === key && styles.chipActive]}
+                    onPress={() => setDistanceFilter(key)}
+                  >
+                    <Text
+                      style={[styles.chipText, distanceFilter === key && styles.chipTextActive]}
+                    >
+                      {label}
+                    </Text>
+                  </TouchableOpacity>
+                ))}
+              </View>
+
+              <Text style={styles.filterLabel}>After the Movie</Text>
+              <View style={styles.chipRow}>
+                <TouchableOpacity
+                  activeOpacity={0.8}
+                  style={[styles.chip, activityFilter === null && styles.chipActive]}
+                  onPress={() => setActivityFilter(null)}
+                >
+                  <Text style={[styles.chipText, activityFilter === null && styles.chipTextActive]}>
+                    Any
+                  </Text>
+                </TouchableOpacity>
+                {POST_ACTIVITIES.map((a) => (
+                  <TouchableOpacity
+                    key={a.key}
+                    activeOpacity={0.8}
+                    style={[styles.chip, activityFilter === a.key && styles.chipActive]}
+                    onPress={() => setActivityFilter(a.key)}
+                  >
+                    <Text
+                      style={[styles.chipText, activityFilter === a.key && styles.chipTextActive]}
+                    >
+                      {a.emoji} {a.label}
+                    </Text>
+                  </TouchableOpacity>
+                ))}
+              </View>
+
+              <TouchableOpacity
+                activeOpacity={0.8}
+                style={[styles.chip, styles.toggleChip, openOnly && styles.chipActive]}
+                onPress={() => setOpenOnly((v) => !v)}
+              >
+                <Ionicons
+                  name={openOnly ? "checkbox" : "square-outline"}
+                  size={16}
+                  color={openOnly ? SpaceTheme.backgroundVoid : SpaceTheme.mutedOrbit}
+                />
+                <Text style={[styles.chipText, openOnly && styles.chipTextActive]}>
+                  Only show spaces with room left
+                </Text>
+              </TouchableOpacity>
+
+              <Text style={styles.resultsCount}>
+                {filteredSpaces.length} open space{filteredSpaces.length === 1 ? "" : "s"}
               </Text>
             </View>
           }
           renderItem={({ item }) => (
             <TouchableOpacity
               activeOpacity={0.8}
-              style={styles.card}
-              onPress={() =>
-                router.push({
-                  pathname: "/movie",
-                  params: {
-                    filmId: item.film_id,
-                    filmName: item.film_name,
-                    posterUrl:
-                      item.images?.poster?.["1"]?.medium?.film_image ?? "",
-                  },
-                })
-              }
+              style={styles.spaceCard}
+              onPress={() => router.push({ pathname: "/group", params: { groupId: item.id } })}
             >
-              <Image
-                source={{ uri: item.images?.poster?.["1"]?.medium?.film_image }}
-                style={styles.poster}
-              />
-              <View style={styles.info}>
-                <Text style={styles.filmName}>{item.film_name}</Text>
-                <Text style={styles.releaseDate}>
-                  📅 {item.release_dates?.[0]?.release_date}
+              <View style={styles.spaceCardHeader}>
+                <Text style={styles.spaceFilmName} numberOfLines={1}>
+                  {item.filmName}
                 </Text>
-                <Text style={styles.rating}>{item.age_rating?.[0]?.rating}</Text>
-                <Text style={styles.synopsis} numberOfLines={2}>
-                  {item.synopsis_long?.replace(/<[^>]*>/g, "")}
+                <View
+                  style={[
+                    styles.typeBadge,
+                    item.spaceType === "private_rental" && styles.typeBadgePink,
+                  ]}
+                >
+                  <Text style={styles.typeBadgeText}>
+                    {item.spaceType === "private_rental" ? "Rental" : "Gathering"}
+                  </Text>
+                </View>
+              </View>
+              {item.postActivities && (
+                <View style={styles.hangoutBadge}>
+                  <Text style={styles.hangoutBadgeText}>💬 + Hangout After</Text>
+                </View>
+              )}
+              <Text style={styles.spaceDetails} numberOfLines={1}>
+                {item.cinemaName}
+                {item.cinemaId != null && cinemaDistance[item.cinemaId] != null
+                  ? ` • ${cinemaDistance[item.cinemaId].toFixed(1)} mi`
+                  : ""}
+              </Text>
+              <Text style={styles.spaceDetails}>
+                {item.showDate} • {item.showTime}
+              </Text>
+              {item.totalCostCents != null && (
+                <Text style={styles.spacePrice}>
+                  ${(item.totalCostCents / 100).toFixed(0)} total
                 </Text>
-                <Text style={styles.cta}>View Spaces & Showtimes →</Text>
+              )}
+              {item.postActivities && (
+                <View style={styles.afterRow}>
+                  {item.postActivities.split(",").map((key) => (
+                    <View key={key} style={styles.afterBadge}>
+                      <Text style={styles.afterBadgeText}>
+                        {activityEmoji(key)} {activityLabel(key)}
+                      </Text>
+                    </View>
+                  ))}
+                </View>
+              )}
+              <View style={styles.spaceFooter}>
+                <Text style={styles.spaceMembers}>
+                  👥 {item.members.length}/{item.maxCapacity} going
+                </Text>
+                <Text style={styles.spaceHost} numberOfLines={1}>
+                  by {item.hostName}
+                </Text>
               </View>
             </TouchableOpacity>
           )}
           ListEmptyComponent={
-            <Text style={styles.empty}>No films coming soon right now.</Text>
+            <Text style={styles.empty}>No open spaces match these filters yet.</Text>
           }
         />
       </View>
@@ -285,93 +334,104 @@ const styles = StyleSheet.create({
     paddingTop: 60,
     paddingHorizontal: 16,
   },
-  header: {
+  title: { fontSize: 28, fontWeight: "bold", color: SpaceTheme.starWhite },
+  subtitle: { fontSize: 14, color: SpaceTheme.mutedOrbit, marginBottom: 16 },
+  filters: { marginBottom: 8 },
+  filterLabel: {
+    fontSize: 13,
+    fontWeight: "700",
+    color: SpaceTheme.mutedOrbit,
+    marginTop: 12,
+    marginBottom: 8,
+    textTransform: "uppercase",
+  },
+  chipRow: { flexDirection: "row", flexWrap: "wrap", gap: 8 },
+  chip: {
+    ...SpaceStyles.glassCard,
+    flexDirection: "row",
+    alignItems: "center",
+    gap: 6,
+    paddingVertical: 8,
+    paddingHorizontal: 12,
+  },
+  chipActive: {
+    backgroundColor: SpaceTheme.glowCyan,
+    borderColor: SpaceTheme.glowCyan,
+  },
+  chipText: { fontSize: 13, fontWeight: "600", color: SpaceTheme.mutedOrbit },
+  chipTextActive: { color: SpaceTheme.backgroundVoid },
+  toggleChip: { marginTop: 12, alignSelf: "flex-start" },
+  resultsCount: {
+    fontSize: 13,
+    color: SpaceTheme.mutedOrbit,
+    marginTop: 16,
+    marginBottom: 4,
+  },
+  spaceCard: {
+    ...SpaceStyles.glassCard,
+    padding: 16,
+    marginBottom: 12,
+  },
+  spaceCardHeader: {
     flexDirection: "row",
     justifyContent: "space-between",
     alignItems: "center",
     marginBottom: 4,
   },
-  title: { fontSize: 28, fontWeight: "bold", color: SpaceTheme.starWhite },
-  subtitle: { fontSize: 14, color: SpaceTheme.mutedOrbit, marginBottom: 16 },
-  editGenres: { color: SpaceTheme.glowCyan, fontWeight: "600" },
-  sectionTitle: {
-    fontSize: 18,
-    fontWeight: "700",
-    color: SpaceTheme.starWhite,
-    marginBottom: 12,
-  },
-  spacesSection: { marginBottom: 8 },
-  emptySpaces: {
-    color: SpaceTheme.mutedOrbit,
-    fontSize: 14,
-    marginBottom: 16,
-    fontStyle: "italic",
-  },
-  spaceCard: {
-    ...SpaceStyles.glassCard,
-    padding: 14,
-    marginRight: 12,
-    width: 200,
-  },
   spaceFilmName: {
-    fontSize: 15,
+    flex: 1,
+    fontSize: 16,
     fontWeight: "700",
     color: SpaceTheme.starWhite,
-    marginBottom: 4,
+    marginRight: 8,
   },
-  spaceDetails: { fontSize: 12, color: SpaceTheme.mutedOrbit, marginBottom: 2 },
+  typeBadge: {
+    backgroundColor: "rgba(56, 189, 248, 0.15)",
+    borderWidth: 1,
+    borderColor: "rgba(56, 189, 248, 0.4)",
+    borderRadius: 6,
+    paddingVertical: 3,
+    paddingHorizontal: 8,
+  },
+  typeBadgePink: {
+    backgroundColor: "rgba(244, 114, 182, 0.15)",
+    borderColor: "rgba(244, 114, 182, 0.4)",
+  },
+  typeBadgeText: { fontSize: 11, fontWeight: "700", color: SpaceTheme.starWhite },
+  spaceDetails: { fontSize: 13, color: SpaceTheme.mutedOrbit, marginBottom: 2 },
+  spacePrice: { fontSize: 13, color: SpaceTheme.supernovaPink, fontWeight: "700", marginTop: 4 },
+  hangoutBadge: {
+    alignSelf: "flex-start",
+    backgroundColor: "rgba(244, 114, 182, 0.15)",
+    borderWidth: 1,
+    borderColor: "rgba(244, 114, 182, 0.4)",
+    borderRadius: 6,
+    paddingVertical: 3,
+    paddingHorizontal: 8,
+    marginTop: 6,
+    shadowColor: SpaceTheme.supernovaPink,
+    shadowOffset: { width: 0, height: 0 },
+    shadowOpacity: 0.5,
+    shadowRadius: 6,
+    elevation: 2,
+  },
+  hangoutBadgeText: { fontSize: 11, fontWeight: "700", color: SpaceTheme.supernovaPink },
+  afterRow: { flexDirection: "row", flexWrap: "wrap", gap: 6, marginTop: 6 },
+  afterBadge: {
+    backgroundColor: "rgba(244, 114, 182, 0.15)",
+    borderWidth: 1,
+    borderColor: "rgba(244, 114, 182, 0.4)",
+    borderRadius: 6,
+    paddingVertical: 3,
+    paddingHorizontal: 8,
+  },
+  afterBadgeText: { fontSize: 11, fontWeight: "600", color: SpaceTheme.supernovaPink },
   spaceFooter: {
     flexDirection: "row",
     justifyContent: "space-between",
     marginTop: 8,
   },
   spaceMembers: { fontSize: 12, color: SpaceTheme.glowCyan, fontWeight: "600" },
-  spaceHost: { fontSize: 11, color: SpaceTheme.mutedOrbit, maxWidth: 90 },
-  genreGrid: {
-    flexDirection: "row",
-    flexWrap: "wrap",
-    gap: 12,
-    marginBottom: 24,
-  },
-  genreChip: {
-    width: "45%",
-    ...SpaceStyles.glassCard,
-    padding: 16,
-    alignItems: "center",
-    borderWidth: 2,
-  },
-  genreChipSelected: {
-    borderColor: SpaceTheme.glowCyan,
-    backgroundColor: "rgba(56, 189, 248, 0.12)",
-  },
-  genreEmoji: { fontSize: 28, marginBottom: 8 },
-  genreName: { fontSize: 14, fontWeight: "600", color: SpaceTheme.starWhite },
-  genreNameSelected: { color: SpaceTheme.glowCyan },
-  saveButton: {
-    backgroundColor: SpaceTheme.supernovaPink,
-    padding: 16,
-    borderRadius: 12,
-    alignItems: "center",
-  },
-  saveButtonText: { color: SpaceTheme.backgroundVoid, fontWeight: "700", fontSize: 16 },
-  disabled: { backgroundColor: SpaceTheme.mutedOrbit },
-  card: {
-    ...SpaceStyles.glassCard,
-    marginBottom: 16,
-    flexDirection: "row",
-    overflow: "hidden",
-  },
-  poster: { width: 90, height: 130 },
-  info: { flex: 1, padding: 12 },
-  filmName: {
-    fontSize: 16,
-    fontWeight: "700",
-    color: SpaceTheme.starWhite,
-    marginBottom: 4,
-  },
-  releaseDate: { fontSize: 12, color: SpaceTheme.mutedOrbit, marginBottom: 2 },
-  rating: { fontSize: 12, color: SpaceTheme.mutedOrbit, marginBottom: 4 },
-  synopsis: { fontSize: 13, color: SpaceTheme.mutedOrbit, lineHeight: 18 },
-  cta: { fontSize: 13, color: SpaceTheme.glowCyan, fontWeight: "600", marginTop: 8 },
+  spaceHost: { fontSize: 11, color: SpaceTheme.mutedOrbit, maxWidth: 120 },
   empty: { textAlign: "center", color: SpaceTheme.mutedOrbit, marginTop: 40, fontSize: 16 },
 });

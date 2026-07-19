@@ -10,20 +10,44 @@ import {
   KeyboardAvoidingView,
   Platform,
   Alert,
+  Modal,
+  FlatList,
 } from "react-native";
-import { router } from "expo-router";
+import { router, useLocalSearchParams } from "expo-router";
 import AsyncStorage from "@react-native-async-storage/async-storage";
+import DateTimePicker from "@react-native-community/datetimepicker";
 import { Ionicons } from "@expo/vector-icons";
 import { authFetch } from "@/frontend/services/api";
 import { Starfield } from "@/frontend/components/starfield";
 import { SpaceTheme, SpaceStyles } from "@/frontend/constants/theme";
+import { POST_ACTIVITIES } from "@/frontend/constants/activities";
 
 type SpaceType = "public_gathering" | "private_rental";
 
+interface Cinema {
+  cinema_id: number;
+  cinema_name: string;
+  address: string;
+  city: string;
+}
+
+const formatDate = (d: Date) =>
+  `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, "0")}-${String(d.getDate()).padStart(2, "0")}`;
+
+const formatTime = (d: Date) =>
+  d.toLocaleTimeString(undefined, { hour: "numeric", minute: "2-digit", hour12: true });
+
 export default function CreateSpaceScreen() {
-  const [spaceType, setSpaceType] = useState<SpaceType>("public_gathering");
+  const { theaterName: prefillTheaterName, spaceType: prefillSpaceType } = useLocalSearchParams<{
+    theaterName?: string;
+    spaceType?: SpaceType;
+  }>();
+  const [spaceType, setSpaceType] = useState<SpaceType>(
+    prefillSpaceType === "private_rental" ? "private_rental" : "public_gathering",
+  );
   const [hostName, setHostName] = useState("");
-  const [theaterName, setTheaterName] = useState("");
+  const [theaterName, setTheaterName] = useState(prefillTheaterName ?? "");
+  const [theaterCinemaId, setTheaterCinemaId] = useState<number | null>(null);
   const [movieName, setMovieName] = useState("");
   const [showDate, setShowDate] = useState("");
   const [showTime, setShowTime] = useState("");
@@ -32,14 +56,62 @@ export default function CreateSpaceScreen() {
   const [totalCost, setTotalCost] = useState("");
   const [maxCapacity, setMaxCapacity] = useState("");
   const [bookingUrl, setBookingUrl] = useState("");
+  const [postActivities, setPostActivities] = useState<string[]>([]);
+  const [hangoutNotes, setHangoutNotes] = useState("");
+
+  const toggleActivity = (key: string) => {
+    setPostActivities((prev) =>
+      prev.includes(key) ? prev.filter((a) => a !== key) : [...prev, key],
+    );
+  };
 
   const [creating, setCreating] = useState(false);
+
+  const [cinemas, setCinemas] = useState<Cinema[]>([]);
+  const [cinemasLoading, setCinemasLoading] = useState(true);
+  const [theaterModalVisible, setTheaterModalVisible] = useState(false);
+  const [theaterSearch, setTheaterSearch] = useState("");
+
+  const [datePickerVisible, setDatePickerVisible] = useState(false);
+  const [dateValue, setDateValue] = useState<Date | null>(null);
+  const [timePickerVisible, setTimePickerVisible] = useState(false);
+  const [timeValue, setTimeValue] = useState<Date | null>(null);
 
   useEffect(() => {
     AsyncStorage.getItem("userName").then((savedName) => {
       if (savedName) setHostName(savedName);
     });
   }, []);
+
+  useEffect(() => {
+    fetch(`${process.env.EXPO_PUBLIC_API_URL}/api/movieglu/cinemas?lat=-22.0&lng=14.0`)
+      .then(async (res) => {
+        if (!res.ok) throw new Error(`Server responded with status: ${res.status}`);
+        const data = await res.json();
+        setCinemas(data.cinemas || []);
+      })
+      .catch((err) => {
+        console.error("Failed to load nearby theaters:", err);
+        setCinemas([]);
+      })
+      .finally(() => setCinemasLoading(false));
+  }, []);
+
+  const filteredCinemas = cinemas.filter((c) =>
+    c.cinema_name.toLowerCase().includes(theaterSearch.toLowerCase()),
+  );
+
+  const onDateChange = (_event: any, selected: Date) => {
+    if (Platform.OS === "android") setDatePickerVisible(false);
+    setDateValue(selected);
+    setShowDate(formatDate(selected));
+  };
+
+  const onTimeChange = (_event: any, selected: Date) => {
+    if (Platform.OS === "android") setTimePickerVisible(false);
+    setTimeValue(selected);
+    setShowTime(formatTime(selected));
+  };
 
   const handleSubmit = async () => {
     if (!hostName.trim() || !theaterName.trim() || !movieName.trim() || !showDate.trim() || !showTime.trim()) {
@@ -65,7 +137,7 @@ export default function CreateSpaceScreen() {
         method: "POST",
         body: JSON.stringify({
           hostName: hostName.trim(),
-          cinemaId: null,
+          cinemaId: theaterCinemaId,
           cinemaName: theaterName.trim(),
           filmId: null,
           filmName: movieName.trim(),
@@ -75,6 +147,8 @@ export default function CreateSpaceScreen() {
           spaceType,
           totalCostCents,
           maxCapacity: spaceType === "private_rental" && maxCapacity ? parseInt(maxCapacity, 10) : null,
+          postActivities,
+          hangoutNotes: hangoutNotes.trim() || null,
         }),
       });
 
@@ -159,13 +233,18 @@ export default function CreateSpaceScreen() {
             value={hostName}
             onChangeText={setHostName}
           />
-          <TextInput
-            style={styles.input}
-            placeholder="Theater name"
-            placeholderTextColor={SpaceTheme.mutedOrbit}
-            value={theaterName}
-            onChangeText={setTheaterName}
-          />
+          <TouchableOpacity
+            activeOpacity={0.8}
+            style={styles.pickerField}
+            onPress={() => setTheaterModalVisible(true)}
+          >
+            <Ionicons name="storefront-outline" size={18} color={SpaceTheme.mutedOrbit} />
+            <Text style={[styles.pickerFieldText, !theaterName && styles.pickerFieldPlaceholder]}>
+              {theaterName || "Select a nearby theater"}
+            </Text>
+            <Ionicons name="chevron-down" size={18} color={SpaceTheme.mutedOrbit} />
+          </TouchableOpacity>
+
           <TextInput
             style={styles.input}
             placeholder="Movie"
@@ -173,22 +252,67 @@ export default function CreateSpaceScreen() {
             value={movieName}
             onChangeText={setMovieName}
           />
-          <TextInput
-            style={styles.input}
-            placeholder="Screening date (e.g. 2026-08-01)"
-            placeholderTextColor={SpaceTheme.mutedOrbit}
-            value={showDate}
-            onChangeText={setShowDate}
-            autoCapitalize="none"
-          />
-          <TextInput
-            style={styles.input}
-            placeholder="Screening time (e.g. 7:30 PM)"
-            placeholderTextColor={SpaceTheme.mutedOrbit}
-            value={showTime}
-            onChangeText={setShowTime}
-            autoCapitalize="none"
-          />
+
+          <TouchableOpacity
+            activeOpacity={0.8}
+            style={styles.pickerField}
+            onPress={() => setDatePickerVisible(true)}
+          >
+            <Ionicons name="calendar-outline" size={18} color={SpaceTheme.mutedOrbit} />
+            <Text style={[styles.pickerFieldText, !showDate && styles.pickerFieldPlaceholder]}>
+              {showDate || "Select screening date"}
+            </Text>
+          </TouchableOpacity>
+          {datePickerVisible && (
+            <DateTimePicker
+              style={styles.pickerNative}
+              value={dateValue ?? new Date()}
+              mode="date"
+              minimumDate={new Date()}
+              display={Platform.OS === "ios" ? "inline" : "default"}
+              onValueChange={onDateChange}
+              onDismiss={() => setDatePickerVisible(false)}
+            />
+          )}
+          {Platform.OS === "ios" && datePickerVisible && (
+            <TouchableOpacity
+              activeOpacity={0.8}
+              style={styles.pickerDoneButton}
+              onPress={() => setDatePickerVisible(false)}
+            >
+              <Text style={styles.pickerDoneButtonText}>Done</Text>
+            </TouchableOpacity>
+          )}
+
+          <TouchableOpacity
+            activeOpacity={0.8}
+            style={styles.pickerField}
+            onPress={() => setTimePickerVisible(true)}
+          >
+            <Ionicons name="time-outline" size={18} color={SpaceTheme.mutedOrbit} />
+            <Text style={[styles.pickerFieldText, !showTime && styles.pickerFieldPlaceholder]}>
+              {showTime || "Select screening time"}
+            </Text>
+          </TouchableOpacity>
+          {timePickerVisible && (
+            <DateTimePicker
+              style={styles.pickerNativeTime}
+              value={timeValue ?? new Date()}
+              mode="time"
+              display={Platform.OS === "ios" ? "spinner" : "default"}
+              onValueChange={onTimeChange}
+              onDismiss={() => setTimePickerVisible(false)}
+            />
+          )}
+          {Platform.OS === "ios" && timePickerVisible && (
+            <TouchableOpacity
+              activeOpacity={0.8}
+              style={styles.pickerDoneButton}
+              onPress={() => setTimePickerVisible(false)}
+            >
+              <Text style={styles.pickerDoneButtonText}>Done</Text>
+            </TouchableOpacity>
+          )}
 
           {spaceType === "private_rental" && (
             <View style={styles.rentalSection}>
@@ -230,6 +354,39 @@ export default function CreateSpaceScreen() {
             </View>
           )}
 
+          <Text style={styles.afterSectionTitle}>Up for anything after? (optional)</Text>
+          <View style={styles.chipRow}>
+            {POST_ACTIVITIES.map((a) => (
+              <TouchableOpacity
+                key={a.key}
+                activeOpacity={0.8}
+                style={[styles.afterChip, postActivities.includes(a.key) && styles.afterChipActive]}
+                onPress={() => toggleActivity(a.key)}
+              >
+                <Text style={styles.afterChipEmoji}>{a.emoji}</Text>
+                <Text
+                  style={[
+                    styles.afterChipText,
+                    postActivities.includes(a.key) && styles.afterChipTextActive,
+                  ]}
+                >
+                  {a.label}
+                </Text>
+              </TouchableOpacity>
+            ))}
+          </View>
+
+          {postActivities.length > 0 && (
+            <TextInput
+              style={[styles.input, styles.notesInput]}
+              placeholder="e.g., Grabbing drinks at the bar across the street..."
+              placeholderTextColor={SpaceTheme.mutedOrbit}
+              value={hangoutNotes}
+              onChangeText={setHangoutNotes}
+              multiline
+            />
+          )}
+
           <TouchableOpacity
             activeOpacity={0.8}
             style={styles.submitButton}
@@ -244,6 +401,82 @@ export default function CreateSpaceScreen() {
           </TouchableOpacity>
         </ScrollView>
       </KeyboardAvoidingView>
+
+      <Modal
+        visible={theaterModalVisible}
+        animationType="slide"
+        transparent
+        onRequestClose={() => setTheaterModalVisible(false)}
+      >
+        <View style={styles.modalBackdrop}>
+          <View style={styles.modalSheet}>
+            <View style={styles.modalHeader}>
+              <Text style={styles.modalTitle}>Select a Theater</Text>
+              <TouchableOpacity onPress={() => setTheaterModalVisible(false)} hitSlop={10}>
+                <Ionicons name="close" size={24} color={SpaceTheme.mutedOrbit} />
+              </TouchableOpacity>
+            </View>
+            <TextInput
+              style={styles.input}
+              placeholder="Search theaters..."
+              placeholderTextColor={SpaceTheme.mutedOrbit}
+              value={theaterSearch}
+              onChangeText={setTheaterSearch}
+            />
+            {cinemasLoading ? (
+              <ActivityIndicator color={SpaceTheme.glowCyan} style={{ marginTop: 20 }} />
+            ) : (
+              <FlatList
+                data={filteredCinemas}
+                keyExtractor={(item) => item.cinema_id.toString()}
+                keyboardShouldPersistTaps="handled"
+                renderItem={({ item }) => (
+                  <TouchableOpacity
+                    activeOpacity={0.8}
+                    style={styles.modalRow}
+                    onPress={() => {
+                      setTheaterName(item.cinema_name);
+                      setTheaterCinemaId(item.cinema_id);
+                      setTheaterModalVisible(false);
+                      setTheaterSearch("");
+                    }}
+                  >
+                    <Text style={styles.modalRowTitle}>{item.cinema_name}</Text>
+                    <Text style={styles.modalRowSubtitle}>
+                      {item.address}, {item.city}
+                    </Text>
+                  </TouchableOpacity>
+                )}
+                ListEmptyComponent={
+                  <Text style={styles.modalEmptyText}>
+                    No nearby theaters found — you can still type the name in manually below.
+                  </Text>
+                }
+              />
+            )}
+            <TextInput
+              style={[styles.input, { marginTop: 8 }]}
+              placeholder="Can't find it? Type the theater name"
+              placeholderTextColor={SpaceTheme.mutedOrbit}
+              value={theaterName}
+              onChangeText={(text) => {
+                setTheaterName(text);
+                setTheaterCinemaId(null);
+              }}
+            />
+            <TouchableOpacity
+              activeOpacity={0.8}
+              style={styles.pickerDoneButton}
+              onPress={() => {
+                setTheaterModalVisible(false);
+                setTheaterSearch("");
+              }}
+            >
+              <Text style={styles.pickerDoneButtonText}>Done</Text>
+            </TouchableOpacity>
+          </View>
+        </View>
+      </Modal>
     </Starfield>
   );
 }
@@ -314,4 +547,80 @@ const styles = StyleSheet.create({
     elevation: 6,
   },
   submitButtonText: { color: SpaceTheme.backgroundVoid, fontWeight: "800", fontSize: 17 },
+  pickerField: {
+    ...SpaceStyles.glassCard,
+    flexDirection: "row",
+    alignItems: "center",
+    gap: 10,
+    padding: 14,
+    marginBottom: 12,
+  },
+  pickerFieldText: { flex: 1, color: SpaceTheme.starWhite, fontSize: 16 },
+  pickerFieldPlaceholder: { color: SpaceTheme.mutedOrbit },
+  pickerNative: { width: "100%", height: 360, marginBottom: 4 },
+  pickerNativeTime: { width: "100%", height: 200, marginBottom: 4 },
+  afterSectionTitle: {
+    fontSize: 14,
+    fontWeight: "700",
+    color: SpaceTheme.starWhite,
+    marginTop: 4,
+    marginBottom: 10,
+  },
+  chipRow: { flexDirection: "row", flexWrap: "wrap", gap: 8, marginBottom: 20 },
+  afterChip: {
+    ...SpaceStyles.glassCard,
+    flexDirection: "row",
+    alignItems: "center",
+    gap: 6,
+    paddingVertical: 8,
+    paddingHorizontal: 12,
+  },
+  afterChipActive: {
+    backgroundColor: "rgba(56, 189, 248, 0.15)",
+    borderColor: SpaceTheme.glowCyan,
+  },
+  afterChipEmoji: { fontSize: 14 },
+  afterChipText: { fontSize: 13, fontWeight: "600", color: SpaceTheme.mutedOrbit },
+  afterChipTextActive: { color: SpaceTheme.glowCyan },
+  notesInput: { minHeight: 60, textAlignVertical: "top" },
+  pickerDoneButton: {
+    alignSelf: "flex-end",
+    paddingVertical: 8,
+    paddingHorizontal: 16,
+    marginBottom: 12,
+  },
+  pickerDoneButtonText: { color: SpaceTheme.glowCyan, fontWeight: "700", fontSize: 15 },
+  modalBackdrop: {
+    flex: 1,
+    justifyContent: "flex-end",
+    backgroundColor: "rgba(0, 0, 0, 0.6)",
+  },
+  modalSheet: {
+    backgroundColor: SpaceTheme.deepSpace,
+    borderTopLeftRadius: 20,
+    borderTopRightRadius: 20,
+    padding: 16,
+    maxHeight: "85%",
+  },
+  modalHeader: {
+    flexDirection: "row",
+    justifyContent: "space-between",
+    alignItems: "center",
+    marginBottom: 12,
+  },
+  modalTitle: { fontSize: 18, fontWeight: "700", color: SpaceTheme.starWhite },
+  modalRow: {
+    paddingVertical: 12,
+    borderBottomWidth: 1,
+    borderBottomColor: "rgba(255, 255, 255, 0.08)",
+  },
+  modalRowTitle: { fontSize: 15, fontWeight: "600", color: SpaceTheme.starWhite, marginBottom: 2 },
+  modalRowSubtitle: { fontSize: 13, color: SpaceTheme.mutedOrbit },
+  modalEmptyText: {
+    color: SpaceTheme.mutedOrbit,
+    fontSize: 14,
+    textAlign: "center",
+    marginTop: 20,
+    paddingHorizontal: 12,
+  },
 });
