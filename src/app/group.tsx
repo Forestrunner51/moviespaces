@@ -16,6 +16,7 @@ import { supabase } from "@/frontend/config/supabase";
 import { Starfield } from "@/frontend/components/starfield";
 import { SpaceTheme, SpaceStyles } from "@/frontend/constants/theme";
 import { buildTicketUrl } from "@/frontend/services/ticket-links";
+import { activityLabel, activityEmoji } from "@/frontend/constants/activities";
 
 interface Member {
   id: string;
@@ -37,6 +38,8 @@ interface Group {
   spaceType: "public_gathering" | "private_rental";
   totalCostCents: number | null;
   maxCapacity: number;
+  postActivities: string | null;
+  hangoutNotes: string | null;
   members: Member[];
 }
 
@@ -149,6 +152,26 @@ export default function GroupScreen() {
           {group.cinemaName} • {group.showTime}
         </Text>
 
+        {group.postActivities && (
+          <View style={styles.hangoutCapsule}>
+            <View style={styles.hangoutCapsuleHeader}>
+              <Text style={styles.hangoutCapsuleTitle}>💬 Hangout After</Text>
+            </View>
+            <View style={styles.afterRow}>
+              {group.postActivities.split(",").map((key) => (
+                <View key={key} style={styles.afterBadge}>
+                  <Text style={styles.afterBadgeText}>
+                    {activityEmoji(key)} {activityLabel(key)}
+                  </Text>
+                </View>
+              ))}
+            </View>
+            {group.hangoutNotes && (
+              <Text style={styles.hangoutNotesText}>{group.hangoutNotes}</Text>
+            )}
+          </View>
+        )}
+
         {group.spaceType === "private_rental" && (
           <View style={styles.rentalCard}>
             <View style={styles.rentalCardHeader}>
@@ -245,7 +268,33 @@ const styles = StyleSheet.create({
   center: { flex: 1, justifyContent: "center", alignItems: "center" },
   notFoundText: { color: SpaceTheme.mutedOrbit, fontSize: 16 },
   title: { fontSize: 22, fontWeight: "bold", color: SpaceTheme.starWhite },
-  subtitle: { fontSize: 14, color: SpaceTheme.mutedOrbit, marginBottom: 24 },
+  subtitle: { fontSize: 14, color: SpaceTheme.mutedOrbit, marginBottom: 12 },
+  hangoutCapsule: {
+    borderWidth: 1,
+    borderColor: "rgba(255, 255, 255, 0.08)",
+    backgroundColor: "rgba(244, 114, 182, 0.06)",
+    borderRadius: 12,
+    padding: 14,
+    marginBottom: 16,
+  },
+  hangoutCapsuleHeader: { marginBottom: 8 },
+  hangoutCapsuleTitle: { fontSize: 14, fontWeight: "700", color: SpaceTheme.supernovaPink },
+  hangoutNotesText: {
+    fontSize: 13,
+    color: SpaceTheme.starWhite,
+    lineHeight: 19,
+    marginTop: 8,
+  },
+  afterRow: { flexDirection: "row", flexWrap: "wrap", gap: 8 },
+  afterBadge: {
+    backgroundColor: "rgba(244, 114, 182, 0.12)",
+    borderWidth: 1,
+    borderColor: "rgba(244, 114, 182, 0.35)",
+    borderRadius: 8,
+    paddingVertical: 6,
+    paddingHorizontal: 10,
+  },
+  afterBadgeText: { fontSize: 12, fontWeight: "600", color: SpaceTheme.supernovaPink },
   rentalCard: {
     ...SpaceStyles.glassCard,
     borderColor: "rgba(244, 114, 182, 0.3)",

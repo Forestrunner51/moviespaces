@@ -1,6 +1,5 @@
 import { useState, useCallback } from "react";
 import { authFetch } from "@/frontend/services/api";
-import * as WebBrowser from "expo-web-browser";
 import {
   View,
   Text,
@@ -10,12 +9,11 @@ import {
   ActivityIndicator,
   TouchableOpacity,
 } from "react-native";
-import { router, useFocusEffect } from "expo-router";
+import { router, useFocusEffect, useLocalSearchParams } from "expo-router";
 import { Ionicons } from "@expo/vector-icons";
 import { FriendsPanel } from "@/frontend/components/friends-panel";
 import { Starfield } from "@/frontend/components/starfield";
 import { SpaceTheme, SpaceStyles } from "@/frontend/constants/theme";
-import { buildRentalInquiryUrl } from "@/frontend/services/ticket-links";
 
 interface Space {
   id: string;
@@ -24,14 +22,8 @@ interface Space {
   showTime: string;
   showDate: string;
   status: string;
+  spaceType: string;
   members: { id: string; name: string; confirmed: boolean }[];
-}
-
-interface Cinema {
-  cinema_id: number;
-  cinema_name: string;
-  address: string;
-  city: string;
 }
 
 type Tab = "spaces" | "rent" | "friends";
@@ -43,12 +35,12 @@ const TABS: { key: Tab; label: string; icon: keyof typeof Ionicons.glyphMap }[] 
 ];
 
 export default function MySpacesScreen() {
-  const [tab, setTab] = useState<Tab>("spaces");
+  const { tab: initialTab } = useLocalSearchParams<{ tab?: Tab }>();
+  const [tab, setTab] = useState<Tab>(
+    initialTab === "rent" || initialTab === "friends" ? initialTab : "spaces",
+  );
   const [spaces, setSpaces] = useState<Space[]>([]);
   const [loading, setLoading] = useState(true);
-
-  const [cinemas, setCinemas] = useState<Cinema[]>([]);
-  const [cinemasLoading, setCinemasLoading] = useState(true);
 
   const loadSpaces = async () => {
     try {
@@ -72,29 +64,13 @@ export default function MySpacesScreen() {
     }
   };
 
-  const loadCinemas = async () => {
-    setCinemasLoading(true);
-    try {
-      const res = await fetch(
-        `${process.env.EXPO_PUBLIC_API_URL}/api/movieglu/cinemas?lat=-22.0&lng=14.0`,
-      );
-      if (res.ok) {
-        const data = await res.json();
-        setCinemas(data.cinemas || []);
-      }
-    } catch (err) {
-      console.error("Failed to load nearby theaters:", err);
-    } finally {
-      setCinemasLoading(false);
-    }
-  };
-
   useFocusEffect(
     useCallback(() => {
       loadSpaces();
-      loadCinemas();
     }, []),
   );
+
+  const rentalSpaces = spaces.filter((s) => s.spaceType === "private_rental");
 
   return (
     <Starfield>
@@ -129,50 +105,64 @@ export default function MySpacesScreen() {
             <FriendsPanel />
           </ScrollView>
         ) : tab === "rent" ? (
-          <>
-            <Text style={styles.subtitle}>
-              MovieSpaces doesn't handle the booking — pick a theater and we'll connect you
-              directly so you can arrange your own private rental for whatever movie or
-              activity you want.
-            </Text>
-            {cinemasLoading ? (
-              <ActivityIndicator size="large" color={SpaceTheme.glowCyan} style={{ flex: 1 }} />
-            ) : (
+          loading ? (
+            <ActivityIndicator size="large" color={SpaceTheme.glowCyan} style={{ flex: 1 }} />
+          ) : (
+            <>
+              <TouchableOpacity
+                activeOpacity={0.8}
+                style={styles.newSpaceButton}
+                onPress={() => router.push("/rent-a-theater")}
+              >
+                <Ionicons name="storefront-outline" size={18} color={SpaceTheme.backgroundVoid} />
+                <Text style={styles.newSpaceButtonText}>Find a Theater to Rent</Text>
+              </TouchableOpacity>
+              <Text style={styles.subtitle}>Private theater rentals you're part of</Text>
               <FlatList
-                data={cinemas}
-                keyExtractor={(item) => item.cinema_id.toString()}
+                data={rentalSpaces}
+                keyExtractor={(item) => item.id}
                 renderItem={({ item }) => (
                   <TouchableOpacity
                     activeOpacity={0.8}
                     style={styles.card}
                     onPress={() =>
-                      WebBrowser.openBrowserAsync(buildRentalInquiryUrl(item.cinema_name))
+                      router.push({
+                        pathname: "/group",
+                        params: { groupId: item.id },
+                      })
                     }
                   >
-                    <View style={styles.rentCardRow}>
-                      <Ionicons name="storefront-outline" size={20} color={SpaceTheme.supernovaPink} />
-                      <View style={{ flex: 1 }}>
-                        <Text style={styles.filmName}>{item.cinema_name}</Text>
-                        <Text style={styles.details}>
-                          {item.address}, {item.city}
-                        </Text>
-                      </View>
-                      <Ionicons name="open-outline" size={18} color={SpaceTheme.mutedOrbit} />
+                    <Text style={styles.filmName}>{item.filmName}</Text>
+                    <Text style={styles.details}>
+                      {item.cinemaName} • {item.showTime}
+                    </Text>
+                    <Text style={styles.date}>{item.showDate}</Text>
+                    <View style={styles.footer}>
+                      <Text style={styles.amount}>
+                        {item.members.length} member(s)
+                      </Text>
+                      <Text
+                        style={
+                          item.status === "booked" ? styles.statusGood : styles.statusPending
+                        }
+                      >
+                        {item.status === "booked" ? "✓ Booked" : "Pending"}
+                      </Text>
                     </View>
                   </TouchableOpacity>
                 )}
                 ListEmptyComponent={
                   <View style={styles.emptyState}>
                     <Ionicons name="storefront-outline" size={40} color={SpaceTheme.mutedOrbit} />
-                    <Text style={styles.emptyTitle}>No nearby theaters found</Text>
+                    <Text style={styles.emptyTitle}>No theater rentals yet</Text>
                     <Text style={styles.emptySubtitle}>
-                      Try again later or search directly with your local theater chain.
+                      Find a theater and set up a private rental to see it here
                     </Text>
                   </View>
                 }
               />
-            )}
-          </>
+            </>
+          )
         ) : loading ? (
           <ActivityIndicator size="large" color={SpaceTheme.glowCyan} style={{ flex: 1 }} />
         ) : (
@@ -229,7 +219,7 @@ export default function MySpacesScreen() {
                   <TouchableOpacity
                     activeOpacity={0.8}
                     style={styles.emptyButton}
-                    onPress={() => router.push("/(tabs)")}
+                    onPress={() => router.push({ pathname: "/(tabs)", params: { mode: "movies" } })}
                   >
                     <Text style={styles.emptyButtonText}>Find a Movie →</Text>
                   </TouchableOpacity>
