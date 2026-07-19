@@ -1,4 +1,4 @@
-import { useState } from "react";
+import { useEffect, useState } from "react";
 import {
   View,
   Text,
@@ -7,6 +7,7 @@ import {
   StyleSheet,
 } from "react-native";
 import { useLocalSearchParams, router } from "expo-router";
+import AsyncStorage from "@react-native-async-storage/async-storage";
 import { authFetch } from "@/frontend/services/api";
 import { Starfield } from "@/frontend/components/starfield";
 import { SpaceTheme, SpaceStyles } from "@/frontend/constants/theme";
@@ -16,9 +17,16 @@ export default function JoinScreen() {
   const [name, setName] = useState("");
   const [loading, setLoading] = useState(false);
 
+  useEffect(() => {
+    AsyncStorage.getItem("userName").then((savedName) => {
+      if (savedName) setName(savedName);
+    });
+  }, []);
+
   const handleJoin = async () => {
     if (!name.trim()) return;
     setLoading(true);
+    await AsyncStorage.setItem("userName", name.trim());
     const res = await authFetch(
       `${process.env.EXPO_PUBLIC_API_URL}/api/group/${groupId}/join`,
       {
@@ -26,11 +34,11 @@ export default function JoinScreen() {
         body: JSON.stringify({ name }),
       },
     );
-    const data = await res.json();
+    await res.json();
     setLoading(false);
-    router.push({
-      pathname: "/confirm",
-      params: { groupId, memberId: data.memberId, name },
+    router.replace({
+      pathname: "/group",
+      params: { groupId, hostName: "" },
     });
   };
 

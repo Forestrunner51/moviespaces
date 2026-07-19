@@ -96,6 +96,28 @@ export default function GroupScreen() {
     await WebBrowser.openBrowserAsync(buildTicketUrl(group.filmName, group.bookingUrl));
   };
 
+  const [confirming, setConfirming] = useState(false);
+
+  const handleConfirmAttendance = async (memberId: string) => {
+    setConfirming(true);
+    await authFetch(
+      `${process.env.EXPO_PUBLIC_API_URL}/api/group/${groupId}/confirm/${memberId}`,
+      { method: "POST" },
+    );
+    await fetchGroup();
+    setConfirming(false);
+  };
+
+  const handleCancelAttendance = async (memberId: string) => {
+    setConfirming(true);
+    await authFetch(
+      `${process.env.EXPO_PUBLIC_API_URL}/api/group/${groupId}/unconfirm/${memberId}`,
+      { method: "POST" },
+    );
+    await fetchGroup();
+    setConfirming(false);
+  };
+
   const handleBook = async () => {
     if (!group) return;
 
@@ -143,6 +165,7 @@ export default function GroupScreen() {
   const isHost = hostName === group.hostName;
   const isMember =
     !!currentUserId && groupMembers.some((m) => m.userId === currentUserId);
+  const myMember = groupMembers.find((m) => m.userId === currentUserId);
 
   return (
     <Starfield>
@@ -211,6 +234,42 @@ export default function GroupScreen() {
             )}
           />
         </View>
+
+        {!isHost && !isMember && (
+          <TouchableOpacity
+            activeOpacity={0.8}
+            style={styles.joinButton}
+            onPress={() => router.push({ pathname: "/join", params: { groupId: group.id } })}
+          >
+            <Text style={styles.buttonText}>🙋 Join This Space</Text>
+          </TouchableOpacity>
+        )}
+
+        {isMember && myMember && (
+          myMember.confirmed ? (
+            <TouchableOpacity
+              activeOpacity={0.8}
+              style={styles.confirmedButton}
+              onPress={() => handleCancelAttendance(myMember.id)}
+              disabled={confirming}
+            >
+              <Text style={styles.confirmedButtonText}>
+                {confirming ? "..." : "✓ You're Confirmed — Tap to Cancel"}
+              </Text>
+            </TouchableOpacity>
+          ) : (
+            <TouchableOpacity
+              activeOpacity={0.8}
+              style={styles.confirmButton}
+              onPress={() => handleConfirmAttendance(myMember.id)}
+              disabled={confirming}
+            >
+              <Text style={styles.buttonText}>
+                {confirming ? "..." : "✓ Confirm You're Going"}
+              </Text>
+            </TouchableOpacity>
+          )
+        )}
 
         <TouchableOpacity activeOpacity={0.8} style={styles.shareButton} onPress={shareLink}>
           <Text style={styles.buttonText}>📤 Invite Friends</Text>
@@ -327,6 +386,35 @@ const styles = StyleSheet.create({
   memberName: { fontSize: 16, color: SpaceTheme.starWhite },
   confirmed: { color: "#4ADE80", fontWeight: "600" },
   pending: { color: SpaceTheme.supernovaPink, fontWeight: "600" },
+  joinButton: {
+    backgroundColor: SpaceTheme.supernovaPink,
+    padding: 16,
+    borderRadius: 14,
+    alignItems: "center",
+    marginBottom: 12,
+    shadowColor: SpaceTheme.supernovaPink,
+    shadowOffset: { width: 0, height: 0 },
+    shadowOpacity: 0.5,
+    shadowRadius: 10,
+    elevation: 6,
+  },
+  confirmButton: {
+    backgroundColor: "#4ADE80",
+    padding: 14,
+    borderRadius: 12,
+    alignItems: "center",
+    marginBottom: 12,
+  },
+  confirmedButton: {
+    backgroundColor: "rgba(255, 255, 255, 0.06)",
+    borderWidth: 1,
+    borderColor: "rgba(255, 255, 255, 0.12)",
+    padding: 14,
+    borderRadius: 12,
+    alignItems: "center",
+    marginBottom: 12,
+  },
+  confirmedButtonText: { color: SpaceTheme.mutedOrbit, fontWeight: "600", fontSize: 14 },
   shareButton: {
     backgroundColor: SpaceTheme.glowCyan,
     padding: 14,

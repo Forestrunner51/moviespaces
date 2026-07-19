@@ -322,6 +322,20 @@ namespace Backend.Controllers
             return Ok();
         }
 
+        [HttpPost("{id}/unconfirm/{memberId}")]
+        public async Task<IActionResult> UnconfirmMember(Guid id, Guid memberId)
+        {
+            var member = await _db.GroupMembers
+                .FirstOrDefaultAsync(m => m.Id == memberId && m.GroupId == id);
+
+            if (member == null) return NotFound();
+
+            member.Confirmed = false;
+            await _db.SaveChangesAsync();
+
+            return Ok();
+        }
+
         [HttpGet("/.well-known/apple-app-site-association")]
         [AllowAnonymous]
         public IActionResult GetAppleAppSiteAssociation()

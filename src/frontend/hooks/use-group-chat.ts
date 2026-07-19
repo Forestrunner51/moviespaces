@@ -11,18 +11,53 @@ export interface GroupMessage {
   sender_id: string;
   content: string;
   created_at: string;
+  sender_name?: string;
+  sender_avatar_url?: string | null;
 }
 
 export function useGroupChat(groupType: GroupChatType, groupId: string) {
   const [currentUserId, setCurrentUserId] = useState<string | null>(null);
   const [messages, setMessages] = useState<GroupMessage[]>([]);
   const [loading, setLoading] = useState(true);
+  const [profileCache, setProfileCache] = useState<
+    Record<string, { display_name: string; avatar_url: string | null }>
+  >({});
 
   useEffect(() => {
     supabase.auth.getUser().then(({ data: { user } }) => {
       if (user) setCurrentUserId(user.id);
     });
   }, []);
+
+  // Sender name/avatar aren't stored on the message row — look them up from
+  // profiles and merge in, caching per-user across fetches so we don't
+  // re-fetch the same senders' profiles every 4s poll.
+  const withSenderInfo = async (rows: GroupMessage[]) => {
+    const unknownIds = [...new Set(rows.map((m) => m.sender_id))].filter(
+      (id) => !profileCache[id],
+    );
+
+    let cache = profileCache;
+    if (unknownIds.length > 0) {
+      const { data: profiles } = await supabase
+        .from("profiles")
+        .select("id, display_name, avatar_url")
+        .in("id", unknownIds);
+
+      const additions: typeof profileCache = {};
+      (profiles || []).forEach((p) => {
+        additions[p.id] = { display_name: p.display_name, avatar_url: p.avatar_url ?? null };
+      });
+      cache = { ...profileCache, ...additions };
+      setProfileCache(cache);
+    }
+
+    return rows.map((m) => ({
+      ...m,
+      sender_name: cache[m.sender_id]?.display_name,
+      sender_avatar_url: cache[m.sender_id]?.avatar_url ?? null,
+    }));
+  };
 
   const fetchHistory = async () => {
     if (!groupId) return;
@@ -36,7 +71,7 @@ export function useGroupChat(groupType: GroupChatType, groupId: string) {
         .order("created_at", { ascending: true });
 
       if (error) throw error;
-      setMessages(data || []);
+      setMessages(await withSenderInfo(data || []));
     } catch (err) {
       console.error("Error fetching group chat history:", err);
     } finally {
@@ -61,6 +96,8 @@ export function useGroupChat(groupType: GroupChatType, groupId: string) {
         sender_id: currentUserId,
         content,
         created_at: new Date().toISOString(),
+        sender_name: profileCache[currentUserId]?.display_name,
+        sender_avatar_url: profileCache[currentUserId]?.avatar_url ?? null,
       };
       setMessages((prev) => [...prev, newMsg]);
 
@@ -79,9 +116,8 @@ export function useGroupChat(groupType: GroupChatType, groupId: string) {
       if (error) throw error;
 
       if (data && data.length > 0) {
-        setMessages((prev) =>
-          prev.map((m) => (m.id === tempId ? (data[0] as GroupMessage) : m)),
-        );
+        const [sent] = await withSenderInfo(data as GroupMessage[]);
+        setMessages((prev) => prev.map((m) => (m.id === tempId ? sent : m)));
       }
       return { success: true };
     } catch (err: any) {
