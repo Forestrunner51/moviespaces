@@ -9,6 +9,7 @@ import {
   KeyboardAvoidingView,
   Platform,
   ActivityIndicator,
+  Image,
 } from "react-native";
 import { useLocalSearchParams, Stack } from "expo-router";
 import { Starfield } from "@/frontend/components/starfield";
@@ -35,15 +36,30 @@ export default function GroupChatScreen() {
 
   const renderItem = ({ item }: { item: GroupMessage }) => {
     const isMe = item.sender_id === currentUserId;
+    if (isMe) {
+      return (
+        <View style={[styles.bubble, styles.bubbleMe, { alignSelf: "flex-end" }]}>
+          <Text style={styles.bubbleText}>{item.content}</Text>
+        </View>
+      );
+    }
     return (
-      <View
-        style={[
-          styles.bubble,
-          isMe ? styles.bubbleMe : styles.bubbleThem,
-          { alignSelf: isMe ? "flex-end" : "flex-start" },
-        ]}
-      >
-        <Text style={styles.bubbleText}>{item.content}</Text>
+      <View style={styles.rowThem}>
+        {item.sender_avatar_url ? (
+          <Image source={{ uri: item.sender_avatar_url }} style={styles.avatar} />
+        ) : (
+          <View style={styles.avatarFallback}>
+            <Text style={styles.avatarFallbackText}>
+              {(item.sender_name || "?").charAt(0).toUpperCase()}
+            </Text>
+          </View>
+        )}
+        <View style={{ flex: 1 }}>
+          <Text style={styles.senderName}>{item.sender_name || "Someone"}</Text>
+          <View style={[styles.bubble, styles.bubbleThem, { alignSelf: "flex-start", marginBottom: 0 }]}>
+            <Text style={styles.bubbleText}>{item.content}</Text>
+          </View>
+        </View>
       </View>
     );
   };
@@ -105,6 +121,21 @@ const styles = StyleSheet.create({
   bubbleMe: { backgroundColor: SpaceTheme.supernovaPink },
   bubbleThem: { ...SpaceStyles.glassCard },
   bubbleText: { color: SpaceTheme.starWhite },
+  rowThem: { flexDirection: "row", alignItems: "flex-end", gap: 8, marginBottom: 8, maxWidth: "85%" },
+  avatar: { width: 28, height: 28, borderRadius: 14, marginBottom: 4 },
+  avatarFallback: {
+    width: 28,
+    height: 28,
+    borderRadius: 14,
+    marginBottom: 4,
+    backgroundColor: SpaceTheme.deepSpace,
+    borderWidth: 1,
+    borderColor: "rgba(255,255,255,0.15)",
+    alignItems: "center",
+    justifyContent: "center",
+  },
+  avatarFallbackText: { color: SpaceTheme.glowCyan, fontSize: 12, fontWeight: "700" },
+  senderName: { color: SpaceTheme.mutedOrbit, fontSize: 11, fontWeight: "600", marginBottom: 3, marginLeft: 2 },
   inputRow: {
     flexDirection: "row",
     alignItems: "flex-end",

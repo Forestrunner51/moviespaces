@@ -57,12 +57,31 @@ export default function CreateSpaceScreen() {
   const [maxCapacity, setMaxCapacity] = useState("");
   const [bookingUrl, setBookingUrl] = useState("");
   const [postActivities, setPostActivities] = useState<string[]>([]);
+  const [customActivities, setCustomActivities] = useState<string[]>([]);
+  const [customActivityInput, setCustomActivityInput] = useState("");
   const [hangoutNotes, setHangoutNotes] = useState("");
 
   const toggleActivity = (key: string) => {
     setPostActivities((prev) =>
       prev.includes(key) ? prev.filter((a) => a !== key) : [...prev, key],
     );
+  };
+
+  const addCustomActivity = () => {
+    // Stored comma-joined, so strip commas out of freeform tags.
+    const label = customActivityInput.trim().replace(/,/g, "");
+    if (!label || customActivities.includes(label)) {
+      setCustomActivityInput("");
+      return;
+    }
+    setCustomActivities((prev) => [...prev, label]);
+    setPostActivities((prev) => [...prev, label]);
+    setCustomActivityInput("");
+  };
+
+  const removeCustomActivity = (label: string) => {
+    setCustomActivities((prev) => prev.filter((a) => a !== label));
+    setPostActivities((prev) => prev.filter((a) => a !== label));
   };
 
   const [creating, setCreating] = useState(false);
@@ -374,6 +393,36 @@ export default function CreateSpaceScreen() {
                 </Text>
               </TouchableOpacity>
             ))}
+            {customActivities.map((label) => (
+              <TouchableOpacity
+                key={label}
+                activeOpacity={0.8}
+                style={[styles.afterChip, styles.afterChipActive]}
+                onPress={() => removeCustomActivity(label)}
+              >
+                <Text style={[styles.afterChipText, styles.afterChipTextActive]}>{label}</Text>
+                <Ionicons name="close" size={14} color={SpaceTheme.glowCyan} />
+              </TouchableOpacity>
+            ))}
+          </View>
+
+          <View style={styles.customActivityRow}>
+            <TextInput
+              style={[styles.input, styles.customActivityInput]}
+              placeholder="Add your own (e.g. Board games)"
+              placeholderTextColor={SpaceTheme.mutedOrbit}
+              value={customActivityInput}
+              onChangeText={setCustomActivityInput}
+              onSubmitEditing={addCustomActivity}
+              returnKeyType="done"
+            />
+            <TouchableOpacity
+              activeOpacity={0.8}
+              style={styles.customActivityAddButton}
+              onPress={addCustomActivity}
+            >
+              <Ionicons name="add" size={20} color={SpaceTheme.backgroundVoid} />
+            </TouchableOpacity>
           </View>
 
           {postActivities.length > 0 && (
@@ -583,6 +632,16 @@ const styles = StyleSheet.create({
   afterChipText: { fontSize: 13, fontWeight: "600", color: SpaceTheme.mutedOrbit },
   afterChipTextActive: { color: SpaceTheme.glowCyan },
   notesInput: { minHeight: 60, textAlignVertical: "top" },
+  customActivityRow: { flexDirection: "row", gap: 8, alignItems: "center", marginBottom: 12 },
+  customActivityInput: { flex: 1, marginBottom: 0 },
+  customActivityAddButton: {
+    backgroundColor: SpaceTheme.glowCyan,
+    width: 46,
+    height: 46,
+    borderRadius: 12,
+    alignItems: "center",
+    justifyContent: "center",
+  },
   pickerDoneButton: {
     alignSelf: "flex-end",
     paddingVertical: 8,
