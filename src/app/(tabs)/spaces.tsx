@@ -71,6 +71,7 @@ export default function MySpacesScreen() {
   );
 
   const rentalSpaces = spaces.filter((s) => s.spaceType === "private_rental");
+  const gatheringSpaces = spaces.filter((s) => s.spaceType !== "private_rental");
 
   return (
     <Starfield>
@@ -177,7 +178,7 @@ export default function MySpacesScreen() {
             </TouchableOpacity>
             <Text style={styles.subtitle}>Your movie groups and memberships</Text>
             <FlatList
-              data={spaces}
+              data={gatheringSpaces}
               keyExtractor={(item) => item.id}
               renderItem={({ item }) => (
                 <TouchableOpacity

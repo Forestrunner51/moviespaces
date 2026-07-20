@@ -66,7 +66,11 @@ export default function GroupChatScreen() {
 
   return (
     <Starfield>
-      <View style={styles.container}>
+      <KeyboardAvoidingView
+        style={styles.container}
+        behavior={Platform.OS === "ios" ? "padding" : undefined}
+        keyboardVerticalOffset={Platform.OS === "ios" ? 100 : 0}
+      >
         <Stack.Screen options={{ title: title || "Group Chat" }} />
         {loading && messages.length === 0 ? (
           <ActivityIndicator color={SpaceTheme.glowCyan} style={{ flex: 1 }} />
@@ -85,25 +89,20 @@ export default function GroupChatScreen() {
             }
           />
         )}
-        <KeyboardAvoidingView
-          behavior={Platform.OS === "ios" ? "padding" : undefined}
-          keyboardVerticalOffset={90}
-        >
-          <View style={styles.inputRow}>
-            <TextInput
-              style={styles.input}
-              placeholder="Message the group..."
-              placeholderTextColor={SpaceTheme.mutedOrbit}
-              value={text}
-              onChangeText={setText}
-              multiline
-            />
-            <TouchableOpacity activeOpacity={0.8} style={styles.sendButton} onPress={handleSend}>
-              <Text style={styles.sendButtonText}>Send</Text>
-            </TouchableOpacity>
-          </View>
-        </KeyboardAvoidingView>
-      </View>
+        <View style={styles.inputRow}>
+          <TextInput
+            style={styles.input}
+            placeholder="Message the group..."
+            placeholderTextColor={SpaceTheme.mutedOrbit}
+            value={text}
+            onChangeText={setText}
+            multiline
+          />
+          <TouchableOpacity activeOpacity={0.8} style={styles.sendButton} onPress={handleSend}>
+            <Text style={styles.sendButtonText}>Send</Text>
+          </TouchableOpacity>
+        </View>
+      </KeyboardAvoidingView>
     </Starfield>
   );
 }
