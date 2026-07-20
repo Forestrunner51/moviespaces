@@ -73,7 +73,8 @@
         {
           "locationWhenInUsePermission": "Allow MovieSpaces to use your location to find nearby theaters."
         }
-      ]
+      ],
+      "expo-notifications"
     ],
     "experiments": {
       "typedRoutes": true,

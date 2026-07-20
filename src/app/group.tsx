@@ -242,8 +242,31 @@ export default function GroupScreen() {
 
     Alert.alert(
       "🎉 Group Confirmed!",
-      `Your group is booked for ${group.filmName} at ${group.showTime} on ${group.showDate}.\n\nHead to ${group.cinemaName} to purchase tickets!`,
+      `Your group is booked for ${group.filmName} at ${group.showTime} on ${group.showDate}.\n\nHead to ${group.cinemaName} to purchase tickets! Everyone in the group has been notified.`,
       [{ text: "OK" }],
+    );
+  };
+
+  const [unbooking, setUnbooking] = useState(false);
+
+  const handleUnbook = () => {
+    Alert.alert(
+      "Unbook this Space?",
+      "This reverts it back to pending — useful if it was marked booked by mistake.",
+      [
+        { text: "Cancel", style: "cancel" },
+        {
+          text: "Unbook",
+          onPress: async () => {
+            setUnbooking(true);
+            await authFetch(`${process.env.EXPO_PUBLIC_API_URL}/api/group/${groupId}/unbook`, {
+              method: "POST",
+            });
+            await fetchGroup();
+            setUnbooking(false);
+          },
+        },
+      ],
     );
   };
 
@@ -468,7 +491,7 @@ export default function GroupScreen() {
           </TouchableOpacity>
         )}
 
-        {isHost && (
+        {isHost && group.status !== "booked" && (
           <TouchableOpacity
             activeOpacity={0.8}
             style={styles.bookButton}
@@ -478,6 +501,19 @@ export default function GroupScreen() {
               {allConfirmed
                 ? "✓ Mark Group Booked"
                 : `Waiting for ${groupMembers.filter((m) => !m.confirmed).length} confirmation(s)`}
+            </Text>
+          </TouchableOpacity>
+        )}
+
+        {isHost && group.status === "booked" && (
+          <TouchableOpacity
+            activeOpacity={0.8}
+            style={styles.unbookButton}
+            onPress={handleUnbook}
+            disabled={unbooking}
+          >
+            <Text style={styles.buttonText}>
+              {unbooking ? "..." : "↩️ Unbook (Revert to Pending)"}
             </Text>
           </TouchableOpacity>
         )}
@@ -725,6 +761,14 @@ const styles = StyleSheet.create({
   ticketsButtonText: { color: SpaceTheme.backgroundVoid, fontWeight: "800", fontSize: 18 },
   bookButton: {
     backgroundColor: "#4ADE80",
+    padding: 14,
+    borderRadius: 12,
+    alignItems: "center",
+  },
+  unbookButton: {
+    backgroundColor: "rgba(255, 255, 255, 0.08)",
+    borderWidth: 1,
+    borderColor: "rgba(255, 255, 255, 0.15)",
     padding: 14,
     borderRadius: 12,
     alignItems: "center",

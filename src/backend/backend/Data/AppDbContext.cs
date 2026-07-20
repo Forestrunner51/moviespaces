@@ -21,4 +21,5 @@ public class AppDbContext : DbContext
     public DbSet<MovieSpace> MovieSpaces => Set<MovieSpace>();
     public DbSet<Group> Groups { get; set; }
     public DbSet<GroupMember> GroupMembers { get; set; }
+    public DbSet<PushToken> PushTokens { get; set; }
 }
