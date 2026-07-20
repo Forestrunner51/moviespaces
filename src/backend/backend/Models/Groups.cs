@@ -77,6 +77,14 @@ namespace Backend.Models
         [Column("screening_time")]
         public DateTime? ScreeningTime { get; set; }
 
+        // Every showtime is host-entered now (no more automated MovieGlu
+        // verification), so members can flag one that turns out to be wrong.
+        // Simple counter, no dedupe — reporting abuse isn't a concern at
+        // this scale, and dedupe would need per-user tracking this table
+        // doesn't have a reason to carry otherwise.
+        [Column("showtime_report_count")]
+        public int ShowtimeReportCount { get; set; } = 0;
+
         public DateTime CreatedAt { get; set; } = DateTime.UtcNow;
         public List<GroupMember> Members { get; set; } = new();
     }

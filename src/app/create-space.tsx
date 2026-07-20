@@ -21,7 +21,7 @@ import { authFetch } from "@/frontend/services/api";
 import { Starfield } from "@/frontend/components/starfield";
 import { SpaceTheme, SpaceStyles } from "@/frontend/constants/theme";
 import { POST_ACTIVITIES } from "@/frontend/constants/activities";
-import { searchMovies, TmdbMovie } from "@/frontend/services/tmdb";
+import { searchMovies, getNowPlaying, TmdbMovie } from "@/frontend/services/tmdb";
 import {
   getDeviceLocation,
   fetchNearbyTheaters,
@@ -35,6 +35,15 @@ const formatDate = (d: Date) =>
 
 const formatTime = (d: Date) =>
   d.toLocaleTimeString(undefined, { hour: "numeric", minute: "2-digit", hour12: true });
+
+// Theaters don't run showings between roughly 2am and 10:30am — catches an
+// obvious fat-finger on the time picker (e.g. AM/PM mixup) before it's saved.
+const isOutsideBusinessHours = (d: Date) => {
+  const minutes = d.getHours() * 60 + d.getMinutes();
+  return minutes >= 2 * 60 && minutes < 10 * 60 + 30;
+};
+
+const maxBookingDate = new Date(Date.now() + 14 * 24 * 60 * 60 * 1000);
 
 export default function CreateSpaceScreen() {
   const {
@@ -103,6 +112,7 @@ export default function CreateSpaceScreen() {
 
   const [theaters, setTheaters] = useState<NearbyTheater[]>([]);
   const [theatersLoading, setTheatersLoading] = useState(true);
+  const [theatersError, setTheatersError] = useState<string | null>(null);
   const [theaterModalVisible, setTheaterModalVisible] = useState(false);
   const [theaterSearch, setTheaterSearch] = useState("");
 
@@ -110,6 +120,7 @@ export default function CreateSpaceScreen() {
   const [movieSearch, setMovieSearch] = useState("");
   const [movieResults, setMovieResults] = useState<TmdbMovie[]>([]);
   const [movieSearching, setMovieSearching] = useState(false);
+  const [nowPlaying, setNowPlaying] = useState<TmdbMovie[]>([]);
 
   const [datePickerVisible, setDatePickerVisible] = useState(false);
   const [dateValue, setDateValue] = useState<Date | null>(null);
@@ -129,14 +140,22 @@ export default function CreateSpaceScreen() {
       .catch((err) => {
         console.error("Failed to load nearby theaters:", err);
         setTheaters([]);
+        setTheatersError(err.message || "Couldn't load nearby theaters.");
       })
       .finally(() => setTheatersLoading(false));
   }, []);
 
-  // Debounced TMDb search — fires 400ms after the user stops typing.
+  // Pre-populate with box-office-active titles so the picker isn't empty
+  // before the host types anything.
+  useEffect(() => {
+    getNowPlaying().then(setNowPlaying);
+  }, []);
+
+  // Debounced TMDb search — fires 400ms after the user stops typing. An
+  // empty query falls back to the now-playing list instead of a blank modal.
   useEffect(() => {
     if (!movieSearch.trim()) {
-      setMovieResults([]);
+      setMovieResults(nowPlaying);
       return;
     }
     setMovieSearching(true);
@@ -146,7 +165,7 @@ export default function CreateSpaceScreen() {
         .finally(() => setMovieSearching(false));
     }, 400);
     return () => clearTimeout(handle);
-  }, [movieSearch]);
+  }, [movieSearch, nowPlaying]);
 
   const filteredTheaters = theaters.filter((t) =>
     t.name.toLowerCase().includes(theaterSearch.toLowerCase()),
@@ -167,6 +186,14 @@ export default function CreateSpaceScreen() {
   const handleSubmit = async () => {
     if (!hostName.trim() || !theaterName.trim() || !movieName.trim() || !showDate.trim() || !showTime.trim()) {
       Alert.alert("Missing info", "Please fill in your name, theater, movie, date, and time.");
+      return;
+    }
+
+    if (timeValue && isOutsideBusinessHours(timeValue)) {
+      Alert.alert(
+        "Check your showtime",
+        "Theaters don't typically run showings between 2:00 AM and 10:30 AM — double-check the time you picked.",
+      );
       return;
     }
 
@@ -334,6 +361,7 @@ export default function CreateSpaceScreen() {
               value={dateValue ?? new Date()}
               mode="date"
               minimumDate={new Date()}
+              maximumDate={maxBookingDate}
               display={Platform.OS === "ios" ? "inline" : "default"}
               onValueChange={onDateChange}
               onDismiss={() => setDatePickerVisible(false)}
@@ -503,7 +531,10 @@ export default function CreateSpaceScreen() {
         transparent
         onRequestClose={() => setTheaterModalVisible(false)}
       >
-        <View style={styles.modalBackdrop}>
+        <KeyboardAvoidingView
+          style={styles.modalBackdrop}
+          behavior={Platform.OS === "ios" ? "padding" : undefined}
+        >
           <View style={styles.modalSheet}>
             <View style={styles.modalHeader}>
               <Text style={styles.modalTitle}>Select a Theater</Text>
@@ -544,8 +575,9 @@ export default function CreateSpaceScreen() {
                 )}
                 ListEmptyComponent={
                   <Text style={styles.modalEmptyText}>
-                    No nearby theaters found — allow location access, or type the name in
-                    manually below.
+                    {theatersError
+                      ? `Couldn't load theaters: ${theatersError}`
+                      : "No nearby theaters found — allow location access, or type the name in manually below."}
                   </Text>
                 }
               />
@@ -573,7 +605,7 @@ export default function CreateSpaceScreen() {
               <Text style={styles.pickerDoneButtonText}>Done</Text>
             </TouchableOpacity>
           </View>
-        </View>
+        </KeyboardAvoidingView>
       </Modal>
 
       <Modal
@@ -582,7 +614,10 @@ export default function CreateSpaceScreen() {
         transparent
         onRequestClose={() => setMovieModalVisible(false)}
       >
-        <View style={styles.modalBackdrop}>
+        <KeyboardAvoidingView
+          style={styles.modalBackdrop}
+          behavior={Platform.OS === "ios" ? "padding" : undefined}
+        >
           <View style={styles.modalSheet}>
             <View style={styles.modalHeader}>
               <Text style={styles.modalTitle}>Search for a Movie</Text>
@@ -630,7 +665,7 @@ export default function CreateSpaceScreen() {
               />
             )}
           </View>
-        </View>
+        </KeyboardAvoidingView>
       </Modal>
     </Starfield>
   );

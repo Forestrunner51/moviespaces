@@ -345,6 +345,19 @@ namespace Backend.Controllers
             return Ok();
         }
 
+        [HttpPost("{id}/report-showtime")]
+        [AllowAnonymous]
+        public async Task<IActionResult> ReportShowtime(Guid id)
+        {
+            var group = await _db.Groups.FindAsync(id);
+            if (group == null) return NotFound();
+
+            group.ShowtimeReportCount += 1;
+            await _db.SaveChangesAsync();
+
+            return Ok(new { showtimeReportCount = group.ShowtimeReportCount });
+        }
+
         [HttpGet("/.well-known/apple-app-site-association")]
         [AllowAnonymous]
         public IActionResult GetAppleAppSiteAssociation()

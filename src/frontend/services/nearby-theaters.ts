@@ -32,11 +32,18 @@ export async function getDeviceLocation(): Promise<Coordinates | null> {
   }
 }
 
+// Throws with the server's actual error message on failure (e.g. a missing
+// GooglePlaces:ApiKey on the backend) instead of silently returning an empty
+// list — an empty list looks identical to "no theaters nearby", which made a
+// real backend misconfiguration invisible in the UI.
 export async function fetchNearbyTheaters(coords: Coordinates): Promise<NearbyTheater[]> {
   const res = await fetch(
     `${process.env.EXPO_PUBLIC_API_URL}/api/locations/nearby-theaters?latitude=${coords.latitude}&longitude=${coords.longitude}`,
   );
-  if (!res.ok) return [];
+  if (!res.ok) {
+    const body = await res.json().catch(() => null);
+    throw new Error(body?.error || `Failed to load nearby theaters (status ${res.status}).`);
+  }
   const data = await res.json();
   return data.theaters || [];
 }
