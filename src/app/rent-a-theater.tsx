@@ -23,6 +23,7 @@ export default function RentATheaterScreen() {
   const [theaters, setTheaters] = useState<NearbyTheater[]>([]);
   const [loading, setLoading] = useState(true);
   const [locationDenied, setLocationDenied] = useState(false);
+  const [error, setError] = useState<string | null>(null);
 
   useEffect(() => {
     getDeviceLocation()
@@ -37,6 +38,7 @@ export default function RentATheaterScreen() {
       .catch((err) => {
         console.error("Failed to load nearby theaters:", err);
         setTheaters([]);
+        setError(err.message || "Couldn't load nearby theaters.");
       })
       .finally(() => setLoading(false));
   }, []);
@@ -95,11 +97,15 @@ export default function RentATheaterScreen() {
             ListEmptyComponent={
               <View style={styles.emptyState}>
                 <Ionicons name="storefront-outline" size={40} color={SpaceTheme.mutedOrbit} />
-                <Text style={styles.emptyTitle}>No nearby theaters found</Text>
+                <Text style={styles.emptyTitle}>
+                  {error ? "Couldn't load theaters" : "No nearby theaters found"}
+                </Text>
                 <Text style={styles.emptySubtitle}>
-                  {locationDenied
-                    ? "Location access was denied — allow it in Settings to see nearby theaters, or create a Space and type the theater name manually."
-                    : "Try again later or search directly with your local theater chain."}
+                  {error
+                    ? error
+                    : locationDenied
+                      ? "Location access was denied — allow it in Settings to see nearby theaters, or create a Space and type the theater name manually."
+                      : "Try again later or search directly with your local theater chain."}
                 </Text>
               </View>
             }

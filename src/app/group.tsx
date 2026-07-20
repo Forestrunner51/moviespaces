@@ -40,6 +40,7 @@ interface Group {
   maxCapacity: number;
   postActivities: string | null;
   hangoutNotes: string | null;
+  showtimeReportCount: number;
   members: Member[];
 }
 
@@ -118,6 +119,30 @@ export default function GroupScreen() {
     setConfirming(false);
   };
 
+  const [reporting, setReporting] = useState(false);
+
+  const handleReportShowtime = () => {
+    Alert.alert(
+      "Report this showtime?",
+      "Let other members know this showtime looks outdated or wrong.",
+      [
+        { text: "Cancel", style: "cancel" },
+        {
+          text: "Report",
+          style: "destructive",
+          onPress: async () => {
+            setReporting(true);
+            await fetch(`${process.env.EXPO_PUBLIC_API_URL}/api/group/${groupId}/report-showtime`, {
+              method: "POST",
+            });
+            await fetchGroup();
+            setReporting(false);
+          },
+        },
+      ],
+    );
+  };
+
   const handleBook = async () => {
     if (!group) return;
 
@@ -174,6 +199,24 @@ export default function GroupScreen() {
         <Text style={styles.subtitle}>
           {group.cinemaName} • {group.showTime}
         </Text>
+
+        <View style={styles.manualRow}>
+          <Text style={styles.manualBadge}>👤 Showtime scheduled manually by host</Text>
+          <TouchableOpacity
+            activeOpacity={0.8}
+            onPress={handleReportShowtime}
+            disabled={reporting}
+            hitSlop={8}
+          >
+            <Text style={styles.reportLink}>🚩 Report</Text>
+          </TouchableOpacity>
+        </View>
+        {group.showtimeReportCount > 0 && (
+          <Text style={styles.reportCountText}>
+            Flagged by {group.showtimeReportCount} member
+            {group.showtimeReportCount === 1 ? "" : "s"} as possibly outdated
+          </Text>
+        )}
 
         {group.postActivities && (
           <View style={styles.hangoutCapsule}>
@@ -328,6 +371,19 @@ const styles = StyleSheet.create({
   notFoundText: { color: SpaceTheme.mutedOrbit, fontSize: 16 },
   title: { fontSize: 22, fontWeight: "bold", color: SpaceTheme.starWhite },
   subtitle: { fontSize: 14, color: SpaceTheme.mutedOrbit, marginBottom: 12 },
+  manualRow: {
+    flexDirection: "row",
+    justifyContent: "space-between",
+    alignItems: "center",
+    marginBottom: 4,
+  },
+  manualBadge: { fontSize: 12, color: SpaceTheme.mutedOrbit, fontWeight: "600" },
+  reportLink: { fontSize: 12, color: SpaceTheme.supernovaPink, fontWeight: "700" },
+  reportCountText: {
+    fontSize: 12,
+    color: SpaceTheme.supernovaPink,
+    marginBottom: 12,
+  },
   hangoutCapsule: {
     borderWidth: 1,
     borderColor: "rgba(255, 255, 255, 0.08)",

@@ -306,6 +306,7 @@ export default function ExploreScreen() {
               <Text style={styles.spaceDetails}>
                 {item.showDate} • {item.showTime}
               </Text>
+              <Text style={styles.manualBadge}>👤 Manually scheduled by host</Text>
               {item.totalCostCents != null && (
                 <Text style={styles.spacePrice}>
                   ${(item.totalCostCents / 100).toFixed(0)} total
@@ -412,6 +413,7 @@ const styles = StyleSheet.create({
   },
   typeBadgeText: { fontSize: 11, fontWeight: "700", color: SpaceTheme.starWhite },
   spaceDetails: { fontSize: 13, color: SpaceTheme.mutedOrbit, marginBottom: 2 },
+  manualBadge: { fontSize: 11, color: SpaceTheme.mutedOrbit, fontStyle: "italic", marginTop: 2 },
   spacePrice: { fontSize: 13, color: SpaceTheme.supernovaPink, fontWeight: "700", marginTop: 4 },
   hangoutBadge: {
     alignSelf: "flex-start",
