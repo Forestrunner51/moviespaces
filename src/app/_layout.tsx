@@ -4,6 +4,7 @@ import { useEffect, useState } from "react";
 import { AnimatedSplashOverlay } from "@/frontend/components/animated-icon";
 import { supabase } from "@/frontend/config/supabase";
 import { SpaceTheme } from "@/frontend/constants/theme";
+import { registerForPushNotifications } from "@/frontend/services/push-notifications";
 
 // Every screen uses the cosmic theme now, regardless of system light/dark
 // mode — so the native header (back button, title bar) should match rather
@@ -50,6 +51,12 @@ export default function Layout() {
       }
     }
   }, [session, loading]);
+
+  useEffect(() => {
+    if (session) {
+      registerForPushNotifications();
+    }
+  }, [session]);
 
   return (
     <ThemeProvider value={SpaceNavigationTheme}>

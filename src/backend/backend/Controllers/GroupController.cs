@@ -5,6 +5,8 @@ using Backend.Data;
 using Backend.Models;
 using System.Security.Claims;
 using System.Net;
+using System.Text;
+using System.Text.Json;
 using Microsoft.Extensions.Logging;
 
 namespace Backend.Controllers
@@ -16,11 +18,58 @@ namespace Backend.Controllers
     {
         private readonly AppDbContext _db;
         private readonly ILogger<GroupController> _logger;
+        private readonly IHttpClientFactory _httpClientFactory;
 
-        public GroupController(AppDbContext db, ILogger<GroupController> logger)
+        public GroupController(AppDbContext db, ILogger<GroupController> logger, IHttpClientFactory httpClientFactory)
         {
             _db = db;
             _logger = logger;
+            _httpClientFactory = httpClientFactory;
+        }
+
+        // Fire-and-forget-ish: best-effort push via Expo's push API. Missing
+        // tokens (member never opened the app / denied permission / no
+        // native build with expo-notifications yet) are silently skipped —
+        // this should never block the booking action itself.
+        private async Task NotifyMembersAsync(Guid groupId, string title, string body)
+        {
+            try
+            {
+                var memberUserIds = await _db.GroupMembers
+                    .Where(m => m.GroupId == groupId && m.UserId != "")
+                    .Select(m => m.UserId)
+                    .Distinct()
+                    .ToListAsync();
+
+                if (memberUserIds.Count == 0) return;
+
+                var tokens = await _db.PushTokens
+                    .Where(t => memberUserIds.Contains(t.UserId))
+                    .Select(t => t.Token)
+                    .ToListAsync();
+
+                if (tokens.Count == 0) return;
+
+                var messages = tokens.Select(token => new
+                {
+                    to = token,
+                    sound = "default",
+                    title,
+                    body,
+                });
+
+                var client = _httpClientFactory.CreateClient();
+                var request = new HttpRequestMessage(HttpMethod.Post, "https://exp.host/--/api/v2/push/send")
+                {
+                    Content = new StringContent(JsonSerializer.Serialize(messages), Encoding.UTF8, "application/json"),
+                };
+                request.Headers.Add("Accept", "application/json");
+                await client.SendAsync(request);
+            }
+            catch (Exception ex)
+            {
+                _logger.LogError(ex, "Failed to send booking push notifications for group {GroupId}", groupId);
+            }
         }
 
         private string GetUserId() =>
@@ -384,10 +433,35 @@ namespace Backend.Controllers
         [HttpPost("{id}/book")]
         public async Task<IActionResult> BookGroup(Guid id)
         {
+            var userId = GetUserId();
             var group = await _db.Groups.FindAsync(id);
             if (group == null) return NotFound();
+            if (group.UserId != userId) return Forbid();
 
             group.Status = "booked";
+            await _db.SaveChangesAsync();
+
+            await NotifyMembersAsync(
+                id,
+                "🎉 Your Space is booked!",
+                $"{group.FilmName} at {group.CinemaName} — {group.ShowDate} at {group.ShowTime}."
+            );
+
+            return Ok();
+        }
+
+        // Host-only: reverts an accidental/premature "Mark Group Booked".
+        // Deliberately doesn't re-notify members — an unbook isn't good news
+        // worth pushing to everyone the way a booking confirmation is.
+        [HttpPost("{id}/unbook")]
+        public async Task<IActionResult> UnbookGroup(Guid id)
+        {
+            var userId = GetUserId();
+            var group = await _db.Groups.FindAsync(id);
+            if (group == null) return NotFound();
+            if (group.UserId != userId) return Forbid();
+
+            group.Status = "pending";
             await _db.SaveChangesAsync();
 
             return Ok();
