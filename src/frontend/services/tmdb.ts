@@ -1,8 +1,8 @@
-// TMDb's v3 API key is designed to be used client-side (unlike MovieGlu's
-// credentials, which required a paid partner relationship) — no backend
-// proxy needed here.
-const TMDB_API_KEY = process.env.EXPO_PUBLIC_TMDB_API_KEY;
-const TMDB_BASE_URL = "https://api.themoviedb.org/3";
+// Routed through our own backend (TmdbController) rather than calling TMDb
+// directly: TMDb's rate limit is per API key, and a key embedded in every
+// app install would mean the whole user base shares one ceiling. The backend
+// also caches responses for 24h, so N users searching the same movie only
+// costs one real TMDb request.
 const TMDB_IMAGE_BASE = "https://image.tmdb.org/t/p/w200";
 
 export interface TmdbMovie {
@@ -22,9 +22,9 @@ function mapResults(results: any[]): TmdbMovie[] {
 }
 
 export async function searchMovies(query: string): Promise<TmdbMovie[]> {
-  if (!query.trim() || !TMDB_API_KEY) return [];
+  if (!query.trim()) return [];
 
-  const url = `${TMDB_BASE_URL}/search/movie?api_key=${TMDB_API_KEY}&query=${encodeURIComponent(query)}&include_adult=false`;
+  const url = `${process.env.EXPO_PUBLIC_API_URL}/api/tmdb/search?query=${encodeURIComponent(query)}`;
   const res = await fetch(url);
   if (!res.ok) return [];
 
@@ -36,9 +36,7 @@ export async function searchMovies(query: string): Promise<TmdbMovie[]> {
 // host types anything — narrows the field to films actually worth starting
 // a Space around instead of an empty list.
 export async function getNowPlaying(): Promise<TmdbMovie[]> {
-  if (!TMDB_API_KEY) return [];
-
-  const url = `${TMDB_BASE_URL}/movie/now_playing?api_key=${TMDB_API_KEY}&region=US`;
+  const url = `${process.env.EXPO_PUBLIC_API_URL}/api/tmdb/now-playing`;
   const res = await fetch(url);
   if (!res.ok) return [];
 
