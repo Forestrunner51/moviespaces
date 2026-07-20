@@ -219,7 +219,12 @@ export default function MySpacesScreen() {
                   <TouchableOpacity
                     activeOpacity={0.8}
                     style={styles.emptyButton}
-                    onPress={() => router.push({ pathname: "/(tabs)", params: { mode: "movies" } })}
+                    onPress={() =>
+                      router.push({
+                        pathname: "/create-space",
+                        params: { spaceType: "public_gathering" },
+                      })
+                    }
                   >
                     <Text style={styles.emptyButtonText}>Find a Movie →</Text>
                   </TouchableOpacity>

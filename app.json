@@ -67,7 +67,13 @@
           "photosPermission": "Allow MovieSpaces to access your photos so you can set a profile picture."
         }
       ],
-      "@react-native-community/datetimepicker"
+      "@react-native-community/datetimepicker",
+      [
+        "expo-location",
+        {
+          "locationWhenInUsePermission": "Allow MovieSpaces to use your location to find nearby theaters."
+        }
+      ]
     ],
     "experiments": {
       "typedRoutes": true,

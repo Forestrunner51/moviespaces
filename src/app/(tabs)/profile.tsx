@@ -14,12 +14,14 @@ import { useFocusEffect } from "expo-router";
 import * as ImagePicker from "expo-image-picker";
 import { Starfield } from "@/frontend/components/starfield";
 import { SpaceTheme, SpaceStyles } from "@/frontend/constants/theme";
+import { THEATER_MEMBERSHIPS, membershipLabel } from "@/frontend/constants/theater-memberships";
 
 interface ProfileData {
   displayName: string;
   avatarUrl: string | null;
   email: string | null;
   joinedAt: string | null;
+  theaterMemberships: string[];
 }
 
 export default function ProfileScreen() {
@@ -30,6 +32,13 @@ export default function ProfileScreen() {
   const [nameInput, setNameInput] = useState("");
   const [pendingAvatarUri, setPendingAvatarUri] = useState<string | null>(null);
   const [saving, setSaving] = useState(false);
+  const [membershipsInput, setMembershipsInput] = useState<string[]>([]);
+
+  const toggleMembership = (key: string) => {
+    setMembershipsInput((prev) =>
+      prev.includes(key) ? prev.filter((m) => m !== key) : [...prev, key],
+    );
+  };
 
   const load = useCallback(async () => {
     const {
@@ -43,20 +52,25 @@ export default function ProfileScreen() {
 
     const { data: row } = await supabase
       .from("profiles")
-      .select("display_name, avatar_url, created_at")
+      .select("display_name, avatar_url, created_at, theater_memberships")
       .eq("id", user.id)
       .maybeSingle();
 
     const displayName =
       row?.display_name || user.user_metadata?.full_name || "Unknown User";
+    const theaterMemberships = row?.theater_memberships
+      ? row.theater_memberships.split(",")
+      : [];
 
     setProfile({
       displayName,
       avatarUrl: row?.avatar_url ?? null,
       email: user.email ?? null,
       joinedAt: row?.created_at || user.created_at || null,
+      theaterMemberships,
     });
     setNameInput(displayName);
+    setMembershipsInput(theaterMemberships);
     setLoading(false);
   }, []);
 
@@ -72,6 +86,7 @@ export default function ProfileScreen() {
 
   const startEditing = () => {
     setNameInput(profile?.displayName ?? "");
+    setMembershipsInput(profile?.theaterMemberships ?? []);
     setPendingAvatarUri(null);
     setEditing(true);
   };
@@ -125,11 +140,19 @@ export default function ProfileScreen() {
 
       const { error: updateError } = await supabase
         .from("profiles")
-        .update({ display_name: nameInput.trim(), avatar_url: avatarUrl })
+        .update({
+          display_name: nameInput.trim(),
+          avatar_url: avatarUrl,
+          theater_memberships: membershipsInput.length > 0 ? membershipsInput.join(",") : null,
+        })
         .eq("id", userId);
       if (updateError) throw updateError;
 
-      setProfile((prev) => (prev ? { ...prev, displayName: nameInput.trim(), avatarUrl } : prev));
+      setProfile((prev) =>
+        prev
+          ? { ...prev, displayName: nameInput.trim(), avatarUrl, theaterMemberships: membershipsInput }
+          : prev,
+      );
       setEditing(false);
       setPendingAvatarUri(null);
     } catch (err: any) {
@@ -197,6 +220,44 @@ export default function ProfileScreen() {
                 year: "numeric",
               })}
             </Text>
+          )}
+
+          {editing ? (
+            <View style={styles.membershipsSection}>
+              <Text style={styles.membershipsLabel}>Theater Memberships</Text>
+              <View style={styles.chipRow}>
+                {THEATER_MEMBERSHIPS.map((m) => (
+                  <TouchableOpacity
+                    key={m.key}
+                    activeOpacity={0.8}
+                    style={[
+                      styles.membershipChip,
+                      membershipsInput.includes(m.key) && styles.membershipChipActive,
+                    ]}
+                    onPress={() => toggleMembership(m.key)}
+                  >
+                    <Text
+                      style={[
+                        styles.membershipChipText,
+                        membershipsInput.includes(m.key) && styles.membershipChipTextActive,
+                      ]}
+                    >
+                      {m.label}
+                    </Text>
+                  </TouchableOpacity>
+                ))}
+              </View>
+            </View>
+          ) : (
+            profile && profile.theaterMemberships.length > 0 && (
+              <View style={[styles.chipRow, styles.membershipsSection]}>
+                {profile.theaterMemberships.map((key) => (
+                  <View key={key} style={styles.membershipBadge}>
+                    <Text style={styles.membershipBadgeText}>{membershipLabel(key)}</Text>
+                  </View>
+                ))}
+              </View>
+            )
           )}
 
           {editing ? (
@@ -299,6 +360,36 @@ const styles = StyleSheet.create({
   },
   email: { fontSize: 15, color: SpaceTheme.mutedOrbit, marginTop: 4 },
   joined: { fontSize: 13, color: SpaceTheme.mutedOrbit, marginTop: 8 },
+  membershipsSection: { marginTop: 16, width: "100%" },
+  membershipsLabel: {
+    fontSize: 12,
+    fontWeight: "700",
+    color: SpaceTheme.mutedOrbit,
+    marginBottom: 8,
+    textTransform: "uppercase",
+    textAlign: "center",
+  },
+  chipRow: { flexDirection: "row", flexWrap: "wrap", gap: 8, justifyContent: "center" },
+  membershipChip: {
+    ...SpaceStyles.glassCard,
+    paddingVertical: 8,
+    paddingHorizontal: 12,
+  },
+  membershipChipActive: {
+    backgroundColor: "rgba(56, 189, 248, 0.15)",
+    borderColor: SpaceTheme.glowCyan,
+  },
+  membershipChipText: { fontSize: 13, fontWeight: "600", color: SpaceTheme.mutedOrbit },
+  membershipChipTextActive: { color: SpaceTheme.glowCyan },
+  membershipBadge: {
+    backgroundColor: "rgba(56, 189, 248, 0.12)",
+    borderWidth: 1,
+    borderColor: "rgba(56, 189, 248, 0.35)",
+    borderRadius: 8,
+    paddingVertical: 5,
+    paddingHorizontal: 10,
+  },
+  membershipBadgeText: { fontSize: 12, fontWeight: "600", color: SpaceTheme.glowCyan },
   editButton: { marginTop: 16, padding: 8 },
   editButtonText: { color: SpaceTheme.glowCyan, fontSize: 15, fontWeight: "600" },
   editActions: { flexDirection: "row", gap: 12, marginTop: 16 },

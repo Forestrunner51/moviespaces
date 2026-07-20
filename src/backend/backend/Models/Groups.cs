@@ -52,6 +52,31 @@ namespace Backend.Models
         [Column("hangout_notes")]
         public string? HangoutNotes { get; set; }
 
+        // Google Places-sourced theater identity (replaces the old MovieGlu
+        // numeric CinemaId, which stays around unused rather than being
+        // dropped — no destructive column removal against live data).
+        [Column("google_place_id")]
+        public string? GooglePlaceId { get; set; }
+
+        [Column("theater_latitude")]
+        public double? TheaterLatitude { get; set; }
+
+        [Column("theater_longitude")]
+        public double? TheaterLongitude { get; set; }
+
+        // TMDb's movie id, now that films come from TMDb search instead of
+        // MovieGlu's catalog. FilmId (MovieGlu's numeric id) stays unused
+        // rather than repurposed, to avoid conflating two different id spaces.
+        [Column("tmdb_movie_id")]
+        public int? TmdbMovieId { get; set; }
+
+        // Real chronological showtime, combining the host-picked date + time.
+        // ShowDate/ShowTime stay as the display strings everything already
+        // renders; this column exists so the backend can actually filter out
+        // stale showtimes (couldn't reliably do that with free-text strings).
+        [Column("screening_time")]
+        public DateTime? ScreeningTime { get; set; }
+
         public DateTime CreatedAt { get; set; } = DateTime.UtcNow;
         public List<GroupMember> Members { get; set; } = new();
     }
