@@ -1,29 +1,50 @@
 import { useEffect, useState } from "react";
 import * as WebBrowser from "expo-web-browser";
-import {
-  View,
-  Text,
-  FlatList,
-  StyleSheet,
-  ActivityIndicator,
-  TouchableOpacity,
-} from "react-native";
+import { View, Text, FlatList, StyleSheet, ActivityIndicator, TouchableOpacity, Alert } from "react-native";
 import { Ionicons } from "@expo/vector-icons";
 import { router } from "expo-router";
 import { Starfield } from "@/frontend/components/starfield";
 import { SpaceTheme, SpaceStyles } from "@/frontend/constants/theme";
-import { buildRentalInquiryUrl } from "@/frontend/services/ticket-links";
 import {
   getDeviceLocation,
   fetchNearbyTheaters,
   NearbyTheater,
 } from "@/frontend/services/nearby-theaters";
+import { getCorporateRentalUrl } from "@/frontend/utils/theater-rentals";
 
 export default function RentATheaterScreen() {
   const [theaters, setTheaters] = useState<NearbyTheater[]>([]);
   const [loading, setLoading] = useState(true);
   const [locationDenied, setLocationDenied] = useState(false);
   const [error, setError] = useState<string | null>(null);
+
+  const handleSelectTheater = (theater: NearbyTheater) => {
+    Alert.alert(
+      "🎟️ Ready to Rent?",
+      "You can lock down this theater room two ways:\n\n" +
+        "1. Buy it now on their site, copy the confirmation link, and paste it here to split the cost.\n\n" +
+        "2. Leave the link blank for now to gauge friend interest first, then lock it in once enough people RSVP!",
+      [
+        { text: "Cancel", style: "cancel" },
+        {
+          text: "Let's Go",
+          onPress: async () => {
+            await WebBrowser.openBrowserAsync(getCorporateRentalUrl(theater.name));
+            router.push({
+              pathname: "/create-space",
+              params: {
+                theaterName: theater.name,
+                theaterPlaceId: theater.placeId,
+                theaterLat: theater.latitude?.toString() ?? "",
+                theaterLng: theater.longitude?.toString() ?? "",
+                spaceType: "private_rental",
+              },
+            });
+          },
+        },
+      ],
+    );
+  };
 
   useEffect(() => {
     getDeviceLocation()
@@ -62,18 +83,7 @@ export default function RentATheaterScreen() {
               <TouchableOpacity
                 activeOpacity={0.8}
                 style={styles.card}
-                onPress={() =>
-                  router.push({
-                    pathname: "/create-space",
-                    params: {
-                      theaterName: item.name,
-                      theaterPlaceId: item.placeId,
-                      theaterLat: item.latitude?.toString() ?? "",
-                      theaterLng: item.longitude?.toString() ?? "",
-                      spaceType: "private_rental",
-                    },
-                  })
-                }
+                onPress={() => handleSelectTheater(item)}
               >
                 <View style={styles.rentCardRow}>
                   <Ionicons name="storefront-outline" size={20} color={SpaceTheme.supernovaPink} />
@@ -82,15 +92,7 @@ export default function RentATheaterScreen() {
                     <Text style={styles.details}>{item.address}</Text>
                     <Text style={styles.cta}>Start a Space here →</Text>
                   </View>
-                  <TouchableOpacity
-                    hitSlop={10}
-                    onPress={(e) => {
-                      e.stopPropagation();
-                      WebBrowser.openBrowserAsync(buildRentalInquiryUrl(item.name));
-                    }}
-                  >
-                    <Ionicons name="open-outline" size={20} color={SpaceTheme.mutedOrbit} />
-                  </TouchableOpacity>
+                  <Ionicons name="chevron-forward" size={20} color={SpaceTheme.mutedOrbit} />
                 </View>
               </TouchableOpacity>
             )}

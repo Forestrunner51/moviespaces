@@ -392,6 +392,23 @@ namespace Backend.Controllers
 
             return Ok();
         }
+
+        // Host-only: lets a "tentative crowdfund" rental host add the real
+        // confirmation link once they actually buy the room, without
+        // recreating the Space.
+        [HttpPost("{id}/booking-url")]
+        public async Task<IActionResult> UpdateBookingUrl(Guid id, [FromBody] UpdateBookingUrlRequest req)
+        {
+            var userId = GetUserId();
+            var group = await _db.Groups.FindAsync(id);
+            if (group == null) return NotFound();
+            if (group.UserId != userId) return Forbid();
+
+            group.BookingUrl = req.BookingUrl?.Trim() ?? "";
+            await _db.SaveChangesAsync();
+
+            return Ok(new { bookingUrl = group.BookingUrl });
+        }
     }
 
     public record CreateGroupRequest(
@@ -416,4 +433,5 @@ namespace Backend.Controllers
     );
 
     public record JoinGroupRequest(string Name);
+    public record UpdateBookingUrlRequest(string? BookingUrl);
 }

@@ -62,6 +62,11 @@ export default function CreateSpaceScreen() {
   const [spaceType, setSpaceType] = useState<SpaceType>(
     prefillSpaceType === "private_rental" ? "private_rental" : "public_gathering",
   );
+  // Locked when arriving from rent-a-theater.tsx's guided flow with a
+  // specific theater already picked — not a blanket lock on every private
+  // rental, since someone starting a rental from scratch still needs to
+  // choose one.
+  const theaterLocked = !!prefillPlaceId;
   const [hostName, setHostName] = useState("");
   const [theaterName, setTheaterName] = useState(prefillTheaterName ?? "");
   const [theaterPlaceId, setTheaterPlaceId] = useState<string | null>(prefillPlaceId ?? null);
@@ -76,7 +81,10 @@ export default function CreateSpaceScreen() {
   const [showDate, setShowDate] = useState("");
   const [showTime, setShowTime] = useState("");
 
-  // Private rental only
+  // Private rental only — a rental doesn't have to be a movie screening at
+  // all (game night, a private party, etc.), so "other" swaps the TMDb movie
+  // picker for a plain freeform description instead of forcing a film choice.
+  const [rentalActivityType, setRentalActivityType] = useState<"movie" | "other">("movie");
   const [totalCost, setTotalCost] = useState("");
   const [maxCapacity, setMaxCapacity] = useState("");
   const [bookingUrl, setBookingUrl] = useState("");
@@ -153,11 +161,19 @@ export default function CreateSpaceScreen() {
 
   // Debounced TMDb search — fires 400ms after the user stops typing. An
   // empty query falls back to the now-playing list instead of a blank modal.
+  //
+  // Full catalog search is available for both space types (not just private
+  // rentals) — different theaters carry different things (indie/arthouse
+  // screens, re-releases, festivals), so restricting Public Gatherings to
+  // only TMDb's generic "now playing" list was too narrow for what a given
+  // theater might actually be showing. Manual entry covers whatever TMDb
+  // itself doesn't have.
   useEffect(() => {
     if (!movieSearch.trim()) {
       setMovieResults(nowPlaying);
       return;
     }
+
     setMovieSearching(true);
     const handle = setTimeout(() => {
       searchMovies(movieSearch)
@@ -184,8 +200,12 @@ export default function CreateSpaceScreen() {
   };
 
   const handleSubmit = async () => {
+    const isOtherActivity = spaceType === "private_rental" && rentalActivityType === "other";
     if (!hostName.trim() || !theaterName.trim() || !movieName.trim() || !showDate.trim() || !showTime.trim()) {
-      Alert.alert("Missing info", "Please fill in your name, theater, movie, date, and time.");
+      Alert.alert(
+        "Missing info",
+        `Please fill in your name, theater, ${isOtherActivity ? "activity" : "movie"}, date, and time.`,
+      );
       return;
     }
 
@@ -322,28 +342,86 @@ export default function CreateSpaceScreen() {
             onChangeText={setHostName}
           />
           <TouchableOpacity
-            activeOpacity={0.8}
+            activeOpacity={theaterLocked ? 1 : 0.8}
             style={styles.pickerField}
-            onPress={() => setTheaterModalVisible(true)}
+            onPress={() => !theaterLocked && setTheaterModalVisible(true)}
+            disabled={theaterLocked}
           >
             <Ionicons name="storefront-outline" size={18} color={SpaceTheme.mutedOrbit} />
             <Text style={[styles.pickerFieldText, !theaterName && styles.pickerFieldPlaceholder]}>
               {theaterName || "Select a nearby theater"}
             </Text>
-            <Ionicons name="chevron-down" size={18} color={SpaceTheme.mutedOrbit} />
+            <Ionicons
+              name={theaterLocked ? "lock-closed" : "chevron-down"}
+              size={18}
+              color={SpaceTheme.mutedOrbit}
+            />
           </TouchableOpacity>
 
-          <TouchableOpacity
-            activeOpacity={0.8}
-            style={styles.pickerField}
-            onPress={() => setMovieModalVisible(true)}
-          >
-            <Ionicons name="film-outline" size={18} color={SpaceTheme.mutedOrbit} />
-            <Text style={[styles.pickerFieldText, !movieName && styles.pickerFieldPlaceholder]}>
-              {movieName || "Search for a movie"}
-            </Text>
-            <Ionicons name="chevron-down" size={18} color={SpaceTheme.mutedOrbit} />
-          </TouchableOpacity>
+          {spaceType === "private_rental" && (
+            <View style={styles.chipRow}>
+              <TouchableOpacity
+                activeOpacity={0.8}
+                style={[styles.afterChip, rentalActivityType === "movie" && styles.afterChipActive]}
+                onPress={() => {
+                  setRentalActivityType("movie");
+                  setMovieName("");
+                  setTmdbMovieId(null);
+                }}
+              >
+                <Text style={styles.afterChipEmoji}>🎬</Text>
+                <Text
+                  style={[
+                    styles.afterChipText,
+                    rentalActivityType === "movie" && styles.afterChipTextActive,
+                  ]}
+                >
+                  Watching a Movie
+                </Text>
+              </TouchableOpacity>
+              <TouchableOpacity
+                activeOpacity={0.8}
+                style={[styles.afterChip, rentalActivityType === "other" && styles.afterChipActive]}
+                onPress={() => {
+                  setRentalActivityType("other");
+                  setMovieName("");
+                  setTmdbMovieId(null);
+                }}
+              >
+                <Text style={styles.afterChipEmoji}>🎉</Text>
+                <Text
+                  style={[
+                    styles.afterChipText,
+                    rentalActivityType === "other" && styles.afterChipTextActive,
+                  ]}
+                >
+                  Something Else (games, party...)
+                </Text>
+              </TouchableOpacity>
+            </View>
+          )}
+
+          {spaceType === "private_rental" && rentalActivityType === "other" ? (
+            <TextInput
+              style={styles.input}
+              placeholder="What are you doing? (e.g. Game Night, Birthday Party)"
+              placeholderTextColor={SpaceTheme.mutedOrbit}
+              value={movieName}
+              onChangeText={setMovieName}
+            />
+          ) : (
+            <TouchableOpacity
+              activeOpacity={0.8}
+              style={styles.pickerField}
+              onPress={() => setMovieModalVisible(true)}
+            >
+              <Ionicons name="film-outline" size={18} color={SpaceTheme.mutedOrbit} />
+              <Text style={[styles.pickerFieldText, !movieName && styles.pickerFieldPlaceholder]}>
+                {movieName || "Search for a movie"}
+              </Text>
+              <Ionicons name="chevron-down" size={18} color={SpaceTheme.mutedOrbit} />
+            </TouchableOpacity>
+          )}
 
           <TouchableOpacity
             activeOpacity={0.8}
@@ -414,9 +492,9 @@ export default function CreateSpaceScreen() {
                 <Text style={styles.rentalSectionTitle}>Rental Details</Text>
               </View>
               <Text style={styles.rentalSectionSubtext}>
-                You've already booked this rental independently — these fields are just for
-                transparency with your guests, splitting cost and showing capacity. The app
-                doesn't charge anyone.
+                Whether you've already booked this room or you're still gauging interest before
+                spending money, these fields keep guests informed — cost-splitting and capacity
+                only. The app never charges anyone.
               </Text>
 
               <TextInput
@@ -437,13 +515,17 @@ export default function CreateSpaceScreen() {
               />
               <TextInput
                 style={styles.input}
-                placeholder="Direct ticket/rental confirmation link (optional)"
+                placeholder="Paste confirmation link (Optional if tentative)"
                 placeholderTextColor={SpaceTheme.mutedOrbit}
                 value={bookingUrl}
                 onChangeText={setBookingUrl}
                 autoCapitalize="none"
                 keyboardType="url"
               />
+              <Text style={styles.rentalHintText}>
+                💡 Leave this blank if you want to make sure enough friends are interested before
+                spending money out of pocket!
+              </Text>
             </View>
           )}
 
@@ -664,6 +746,26 @@ export default function CreateSpaceScreen() {
                 }
               />
             )}
+            <TextInput
+              style={[styles.input, { marginTop: 8 }]}
+              placeholder="Can't find it? Type the movie title"
+              placeholderTextColor={SpaceTheme.mutedOrbit}
+              value={movieName}
+              onChangeText={(text) => {
+                setMovieName(text);
+                setTmdbMovieId(null);
+              }}
+            />
+            <TouchableOpacity
+              activeOpacity={0.8}
+              style={styles.pickerDoneButton}
+              onPress={() => {
+                setMovieModalVisible(false);
+                setMovieSearch("");
+              }}
+            >
+              <Text style={styles.pickerDoneButtonText}>Done</Text>
+            </TouchableOpacity>
           </View>
         </KeyboardAvoidingView>
       </Modal>
@@ -723,6 +825,12 @@ const styles = StyleSheet.create({
     color: SpaceTheme.mutedOrbit,
     lineHeight: 17,
     marginBottom: 14,
+  },
+  rentalHintText: {
+    fontSize: 12,
+    color: SpaceTheme.supernovaPink,
+    lineHeight: 17,
+    marginTop: -4,
   },
   submitButton: {
     backgroundColor: SpaceTheme.supernovaPink,

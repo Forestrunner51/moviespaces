@@ -9,6 +9,10 @@ import {
   ActivityIndicator,
   Share,
   Alert,
+  Modal,
+  TextInput,
+  KeyboardAvoidingView,
+  Platform,
 } from "react-native";
 import { useLocalSearchParams, router } from "expo-router";
 import * as WebBrowser from "expo-web-browser";
@@ -26,6 +30,7 @@ interface Member {
 }
 interface Group {
   id: string;
+  userId: string;
   hostName: string;
   cinemaId: number | null;
   cinemaName: string;
@@ -143,6 +148,26 @@ export default function GroupScreen() {
     );
   };
 
+  const [bookingUrlModalVisible, setBookingUrlModalVisible] = useState(false);
+  const [bookingUrlInput, setBookingUrlInput] = useState("");
+  const [savingBookingUrl, setSavingBookingUrl] = useState(false);
+
+  const openBookingUrlModal = () => {
+    setBookingUrlInput(group?.bookingUrl ?? "");
+    setBookingUrlModalVisible(true);
+  };
+
+  const handleSaveBookingUrl = async () => {
+    setSavingBookingUrl(true);
+    await authFetch(`${process.env.EXPO_PUBLIC_API_URL}/api/group/${groupId}/booking-url`, {
+      method: "POST",
+      body: JSON.stringify({ bookingUrl: bookingUrlInput.trim() }),
+    });
+    await fetchGroup();
+    setSavingBookingUrl(false);
+    setBookingUrlModalVisible(false);
+  };
+
   const handleBook = async () => {
     if (!group) return;
 
@@ -187,7 +212,10 @@ export default function GroupScreen() {
   const groupMembers = group.members ?? [];
   const allConfirmed =
     groupMembers.length > 0 && groupMembers.every((m) => m.confirmed);
-  const isHost = hostName === group.hostName;
+  const isHost =
+    (!!hostName && hostName === group.hostName) ||
+    (!!currentUserId && currentUserId === group.userId);
+  const confirmedCount = groupMembers.filter((m) => m.confirmed).length;
   const isMember =
     !!currentUserId && groupMembers.some((m) => m.userId === currentUserId);
   const myMember = groupMembers.find((m) => m.userId === currentUserId);
@@ -249,14 +277,51 @@ export default function GroupScreen() {
                   ${(group.totalCostCents / 100).toFixed(2)} total
                 </Text>
                 <Text style={styles.rentalPerPersonText}>
-                  ${(group.totalCostCents / 100 / Math.max(groupMembers.length, 1)).toFixed(2)}{" "}
-                  per person ({groupMembers.length} going)
+                  ${(group.totalCostCents / 100 / Math.max(confirmedCount, 1)).toFixed(2)} per
+                  person ({confirmedCount} confirmed)
                 </Text>
               </>
             )}
             <Text style={styles.rentalCapacityText}>
               {groupMembers.length} / {group.maxCapacity} spots filled
             </Text>
+
+            {group.bookingUrl ? (
+              <>
+                <TouchableOpacity
+                  activeOpacity={0.8}
+                  style={styles.rentalReservationButton}
+                  onPress={() => WebBrowser.openBrowserAsync(group.bookingUrl)}
+                >
+                  <Text style={styles.rentalReservationButtonText}>
+                    🎟️ View Theater Reservation Link
+                  </Text>
+                </TouchableOpacity>
+                <View style={styles.rentalSecuredBadge}>
+                  <Text style={styles.rentalSecuredBadgeText}>🔒 Room Secured & Confirmed</Text>
+                </View>
+              </>
+            ) : (
+              <>
+                <View style={styles.tentativeBanner}>
+                  <Text style={styles.tentativeBannerText}>
+                    ⏳ Tentative Crowdfund Mode — Host will officially purchase the room once
+                    enough members RSVP!
+                  </Text>
+                </View>
+                {isHost && (
+                  <TouchableOpacity
+                    activeOpacity={0.8}
+                    style={styles.addBookingLinkButton}
+                    onPress={openBookingUrlModal}
+                  >
+                    <Text style={styles.addBookingLinkButtonText}>
+                      ✏️ Add Theater Booking Link
+                    </Text>
+                  </TouchableOpacity>
+                )}
+              </>
+            )}
           </View>
         )}
 
@@ -333,7 +398,7 @@ export default function GroupScreen() {
           </TouchableOpacity>
         )}
 
-        {(isHost || isMember) && (
+        {(isHost || isMember) && group.spaceType === "public_gathering" && (
           <TouchableOpacity
             activeOpacity={0.8}
             style={styles.ticketsButton}
@@ -357,6 +422,51 @@ export default function GroupScreen() {
           </TouchableOpacity>
         )}
       </View>
+
+      <Modal
+        visible={bookingUrlModalVisible}
+        transparent
+        animationType="slide"
+        onRequestClose={() => setBookingUrlModalVisible(false)}
+      >
+        <KeyboardAvoidingView
+          style={styles.modalOverlay}
+          behavior={Platform.OS === "ios" ? "padding" : undefined}
+        >
+          <View style={styles.modal}>
+            <Text style={styles.modalTitle}>Add Theater Booking Link</Text>
+            <Text style={styles.modalSubtitle}>
+              Paste the confirmation link once you've bought the room — this lets everyone know
+              it's locked in.
+            </Text>
+            <TextInput
+              style={styles.modalInput}
+              placeholder="https://..."
+              placeholderTextColor={SpaceTheme.mutedOrbit}
+              value={bookingUrlInput}
+              onChangeText={setBookingUrlInput}
+              autoCapitalize="none"
+              keyboardType="url"
+            />
+            <TouchableOpacity
+              activeOpacity={0.8}
+              style={styles.confirmButton}
+              onPress={handleSaveBookingUrl}
+              disabled={savingBookingUrl}
+            >
+              <Text style={styles.buttonText}>{savingBookingUrl ? "Saving..." : "Save"}</Text>
+            </TouchableOpacity>
+            <TouchableOpacity
+              activeOpacity={0.8}
+              style={styles.modalCancelButton}
+              onPress={() => setBookingUrlModalVisible(false)}
+              disabled={savingBookingUrl}
+            >
+              <Text style={styles.modalCancelButtonText}>Cancel</Text>
+            </TouchableOpacity>
+          </View>
+        </KeyboardAvoidingView>
+      </Modal>
     </Starfield>
   );
 }
@@ -505,4 +615,69 @@ const styles = StyleSheet.create({
     alignItems: "center",
   },
   buttonText: { color: SpaceTheme.backgroundVoid, fontWeight: "700", fontSize: 16 },
+  rentalReservationButton: {
+    backgroundColor: SpaceTheme.glowCyan,
+    padding: 14,
+    borderRadius: 12,
+    alignItems: "center",
+    marginTop: 12,
+  },
+  rentalReservationButtonText: {
+    color: SpaceTheme.backgroundVoid,
+    fontWeight: "700",
+    fontSize: 15,
+  },
+  rentalSecuredBadge: {
+    alignSelf: "center",
+    marginTop: 10,
+  },
+  rentalSecuredBadgeText: { color: "#4ADE80", fontWeight: "700", fontSize: 13 },
+  tentativeBanner: {
+    backgroundColor: "rgba(244, 114, 182, 0.1)",
+    borderWidth: 1,
+    borderColor: "rgba(244, 114, 182, 0.3)",
+    borderRadius: 10,
+    padding: 12,
+    marginTop: 12,
+  },
+  tentativeBannerText: {
+    color: SpaceTheme.supernovaPink,
+    fontSize: 13,
+    lineHeight: 18,
+    fontWeight: "600",
+  },
+  addBookingLinkButton: {
+    marginTop: 10,
+    alignSelf: "center",
+    paddingVertical: 8,
+    paddingHorizontal: 16,
+  },
+  addBookingLinkButtonText: { color: SpaceTheme.glowCyan, fontWeight: "700", fontSize: 14 },
+  modalOverlay: {
+    flex: 1,
+    backgroundColor: "rgba(3, 7, 18, 0.85)",
+    justifyContent: "flex-end",
+  },
+  modal: {
+    backgroundColor: SpaceTheme.deepSpace,
+    padding: 24,
+    borderTopLeftRadius: 20,
+    borderTopRightRadius: 20,
+    borderWidth: 1,
+    borderColor: "rgba(255, 255, 255, 0.08)",
+  },
+  modalTitle: { fontSize: 20, fontWeight: "bold", color: SpaceTheme.starWhite, marginBottom: 4 },
+  modalSubtitle: { fontSize: 13, color: SpaceTheme.mutedOrbit, marginBottom: 20, lineHeight: 18 },
+  modalInput: {
+    borderWidth: 1,
+    borderColor: "rgba(255, 255, 255, 0.12)",
+    borderRadius: 8,
+    padding: 12,
+    fontSize: 16,
+    backgroundColor: "rgba(255, 255, 255, 0.05)",
+    marginBottom: 16,
+    color: SpaceTheme.starWhite,
+  },
+  modalCancelButton: { alignItems: "center", padding: 12 },
+  modalCancelButtonText: { color: SpaceTheme.mutedOrbit, fontSize: 15 },
 });
