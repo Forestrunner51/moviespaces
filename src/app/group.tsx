@@ -4,6 +4,7 @@ import {
   View,
   Text,
   FlatList,
+  ScrollView,
   StyleSheet,
   TouchableOpacity,
   ActivityIndicator,
@@ -168,6 +169,64 @@ export default function GroupScreen() {
     setBookingUrlModalVisible(false);
   };
 
+  const [transferModalVisible, setTransferModalVisible] = useState(false);
+  const [transferring, setTransferring] = useState(false);
+  const [deleting, setDeleting] = useState(false);
+
+  const handleDeleteGroup = () => {
+    Alert.alert(
+      "Delete this Space?",
+      "This permanently deletes it for everyone and can't be undone.",
+      [
+        { text: "Cancel", style: "cancel" },
+        {
+          text: "Delete",
+          style: "destructive",
+          onPress: async () => {
+            setDeleting(true);
+            await authFetch(`${process.env.EXPO_PUBLIC_API_URL}/api/group/${groupId}`, {
+              method: "DELETE",
+            });
+            router.replace("/(tabs)/spaces");
+          },
+        },
+      ],
+    );
+  };
+
+  const handleCancelSpace = () => {
+    const otherMembers = (group?.members ?? []).filter((m) => m.userId !== group?.userId);
+    Alert.alert(
+      "Cancel this Space?",
+      "You can hand ownership to another member instead, or delete the Space entirely.",
+      [
+        { text: "Nevermind", style: "cancel" },
+        {
+          text: "Hand Ownership",
+          onPress: () => {
+            if (otherMembers.length === 0) {
+              Alert.alert("No one to hand it to", "There are no other members in this Space yet.");
+              return;
+            }
+            setTransferModalVisible(true);
+          },
+        },
+        { text: "Delete Permanently", style: "destructive", onPress: handleDeleteGroup },
+      ],
+    );
+  };
+
+  const handleTransferOwnership = async (member: Member) => {
+    setTransferring(true);
+    await authFetch(`${process.env.EXPO_PUBLIC_API_URL}/api/group/${groupId}/transfer-ownership`, {
+      method: "POST",
+      body: JSON.stringify({ newHostUserId: member.userId }),
+    });
+    await fetchGroup();
+    setTransferring(false);
+    setTransferModalVisible(false);
+  };
+
   const handleBook = async () => {
     if (!group) return;
 
@@ -222,7 +281,7 @@ export default function GroupScreen() {
 
   return (
     <Starfield>
-      <View style={styles.container}>
+      <ScrollView style={styles.container} contentContainerStyle={styles.containerContent}>
         <Text style={[styles.title, SpaceStyles.glowText]}>{group.filmName}</Text>
         <Text style={styles.subtitle}>
           {group.cinemaName} • {group.showTime}
@@ -331,6 +390,7 @@ export default function GroupScreen() {
           </Text>
           <FlatList
             data={groupMembers}
+            scrollEnabled={false}
             keyExtractor={(item) => item.id}
             renderItem={({ item }) => (
               <View style={styles.memberRow}>
@@ -421,7 +481,59 @@ export default function GroupScreen() {
             </Text>
           </TouchableOpacity>
         )}
-      </View>
+
+        {isHost && (
+          <TouchableOpacity
+            activeOpacity={0.8}
+            style={styles.cancelSpaceButton}
+            onPress={handleCancelSpace}
+            disabled={deleting}
+          >
+            <Text style={styles.cancelSpaceButtonText}>
+              {deleting ? "Deleting..." : "⚠️ Cancel this Space"}
+            </Text>
+          </TouchableOpacity>
+        )}
+      </ScrollView>
+
+      <Modal
+        visible={transferModalVisible}
+        transparent
+        animationType="slide"
+        onRequestClose={() => setTransferModalVisible(false)}
+      >
+        <View style={styles.modalOverlay}>
+          <View style={styles.modal}>
+            <Text style={styles.modalTitle}>Hand Ownership To...</Text>
+            <Text style={styles.modalSubtitle}>
+              They'll become the new host — you'll stay on as a regular member.
+            </Text>
+            <FlatList
+              data={groupMembers.filter((m) => m.userId !== group.userId)}
+              keyExtractor={(item) => item.id}
+              renderItem={({ item }) => (
+                <TouchableOpacity
+                  activeOpacity={0.8}
+                  style={styles.memberRow}
+                  onPress={() => handleTransferOwnership(item)}
+                  disabled={transferring}
+                >
+                  <Text style={styles.memberName}>{item.name}</Text>
+                  <Text style={styles.reportLink}>{transferring ? "..." : "Make Host →"}</Text>
+                </TouchableOpacity>
+              )}
+            />
+            <TouchableOpacity
+              activeOpacity={0.8}
+              style={styles.modalCancelButton}
+              onPress={() => setTransferModalVisible(false)}
+              disabled={transferring}
+            >
+              <Text style={styles.modalCancelButtonText}>Cancel</Text>
+            </TouchableOpacity>
+          </View>
+        </View>
+      </Modal>
 
       <Modal
         visible={bookingUrlModalVisible}
@@ -474,8 +586,11 @@ export default function GroupScreen() {
 const styles = StyleSheet.create({
   container: {
     flex: 1,
+  },
+  containerContent: {
     padding: 16,
     paddingTop: 60,
+    paddingBottom: 40,
   },
   center: { flex: 1, justifyContent: "center", alignItems: "center" },
   notFoundText: { color: SpaceTheme.mutedOrbit, fontSize: 16 },
@@ -614,6 +729,12 @@ const styles = StyleSheet.create({
     borderRadius: 12,
     alignItems: "center",
   },
+  cancelSpaceButton: {
+    alignItems: "center",
+    padding: 14,
+    marginTop: 12,
+  },
+  cancelSpaceButtonText: { color: SpaceTheme.supernovaPink, fontWeight: "600", fontSize: 14 },
   buttonText: { color: SpaceTheme.backgroundVoid, fontWeight: "700", fontSize: 16 },
   rentalReservationButton: {
     backgroundColor: SpaceTheme.glowCyan,

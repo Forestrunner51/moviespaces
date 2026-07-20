@@ -409,6 +409,48 @@ namespace Backend.Controllers
 
             return Ok(new { bookingUrl = group.BookingUrl });
         }
+
+        // Host-only: permanently deletes the Space. GroupMembers cascade-delete
+        // via the FK (required relationship, EF's default Cascade behavior).
+        // Note: group_messages (Supabase-direct, not EF-owned) has no FK back
+        // to Groups, so any chat history is left orphaned rather than cleaned
+        // up here — harmless, just not reclaimed.
+        [HttpDelete("{id}")]
+        public async Task<IActionResult> DeleteGroup(Guid id)
+        {
+            var userId = GetUserId();
+            var group = await _db.Groups.FindAsync(id);
+            if (group == null) return NotFound();
+            if (group.UserId != userId) return Forbid();
+
+            _db.Groups.Remove(group);
+            await _db.SaveChangesAsync();
+
+            return Ok();
+        }
+
+        // Host-only: hands the host role to an existing member instead of
+        // deleting the Space. The outgoing host stays on as a regular member.
+        [HttpPost("{id}/transfer-ownership")]
+        public async Task<IActionResult> TransferOwnership(Guid id, [FromBody] TransferOwnershipRequest req)
+        {
+            var userId = GetUserId();
+            var group = await _db.Groups
+                .Include(g => g.Members)
+                .FirstOrDefaultAsync(g => g.Id == id);
+            if (group == null) return NotFound();
+            if (group.UserId != userId) return Forbid();
+
+            var newHost = group.Members.FirstOrDefault(m => m.UserId == req.NewHostUserId);
+            if (newHost == null)
+                return BadRequest(new { error = "That member is not part of this Space." });
+
+            group.UserId = newHost.UserId;
+            group.HostName = newHost.Name;
+            await _db.SaveChangesAsync();
+
+            return Ok(new { hostName = group.HostName });
+        }
     }
 
     public record CreateGroupRequest(
@@ -434,4 +476,5 @@ namespace Backend.Controllers
 
     public record JoinGroupRequest(string Name);
     public record UpdateBookingUrlRequest(string? BookingUrl);
+    public record TransferOwnershipRequest(string NewHostUserId);
 }
