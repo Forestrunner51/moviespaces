@@ -57,6 +57,11 @@ namespace Backend.Controllers
                 HangoutNotes = req.PostActivities != null && req.PostActivities.Length > 0
                     ? req.HangoutNotes
                     : null,
+                GooglePlaceId = req.GooglePlaceId,
+                TheaterLatitude = req.TheaterLatitude,
+                TheaterLongitude = req.TheaterLongitude,
+                TmdbMovieId = req.TmdbMovieId,
+                ScreeningTime = req.ScreeningTime,
             };
 
             group.Members.Add(new GroupMember
@@ -203,7 +208,11 @@ namespace Backend.Controllers
         {
             var query = _db.Groups
                 .Include(g => g.Members)
-                .Where(g => g.Status == "pending");
+                .Where(g => g.Status == "pending")
+                // Only filters spaces old enough to have a real ScreeningTime
+                // recorded (post-MovieGlu-removal); older/legacy rows without
+                // one stay visible rather than being hidden by a null check.
+                .Where(g => g.ScreeningTime == null || g.ScreeningTime >= DateTime.UtcNow);
 
             if (filmId.HasValue)
                 query = query.Where(g => g.FilmId == filmId.Value);
@@ -385,7 +394,12 @@ namespace Backend.Controllers
         long? TotalCostCents,
         int? MaxCapacity,
         string[]? PostActivities,
-        string? HangoutNotes
+        string? HangoutNotes,
+        string? GooglePlaceId,
+        double? TheaterLatitude,
+        double? TheaterLongitude,
+        int? TmdbMovieId,
+        DateTime? ScreeningTime
     );
 
     public record JoinGroupRequest(string Name);

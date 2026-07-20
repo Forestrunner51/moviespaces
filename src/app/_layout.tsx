@@ -57,10 +57,8 @@ export default function Layout() {
       <Stack>
         <Stack.Screen name="auth" options={{ headerShown: false }} />
         <Stack.Screen name="(tabs)" options={{ headerShown: false }} />
-        <Stack.Screen name="showtimes" options={{ title: "Showtimes" }} />
         <Stack.Screen name="group" options={{ title: "Movie Group" }} />
         <Stack.Screen name="join" options={{ title: "Join Group" }} />
-        <Stack.Screen name="movie" options={{ title: "Movie" }} />
         <Stack.Screen name="chat/[userId]" options={{ title: "Chat" }} />
         <Stack.Screen name="group-chat/[id]" options={{ title: "Group Chat" }} />
         <Stack.Screen name="create-space" options={{ title: "Create a Space" }} />

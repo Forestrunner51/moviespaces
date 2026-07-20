@@ -12,6 +12,9 @@ import { Ionicons } from "@expo/vector-icons";
 import { Starfield } from "@/frontend/components/starfield";
 import { SpaceTheme, SpaceStyles } from "@/frontend/constants/theme";
 import { POST_ACTIVITIES, activityEmoji, activityLabel } from "@/frontend/constants/activities";
+import { THEATER_CHAINS, cinemaChain } from "@/frontend/constants/theater-memberships";
+import { getDeviceLocation, Coordinates } from "@/frontend/services/nearby-theaters";
+import { distanceMiles } from "@/frontend/utils/distance";
 
 // Matches the Group shape returned by GET /api/group/open
 interface OpenSpace {
@@ -19,7 +22,8 @@ interface OpenSpace {
   hostName: string;
   filmName: string;
   cinemaName: string;
-  cinemaId: number | null;
+  theaterLatitude: number | null;
+  theaterLongitude: number | null;
   showTime: string;
   showDate: string;
   status: string;
@@ -30,13 +34,6 @@ interface OpenSpace {
   members: { id: string; name: string; confirmed: boolean }[];
 }
 
-interface Cinema {
-  cinema_id: number;
-  cinema_name: string;
-  // MovieGlu's cinemasNearby response includes a distance (miles) per cinema.
-  distance?: number;
-}
-
 type TypeFilter = "all" | "public_gathering" | "private_rental";
 type PriceFilter = "any" | "under50" | "50to150" | "150plus";
 type DistanceFilter = "any" | "5" | "10" | "25";
@@ -44,17 +41,18 @@ type DistanceFilter = "any" | "5" | "10" | "25";
 export default function ExploreScreen() {
   const [openSpaces, setOpenSpaces] = useState<OpenSpace[]>([]);
   const [loading, setLoading] = useState(true);
-  const [cinemaDistance, setCinemaDistance] = useState<Record<number, number>>({});
+  const [deviceLocation, setDeviceLocation] = useState<Coordinates | null>(null);
 
   const [typeFilter, setTypeFilter] = useState<TypeFilter>("all");
   const [priceFilter, setPriceFilter] = useState<PriceFilter>("any");
   const [distanceFilter, setDistanceFilter] = useState<DistanceFilter>("any");
   const [openOnly, setOpenOnly] = useState(false);
   const [activityFilter, setActivityFilter] = useState<string | null>(null);
+  const [chainFilter, setChainFilter] = useState<string | null>(null);
 
   useEffect(() => {
     fetchOpenSpaces();
-    fetchCinemaDistances();
+    getDeviceLocation().then(setDeviceLocation);
   }, []);
 
   const fetchOpenSpaces = async () => {
@@ -71,29 +69,21 @@ export default function ExploreScreen() {
     }
   };
 
-  // Groups only store a cinemaId (not coordinates), so distance filtering is
-  // best-effort: we look up each space's cinema against a fresh "nearby
-  // cinemas" call and use the distance MovieGlu already computed for it.
-  // Spaces whose cinema isn't in that nearby set (or that have no cinemaId,
-  // e.g. a manually-typed private rental theater) have unknown distance and
-  // are never hidden by the distance filter — we don't hide content just
-  // because we can't measure it.
-  const fetchCinemaDistances = async () => {
-    try {
-      const res = await fetch(
-        `${process.env.EXPO_PUBLIC_API_URL}/api/movieglu/cinemas?lat=-22.0&lng=14.0`,
-      );
-      if (res.ok) {
-        const data = await res.json();
-        const map: Record<number, number> = {};
-        (data.cinemas || []).forEach((c: Cinema) => {
-          if (typeof c.distance === "number") map[c.cinema_id] = c.distance;
-        });
-        setCinemaDistance(map);
-      }
-    } catch (err) {
-      console.warn("Failed to load cinema distances:", err);
+  // Distance is computed straight from each space's stored theater lat/lng
+  // (captured via Google Places at creation time) against the device's live
+  // location — no separate lookup call needed. Spaces without stored
+  // coordinates (e.g. a manually-typed theater name) have unknown distance
+  // and are never hidden by the distance filter.
+  const spaceDistance = (space: OpenSpace): number | null => {
+    if (!deviceLocation || space.theaterLatitude == null || space.theaterLongitude == null) {
+      return null;
     }
+    return distanceMiles(
+      deviceLocation.latitude,
+      deviceLocation.longitude,
+      space.theaterLatitude,
+      space.theaterLongitude,
+    );
   };
 
   const passesPriceFilter = (space: OpenSpace) => {
@@ -107,8 +97,7 @@ export default function ExploreScreen() {
 
   const passesDistanceFilter = (space: OpenSpace) => {
     if (distanceFilter === "any") return true;
-    if (space.cinemaId == null) return true;
-    const distance = cinemaDistance[space.cinemaId];
+    const distance = spaceDistance(space);
     if (distance == null) return true; // unknown — don't hide it
     return distance <= parseInt(distanceFilter, 10);
   };
@@ -117,6 +106,7 @@ export default function ExploreScreen() {
     if (typeFilter !== "all" && space.spaceType !== typeFilter) return false;
     if (openOnly && space.members.length >= space.maxCapacity) return false;
     if (activityFilter && !space.postActivities?.split(",").includes(activityFilter)) return false;
+    if (chainFilter && cinemaChain(space.cinemaName) !== chainFilter) return false;
     if (!passesPriceFilter(space)) return false;
     if (!passesDistanceFilter(space)) return false;
     return true;
@@ -211,6 +201,31 @@ export default function ExploreScreen() {
                 ))}
               </View>
 
+              <Text style={styles.filterLabel}>Theater Chain</Text>
+              <View style={styles.chipRow}>
+                <TouchableOpacity
+                  activeOpacity={0.8}
+                  style={[styles.chip, chainFilter === null && styles.chipActive]}
+                  onPress={() => setChainFilter(null)}
+                >
+                  <Text style={[styles.chipText, chainFilter === null && styles.chipTextActive]}>
+                    Any
+                  </Text>
+                </TouchableOpacity>
+                {THEATER_CHAINS.map((chain) => (
+                  <TouchableOpacity
+                    key={chain}
+                    activeOpacity={0.8}
+                    style={[styles.chip, chainFilter === chain && styles.chipActive]}
+                    onPress={() => setChainFilter(chain)}
+                  >
+                    <Text style={[styles.chipText, chainFilter === chain && styles.chipTextActive]}>
+                      {chain}
+                    </Text>
+                  </TouchableOpacity>
+                ))}
+              </View>
+
               <Text style={styles.filterLabel}>After the Movie</Text>
               <View style={styles.chipRow}>
                 <TouchableOpacity
@@ -286,9 +301,7 @@ export default function ExploreScreen() {
               )}
               <Text style={styles.spaceDetails} numberOfLines={1}>
                 {item.cinemaName}
-                {item.cinemaId != null && cinemaDistance[item.cinemaId] != null
-                  ? ` • ${cinemaDistance[item.cinemaId].toFixed(1)} mi`
-                  : ""}
+                {spaceDistance(item) != null ? ` • ${spaceDistance(item)!.toFixed(1)} mi` : ""}
               </Text>
               <Text style={styles.spaceDetails}>
                 {item.showDate} • {item.showTime}

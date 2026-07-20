@@ -13,28 +13,30 @@ import { router } from "expo-router";
 import { Starfield } from "@/frontend/components/starfield";
 import { SpaceTheme, SpaceStyles } from "@/frontend/constants/theme";
 import { buildRentalInquiryUrl } from "@/frontend/services/ticket-links";
-
-interface Cinema {
-  cinema_id: number;
-  cinema_name: string;
-  address: string;
-  city: string;
-}
+import {
+  getDeviceLocation,
+  fetchNearbyTheaters,
+  NearbyTheater,
+} from "@/frontend/services/nearby-theaters";
 
 export default function RentATheaterScreen() {
-  const [cinemas, setCinemas] = useState<Cinema[]>([]);
+  const [theaters, setTheaters] = useState<NearbyTheater[]>([]);
   const [loading, setLoading] = useState(true);
+  const [locationDenied, setLocationDenied] = useState(false);
 
   useEffect(() => {
-    fetch(`${process.env.EXPO_PUBLIC_API_URL}/api/movieglu/cinemas?lat=-22.0&lng=14.0`)
-      .then(async (res) => {
-        if (!res.ok) throw new Error(`Server responded with status: ${res.status}`);
-        const data = await res.json();
-        setCinemas(data.cinemas || []);
+    getDeviceLocation()
+      .then((coords) => {
+        if (!coords) {
+          setLocationDenied(true);
+          return [];
+        }
+        return fetchNearbyTheaters(coords);
       })
+      .then(setTheaters)
       .catch((err) => {
         console.error("Failed to load nearby theaters:", err);
-        setCinemas([]);
+        setTheaters([]);
       })
       .finally(() => setLoading(false));
   }, []);
@@ -52,8 +54,8 @@ export default function RentATheaterScreen() {
           <ActivityIndicator size="large" color={SpaceTheme.glowCyan} style={{ flex: 1 }} />
         ) : (
           <FlatList
-            data={cinemas}
-            keyExtractor={(item) => item.cinema_id.toString()}
+            data={theaters}
+            keyExtractor={(item) => item.placeId}
             renderItem={({ item }) => (
               <TouchableOpacity
                 activeOpacity={0.8}
@@ -61,24 +63,28 @@ export default function RentATheaterScreen() {
                 onPress={() =>
                   router.push({
                     pathname: "/create-space",
-                    params: { theaterName: item.cinema_name, spaceType: "private_rental" },
+                    params: {
+                      theaterName: item.name,
+                      theaterPlaceId: item.placeId,
+                      theaterLat: item.latitude?.toString() ?? "",
+                      theaterLng: item.longitude?.toString() ?? "",
+                      spaceType: "private_rental",
+                    },
                   })
                 }
               >
                 <View style={styles.rentCardRow}>
                   <Ionicons name="storefront-outline" size={20} color={SpaceTheme.supernovaPink} />
                   <View style={{ flex: 1 }}>
-                    <Text style={styles.filmName}>{item.cinema_name}</Text>
-                    <Text style={styles.details}>
-                      {item.address}, {item.city}
-                    </Text>
+                    <Text style={styles.filmName}>{item.name}</Text>
+                    <Text style={styles.details}>{item.address}</Text>
                     <Text style={styles.cta}>Start a Space here →</Text>
                   </View>
                   <TouchableOpacity
                     hitSlop={10}
                     onPress={(e) => {
                       e.stopPropagation();
-                      WebBrowser.openBrowserAsync(buildRentalInquiryUrl(item.cinema_name));
+                      WebBrowser.openBrowserAsync(buildRentalInquiryUrl(item.name));
                     }}
                   >
                     <Ionicons name="open-outline" size={20} color={SpaceTheme.mutedOrbit} />
@@ -91,7 +97,9 @@ export default function RentATheaterScreen() {
                 <Ionicons name="storefront-outline" size={40} color={SpaceTheme.mutedOrbit} />
                 <Text style={styles.emptyTitle}>No nearby theaters found</Text>
                 <Text style={styles.emptySubtitle}>
-                  Try again later or search directly with your local theater chain.
+                  {locationDenied
+                    ? "Location access was denied — allow it in Settings to see nearby theaters, or create a Space and type the theater name manually."
+                    : "Try again later or search directly with your local theater chain."}
                 </Text>
               </View>
             }

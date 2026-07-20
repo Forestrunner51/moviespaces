@@ -21,15 +21,14 @@ import { authFetch } from "@/frontend/services/api";
 import { Starfield } from "@/frontend/components/starfield";
 import { SpaceTheme, SpaceStyles } from "@/frontend/constants/theme";
 import { POST_ACTIVITIES } from "@/frontend/constants/activities";
+import { searchMovies, TmdbMovie } from "@/frontend/services/tmdb";
+import {
+  getDeviceLocation,
+  fetchNearbyTheaters,
+  NearbyTheater,
+} from "@/frontend/services/nearby-theaters";
 
 type SpaceType = "public_gathering" | "private_rental";
-
-interface Cinema {
-  cinema_id: number;
-  cinema_name: string;
-  address: string;
-  city: string;
-}
 
 const formatDate = (d: Date) =>
   `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, "0")}-${String(d.getDate()).padStart(2, "0")}`;
@@ -38,8 +37,17 @@ const formatTime = (d: Date) =>
   d.toLocaleTimeString(undefined, { hour: "numeric", minute: "2-digit", hour12: true });
 
 export default function CreateSpaceScreen() {
-  const { theaterName: prefillTheaterName, spaceType: prefillSpaceType } = useLocalSearchParams<{
+  const {
+    theaterName: prefillTheaterName,
+    theaterPlaceId: prefillPlaceId,
+    theaterLat: prefillLat,
+    theaterLng: prefillLng,
+    spaceType: prefillSpaceType,
+  } = useLocalSearchParams<{
     theaterName?: string;
+    theaterPlaceId?: string;
+    theaterLat?: string;
+    theaterLng?: string;
     spaceType?: SpaceType;
   }>();
   const [spaceType, setSpaceType] = useState<SpaceType>(
@@ -47,8 +55,15 @@ export default function CreateSpaceScreen() {
   );
   const [hostName, setHostName] = useState("");
   const [theaterName, setTheaterName] = useState(prefillTheaterName ?? "");
-  const [theaterCinemaId, setTheaterCinemaId] = useState<number | null>(null);
+  const [theaterPlaceId, setTheaterPlaceId] = useState<string | null>(prefillPlaceId ?? null);
+  const [theaterLat, setTheaterLat] = useState<number | null>(
+    prefillLat ? parseFloat(prefillLat) : null,
+  );
+  const [theaterLng, setTheaterLng] = useState<number | null>(
+    prefillLng ? parseFloat(prefillLng) : null,
+  );
   const [movieName, setMovieName] = useState("");
+  const [tmdbMovieId, setTmdbMovieId] = useState<number | null>(null);
   const [showDate, setShowDate] = useState("");
   const [showTime, setShowTime] = useState("");
 
@@ -86,10 +101,15 @@ export default function CreateSpaceScreen() {
 
   const [creating, setCreating] = useState(false);
 
-  const [cinemas, setCinemas] = useState<Cinema[]>([]);
-  const [cinemasLoading, setCinemasLoading] = useState(true);
+  const [theaters, setTheaters] = useState<NearbyTheater[]>([]);
+  const [theatersLoading, setTheatersLoading] = useState(true);
   const [theaterModalVisible, setTheaterModalVisible] = useState(false);
   const [theaterSearch, setTheaterSearch] = useState("");
+
+  const [movieModalVisible, setMovieModalVisible] = useState(false);
+  const [movieSearch, setMovieSearch] = useState("");
+  const [movieResults, setMovieResults] = useState<TmdbMovie[]>([]);
+  const [movieSearching, setMovieSearching] = useState(false);
 
   const [datePickerVisible, setDatePickerVisible] = useState(false);
   const [dateValue, setDateValue] = useState<Date | null>(null);
@@ -103,21 +123,33 @@ export default function CreateSpaceScreen() {
   }, []);
 
   useEffect(() => {
-    fetch(`${process.env.EXPO_PUBLIC_API_URL}/api/movieglu/cinemas?lat=-22.0&lng=14.0`)
-      .then(async (res) => {
-        if (!res.ok) throw new Error(`Server responded with status: ${res.status}`);
-        const data = await res.json();
-        setCinemas(data.cinemas || []);
-      })
+    getDeviceLocation()
+      .then((coords) => (coords ? fetchNearbyTheaters(coords) : []))
+      .then(setTheaters)
       .catch((err) => {
         console.error("Failed to load nearby theaters:", err);
-        setCinemas([]);
+        setTheaters([]);
       })
-      .finally(() => setCinemasLoading(false));
+      .finally(() => setTheatersLoading(false));
   }, []);
 
-  const filteredCinemas = cinemas.filter((c) =>
-    c.cinema_name.toLowerCase().includes(theaterSearch.toLowerCase()),
+  // Debounced TMDb search — fires 400ms after the user stops typing.
+  useEffect(() => {
+    if (!movieSearch.trim()) {
+      setMovieResults([]);
+      return;
+    }
+    setMovieSearching(true);
+    const handle = setTimeout(() => {
+      searchMovies(movieSearch)
+        .then(setMovieResults)
+        .finally(() => setMovieSearching(false));
+    }, 400);
+    return () => clearTimeout(handle);
+  }, [movieSearch]);
+
+  const filteredTheaters = theaters.filter((t) =>
+    t.name.toLowerCase().includes(theaterSearch.toLowerCase()),
   );
 
   const onDateChange = (_event: any, selected: Date) => {
@@ -151,17 +183,27 @@ export default function CreateSpaceScreen() {
     setCreating(true);
     await AsyncStorage.setItem("userName", hostName.trim());
 
+    let screeningTime: string | null = null;
+    if (dateValue && timeValue) {
+      const combined = new Date(dateValue);
+      combined.setHours(timeValue.getHours(), timeValue.getMinutes(), 0, 0);
+      screeningTime = combined.toISOString();
+    }
+
     try {
       const res = await authFetch(`${process.env.EXPO_PUBLIC_API_URL}/api/group`, {
         method: "POST",
         body: JSON.stringify({
           hostName: hostName.trim(),
-          cinemaId: theaterCinemaId,
           cinemaName: theaterName.trim(),
-          filmId: null,
+          googlePlaceId: theaterPlaceId,
+          theaterLatitude: theaterLat,
+          theaterLongitude: theaterLng,
           filmName: movieName.trim(),
+          tmdbMovieId,
           showTime: showTime.trim(),
           showDate: showDate.trim(),
+          screeningTime,
           bookingUrl: spaceType === "private_rental" ? bookingUrl.trim() : "",
           spaceType,
           totalCostCents,
@@ -264,13 +306,17 @@ export default function CreateSpaceScreen() {
             <Ionicons name="chevron-down" size={18} color={SpaceTheme.mutedOrbit} />
           </TouchableOpacity>
 
-          <TextInput
-            style={styles.input}
-            placeholder="Movie"
-            placeholderTextColor={SpaceTheme.mutedOrbit}
-            value={movieName}
-            onChangeText={setMovieName}
-          />
+          <TouchableOpacity
+            activeOpacity={0.8}
+            style={styles.pickerField}
+            onPress={() => setMovieModalVisible(true)}
+          >
+            <Ionicons name="film-outline" size={18} color={SpaceTheme.mutedOrbit} />
+            <Text style={[styles.pickerFieldText, !movieName && styles.pickerFieldPlaceholder]}>
+              {movieName || "Search for a movie"}
+            </Text>
+            <Ionicons name="chevron-down" size={18} color={SpaceTheme.mutedOrbit} />
+          </TouchableOpacity>
 
           <TouchableOpacity
             activeOpacity={0.8}
@@ -472,33 +518,34 @@ export default function CreateSpaceScreen() {
               value={theaterSearch}
               onChangeText={setTheaterSearch}
             />
-            {cinemasLoading ? (
+            {theatersLoading ? (
               <ActivityIndicator color={SpaceTheme.glowCyan} style={{ marginTop: 20 }} />
             ) : (
               <FlatList
-                data={filteredCinemas}
-                keyExtractor={(item) => item.cinema_id.toString()}
+                data={filteredTheaters}
+                keyExtractor={(item) => item.placeId}
                 keyboardShouldPersistTaps="handled"
                 renderItem={({ item }) => (
                   <TouchableOpacity
                     activeOpacity={0.8}
                     style={styles.modalRow}
                     onPress={() => {
-                      setTheaterName(item.cinema_name);
-                      setTheaterCinemaId(item.cinema_id);
+                      setTheaterName(item.name);
+                      setTheaterPlaceId(item.placeId);
+                      setTheaterLat(item.latitude);
+                      setTheaterLng(item.longitude);
                       setTheaterModalVisible(false);
                       setTheaterSearch("");
                     }}
                   >
-                    <Text style={styles.modalRowTitle}>{item.cinema_name}</Text>
-                    <Text style={styles.modalRowSubtitle}>
-                      {item.address}, {item.city}
-                    </Text>
+                    <Text style={styles.modalRowTitle}>{item.name}</Text>
+                    <Text style={styles.modalRowSubtitle}>{item.address}</Text>
                   </TouchableOpacity>
                 )}
                 ListEmptyComponent={
                   <Text style={styles.modalEmptyText}>
-                    No nearby theaters found — you can still type the name in manually below.
+                    No nearby theaters found — allow location access, or type the name in
+                    manually below.
                   </Text>
                 }
               />
@@ -510,7 +557,9 @@ export default function CreateSpaceScreen() {
               value={theaterName}
               onChangeText={(text) => {
                 setTheaterName(text);
-                setTheaterCinemaId(null);
+                setTheaterPlaceId(null);
+                setTheaterLat(null);
+                setTheaterLng(null);
               }}
             />
             <TouchableOpacity
@@ -523,6 +572,63 @@ export default function CreateSpaceScreen() {
             >
               <Text style={styles.pickerDoneButtonText}>Done</Text>
             </TouchableOpacity>
+          </View>
+        </View>
+      </Modal>
+
+      <Modal
+        visible={movieModalVisible}
+        animationType="slide"
+        transparent
+        onRequestClose={() => setMovieModalVisible(false)}
+      >
+        <View style={styles.modalBackdrop}>
+          <View style={styles.modalSheet}>
+            <View style={styles.modalHeader}>
+              <Text style={styles.modalTitle}>Search for a Movie</Text>
+              <TouchableOpacity onPress={() => setMovieModalVisible(false)} hitSlop={10}>
+                <Ionicons name="close" size={24} color={SpaceTheme.mutedOrbit} />
+              </TouchableOpacity>
+            </View>
+            <TextInput
+              style={styles.input}
+              placeholder="Search movies..."
+              placeholderTextColor={SpaceTheme.mutedOrbit}
+              value={movieSearch}
+              onChangeText={setMovieSearch}
+              autoFocus
+            />
+            {movieSearching ? (
+              <ActivityIndicator color={SpaceTheme.glowCyan} style={{ marginTop: 20 }} />
+            ) : (
+              <FlatList
+                data={movieResults}
+                keyExtractor={(item) => item.id.toString()}
+                keyboardShouldPersistTaps="handled"
+                renderItem={({ item }) => (
+                  <TouchableOpacity
+                    activeOpacity={0.8}
+                    style={styles.modalRow}
+                    onPress={() => {
+                      setMovieName(item.title);
+                      setTmdbMovieId(item.id);
+                      setMovieModalVisible(false);
+                      setMovieSearch("");
+                    }}
+                  >
+                    <Text style={styles.modalRowTitle}>{item.title}</Text>
+                    {item.releaseDate ? (
+                      <Text style={styles.modalRowSubtitle}>{item.releaseDate.slice(0, 4)}</Text>
+                    ) : null}
+                  </TouchableOpacity>
+                )}
+                ListEmptyComponent={
+                  movieSearch.trim() ? (
+                    <Text style={styles.modalEmptyText}>No movies found for "{movieSearch}".</Text>
+                  ) : null
+                }
+              />
+            )}
           </View>
         </View>
       </Modal>
