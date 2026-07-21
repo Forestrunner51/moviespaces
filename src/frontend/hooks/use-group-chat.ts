@@ -1,5 +1,6 @@
 import { useState, useEffect } from "react";
 import { supabase } from "@/frontend/config/supabase";
+import { authFetch } from "@/frontend/services/api";
 
 // Only "group" is ever written now — the "crowdfund" group_type value in the
 // DB check constraint is a leftover from the removed Stripe-based feature,
@@ -87,6 +88,22 @@ export function useGroupChat(groupType: GroupChatType, groupId: string) {
     }
   }, [currentUserId, groupId, groupType]);
 
+  // Marks the chat as read as of now, once per screen visit — actively
+  // viewing a chat means you're caught up, so the Spaces list's "N new
+  // messages" badge should clear once you've opened it.
+  useEffect(() => {
+    if (!currentUserId || !groupId) return;
+    supabase
+      .from("group_message_reads")
+      .upsert(
+        { user_id: currentUserId, group_type: groupType, group_id: groupId, last_read_at: new Date().toISOString() },
+        { onConflict: "user_id,group_type,group_id" },
+      )
+      .then(({ error }) => {
+        if (error) console.warn("Failed to mark chat as read:", error);
+      });
+  }, [currentUserId, groupId, groupType]);
+
   const sendMessage = async (content: string) => {
     if (!currentUserId || !groupId || !content.trim()) return { success: false };
     try {
@@ -118,6 +135,22 @@ export function useGroupChat(groupType: GroupChatType, groupId: string) {
       if (data && data.length > 0) {
         const [sent] = await withSenderInfo(data as GroupMessage[]);
         setMessages((prev) => prev.map((m) => (m.id === tempId ? sent : m)));
+
+        // Best-effort — group chat lives in Supabase, not the EF backend, so
+        // there's no server-side trigger to hook a push notification off of.
+        // A failure here should never surface as a failed send.
+        if (groupType === "group") {
+          authFetch(
+            `${process.env.EXPO_PUBLIC_API_URL}/api/group/${groupId}/notify-message`,
+            {
+              method: "POST",
+              body: JSON.stringify({
+                senderName: sent.sender_name || "Someone",
+                preview: content.trim(),
+              }),
+            },
+          ).catch((err) => console.warn("Failed to notify group of new message:", err));
+        }
       }
       return { success: true };
     } catch (err: any) {
