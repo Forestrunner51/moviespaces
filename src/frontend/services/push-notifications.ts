@@ -1,5 +1,6 @@
 import * as Notifications from "expo-notifications";
 import Constants from "expo-constants";
+import * as Device from "expo-device";
 import { Platform } from "react-native";
 import { authFetch } from "@/frontend/services/api";
 
@@ -9,6 +10,11 @@ import { authFetch } from "@/frontend/services/api";
 // notification delivery is a nice-to-have, never something that should
 // block or error out the rest of the app.
 export async function registerForPushNotifications(): Promise<void> {
+  // Simulators/emulators can never obtain a real push token (no APNs
+  // entitlement is possible without a real device), so don't even try —
+  // avoids a guaranteed-to-fail attempt and its console warning every launch.
+  if (!Device.isDevice) return;
+
   try {
     if (Platform.OS === "android") {
       await Notifications.setNotificationChannelAsync("default", {

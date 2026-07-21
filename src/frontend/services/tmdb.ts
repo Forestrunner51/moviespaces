@@ -21,6 +21,18 @@ function mapResults(results: any[]): TmdbMovie[] {
   }));
 }
 
+// TV's /search/tv returns `name`/`first_air_date` instead of `title`/
+// `release_date` — mapped into the same TmdbMovie shape so the existing
+// search-modal UI in create-space.tsx needs no separate rendering path.
+function mapTvResults(results: any[]): TmdbMovie[] {
+  return (results || []).map((r: any) => ({
+    id: r.id,
+    title: r.name,
+    posterPath: r.poster_path ? `${TMDB_IMAGE_BASE}${r.poster_path}` : null,
+    releaseDate: r.first_air_date || "",
+  }));
+}
+
 export async function searchMovies(query: string): Promise<TmdbMovie[]> {
   if (!query.trim()) return [];
 
@@ -30,6 +42,17 @@ export async function searchMovies(query: string): Promise<TmdbMovie[]> {
 
   const data = await res.json();
   return mapResults(data.results);
+}
+
+export async function searchTvShows(query: string): Promise<TmdbMovie[]> {
+  if (!query.trim()) return [];
+
+  const url = `${process.env.EXPO_PUBLIC_API_URL}/api/tmdb/search-tv?query=${encodeURIComponent(query)}`;
+  const res = await fetch(url);
+  if (!res.ok) return [];
+
+  const data = await res.json();
+  return mapTvResults(data.results);
 }
 
 // Box-office-active titles, used to pre-populate the movie picker before the

@@ -17,10 +17,13 @@ import { SpaceTheme, SpaceStyles } from "@/frontend/constants/theme";
 import { useGroupChat, GroupMessage, GroupChatType } from "@/frontend/hooks/use-group-chat";
 
 export default function GroupChatScreen() {
-  const { id, type, title } = useLocalSearchParams<{
+  const { id, type, title, showTime, showDate, seasonEpisodeInfo } = useLocalSearchParams<{
     id: string;
     type: GroupChatType;
     title?: string;
+    showTime?: string;
+    showDate?: string;
+    seasonEpisodeInfo?: string;
   }>();
   const { currentUserId, messages, loading, sendMessage } = useGroupChat(type, id);
   const [text, setText] = useState("");
@@ -72,6 +75,14 @@ export default function GroupChatScreen() {
         keyboardVerticalOffset={Platform.OS === "ios" ? 100 : 0}
       >
         <Stack.Screen options={{ title: title || "Group Chat" }} />
+        {(showTime || showDate || seasonEpisodeInfo) && (
+          <View style={styles.contextBanner}>
+            <Text style={styles.contextBannerText} numberOfLines={2}>
+              {seasonEpisodeInfo ? `📺 ${seasonEpisodeInfo} • ` : ""}
+              {[showDate, showTime].filter(Boolean).join(" • ")}
+            </Text>
+          </View>
+        )}
         {loading && messages.length === 0 ? (
           <ActivityIndicator color={SpaceTheme.glowCyan} style={{ flex: 1 }} />
         ) : (
@@ -109,6 +120,14 @@ export default function GroupChatScreen() {
 
 const styles = StyleSheet.create({
   container: { flex: 1 },
+  contextBanner: {
+    borderBottomWidth: 1,
+    borderBottomColor: "rgba(255, 255, 255, 0.08)",
+    backgroundColor: "rgba(56, 189, 248, 0.08)",
+    paddingVertical: 8,
+    paddingHorizontal: 16,
+  },
+  contextBannerText: { color: SpaceTheme.glowCyan, fontSize: 12, fontWeight: "600" },
   list: { padding: 16, gap: 8 },
   emptyText: { color: SpaceTheme.mutedOrbit, textAlign: "center", marginTop: 24 },
   bubble: {

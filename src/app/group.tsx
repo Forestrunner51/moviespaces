@@ -47,6 +47,7 @@ interface Group {
   postActivities: string | null;
   hangoutNotes: string | null;
   showtimeReportCount: number;
+  seasonEpisodeInfo: string | null;
   members: Member[];
 }
 
@@ -305,6 +306,13 @@ export default function GroupScreen() {
   return (
     <Starfield>
       <ScrollView style={styles.container} contentContainerStyle={styles.containerContent}>
+        {group.seasonEpisodeInfo && (
+          <View style={styles.tvBadge}>
+            <Text style={styles.tvBadgeText}>
+              📺 Live TV Watch Party • {group.seasonEpisodeInfo}
+            </Text>
+          </View>
+        )}
         <Text style={[styles.title, SpaceStyles.glowText]}>{group.filmName}</Text>
         <Text style={styles.subtitle}>
           {group.cinemaName} • {group.showTime}
@@ -351,9 +359,9 @@ export default function GroupScreen() {
         {group.spaceType === "private_rental" && (
           <View style={styles.rentalCard}>
             <View style={styles.rentalCardHeader}>
-              <Text style={styles.rentalBadge}>PRIVATE RENTAL</Text>
+              <Text style={styles.rentalBadge}>WATCH PARTY / CUSTOM VENUE</Text>
             </View>
-            {group.totalCostCents != null && (
+            {group.totalCostCents != null && group.totalCostCents > 0 ? (
               <>
                 <Text style={styles.rentalCostText}>
                   ${(group.totalCostCents / 100).toFixed(2)} total
@@ -363,6 +371,10 @@ export default function GroupScreen() {
                   person ({confirmedCount} confirmed)
                 </Text>
               </>
+            ) : (
+              <View style={styles.freeBadge}>
+                <Text style={styles.freeBadgeText}>🎉 Free to Attend</Text>
+              </View>
             )}
             <Text style={styles.rentalCapacityText}>
               {groupMembers.length} / {group.maxCapacity} spots filled
@@ -376,19 +388,18 @@ export default function GroupScreen() {
                   onPress={() => WebBrowser.openBrowserAsync(group.bookingUrl)}
                 >
                   <Text style={styles.rentalReservationButtonText}>
-                    🎟️ View Theater Reservation Link
+                    🔗 View Event / Venue Link
                   </Text>
                 </TouchableOpacity>
                 <View style={styles.rentalSecuredBadge}>
-                  <Text style={styles.rentalSecuredBadgeText}>🔒 Room Secured & Confirmed</Text>
+                  <Text style={styles.rentalSecuredBadgeText}>🔒 Venue Secured & Confirmed</Text>
                 </View>
               </>
             ) : (
               <>
                 <View style={styles.tentativeBanner}>
                   <Text style={styles.tentativeBannerText}>
-                    ⏳ Tentative Crowdfund Mode — Host will officially purchase the room once
-                    enough members RSVP!
+                    ⏳ Tentative Mode — Host will lock in the venue once enough members RSVP!
                   </Text>
                 </View>
                 {isHost && (
@@ -398,7 +409,7 @@ export default function GroupScreen() {
                     onPress={openBookingUrlModal}
                   >
                     <Text style={styles.addBookingLinkButtonText}>
-                      ✏️ Add Theater Booking Link
+                      ✏️ Add Venue / Event Link
                     </Text>
                   </TouchableOpacity>
                 )}
@@ -473,7 +484,14 @@ export default function GroupScreen() {
             onPress={() =>
               router.push({
                 pathname: "/group-chat/[id]",
-                params: { id: group.id, type: "group", title: group.filmName },
+                params: {
+                  id: group.id,
+                  type: "group",
+                  title: group.filmName,
+                  showTime: group.showTime,
+                  showDate: group.showDate,
+                  seasonEpisodeInfo: group.seasonEpisodeInfo ?? "",
+                },
               })
             }
           >
@@ -582,10 +600,10 @@ export default function GroupScreen() {
           behavior={Platform.OS === "ios" ? "padding" : undefined}
         >
           <View style={styles.modal}>
-            <Text style={styles.modalTitle}>Add Theater Booking Link</Text>
+            <Text style={styles.modalTitle}>Add Venue / Event Link</Text>
             <Text style={styles.modalSubtitle}>
-              Paste the confirmation link once you've bought the room — this lets everyone know
-              it's locked in.
+              Paste the reservation, invite, or chip-in link once the venue's locked in — this
+              lets everyone know it's confirmed.
             </Text>
             <TextInput
               style={styles.modalInput}
@@ -632,6 +650,17 @@ const styles = StyleSheet.create({
   notFoundText: { color: SpaceTheme.mutedOrbit, fontSize: 16 },
   title: { fontSize: 22, fontWeight: "bold", color: SpaceTheme.starWhite },
   subtitle: { fontSize: 14, color: SpaceTheme.mutedOrbit, marginBottom: 12 },
+  tvBadge: {
+    alignSelf: "flex-start",
+    backgroundColor: "rgba(56, 189, 248, 0.15)",
+    borderWidth: 1,
+    borderColor: "rgba(56, 189, 248, 0.4)",
+    borderRadius: 8,
+    paddingVertical: 5,
+    paddingHorizontal: 10,
+    marginBottom: 8,
+  },
+  tvBadgeText: { color: SpaceTheme.glowCyan, fontWeight: "700", fontSize: 12 },
   manualRow: {
     flexDirection: "row",
     justifyContent: "space-between",
@@ -686,6 +715,16 @@ const styles = StyleSheet.create({
   },
   rentalCostText: { color: SpaceTheme.starWhite, fontSize: 20, fontWeight: "700" },
   rentalPerPersonText: { color: SpaceTheme.mutedOrbit, fontSize: 13, marginTop: 2 },
+  freeBadge: {
+    alignSelf: "flex-start",
+    backgroundColor: "rgba(74, 222, 128, 0.15)",
+    borderWidth: 1,
+    borderColor: "rgba(74, 222, 128, 0.4)",
+    borderRadius: 8,
+    paddingVertical: 6,
+    paddingHorizontal: 12,
+  },
+  freeBadgeText: { color: "#4ADE80", fontWeight: "800", fontSize: 15 },
   rentalCapacityText: { color: SpaceTheme.glowCyan, fontSize: 13, fontWeight: "600", marginTop: 8 },
   section: {
     ...SpaceStyles.glassCard,

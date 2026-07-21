@@ -21,7 +21,7 @@ import { authFetch } from "@/frontend/services/api";
 import { Starfield } from "@/frontend/components/starfield";
 import { SpaceTheme, SpaceStyles } from "@/frontend/constants/theme";
 import { POST_ACTIVITIES } from "@/frontend/constants/activities";
-import { searchMovies, getNowPlaying, TmdbMovie } from "@/frontend/services/tmdb";
+import { searchMovies, searchTvShows, getNowPlaying, TmdbMovie } from "@/frontend/services/tmdb";
 import {
   getDeviceLocation,
   fetchNearbyTheaters,
@@ -82,9 +82,11 @@ export default function CreateSpaceScreen() {
   const [showTime, setShowTime] = useState("");
 
   // Private rental only — a rental doesn't have to be a movie screening at
-  // all (game night, a private party, etc.), so "other" swaps the TMDb movie
-  // picker for a plain freeform description instead of forcing a film choice.
-  const [rentalActivityType, setRentalActivityType] = useState<"movie" | "other">("movie");
+  // all: "tv" swaps the movie search for a TMDb TV-show search (plus
+  // optional season/episode info), "other" swaps it for a plain freeform
+  // description instead of forcing a title choice at all.
+  const [rentalActivityType, setRentalActivityType] = useState<"movie" | "tv" | "other">("movie");
+  const [seasonEpisodeInfo, setSeasonEpisodeInfo] = useState("");
   const [totalCost, setTotalCost] = useState("");
   const [maxCapacity, setMaxCapacity] = useState("");
   const [bookingUrl, setBookingUrl] = useState("");
@@ -159,29 +161,32 @@ export default function CreateSpaceScreen() {
     getNowPlaying().then(setNowPlaying);
   }, []);
 
+  const searchingTv = spaceType === "private_rental" && rentalActivityType === "tv";
+
   // Debounced TMDb search — fires 400ms after the user stops typing. An
-  // empty query falls back to the now-playing list instead of a blank modal.
+  // empty query falls back to the now-playing list instead of a blank modal
+  // (TV mode has no equivalent "airing now" list, so it just stays empty).
   //
   // Full catalog search is available for both space types (not just private
   // rentals) — different theaters carry different things (indie/arthouse
-  // screens, re-releases, festivals), so restricting Public Gatherings to
+  // screens, re-releases, festivals), so restricting MovieSpaces to
   // only TMDb's generic "now playing" list was too narrow for what a given
   // theater might actually be showing. Manual entry covers whatever TMDb
   // itself doesn't have.
   useEffect(() => {
     if (!movieSearch.trim()) {
-      setMovieResults(nowPlaying);
+      setMovieResults(searchingTv ? [] : nowPlaying);
       return;
     }
 
     setMovieSearching(true);
     const handle = setTimeout(() => {
-      searchMovies(movieSearch)
+      (searchingTv ? searchTvShows(movieSearch) : searchMovies(movieSearch))
         .then(setMovieResults)
         .finally(() => setMovieSearching(false));
     }, 400);
     return () => clearTimeout(handle);
-  }, [movieSearch, nowPlaying]);
+  }, [movieSearch, nowPlaying, searchingTv]);
 
   const filteredTheaters = theaters.filter((t) =>
     t.name.toLowerCase().includes(theaterSearch.toLowerCase()),
@@ -201,10 +206,11 @@ export default function CreateSpaceScreen() {
 
   const handleSubmit = async () => {
     const isOtherActivity = spaceType === "private_rental" && rentalActivityType === "other";
+    const mediaLabel = isOtherActivity ? "activity" : searchingTv ? "show" : "movie";
     if (!hostName.trim() || !theaterName.trim() || !movieName.trim() || !showDate.trim() || !showTime.trim()) {
       Alert.alert(
         "Missing info",
-        `Please fill in your name, theater, ${isOtherActivity ? "activity" : "movie"}, date, and time.`,
+        `Please fill in your name, theater, ${mediaLabel}, date, and time.`,
       );
       return;
     }
@@ -218,13 +224,13 @@ export default function CreateSpaceScreen() {
     }
 
     let totalCostCents: number | null = null;
-    if (spaceType === "private_rental") {
+    if (spaceType === "private_rental" && totalCost.trim()) {
       const amount = parseFloat(totalCost);
-      if (!amount || amount <= 0) {
-        Alert.alert("Missing cost", "Please enter the total estimated booking cost.");
+      if (isNaN(amount) || amount < 0) {
+        Alert.alert("Invalid cost", "Please enter a valid cost, or leave it blank for a free event.");
         return;
       }
-      totalCostCents = Math.round(amount * 100);
+      totalCostCents = amount > 0 ? Math.round(amount * 100) : null;
     }
 
     setCreating(true);
@@ -257,6 +263,7 @@ export default function CreateSpaceScreen() {
           maxCapacity: spaceType === "private_rental" && maxCapacity ? parseInt(maxCapacity, 10) : null,
           postActivities,
           hangoutNotes: hangoutNotes.trim() || null,
+          seasonEpisodeInfo: searchingTv && seasonEpisodeInfo.trim() ? seasonEpisodeInfo.trim() : null,
         }),
       });
 
@@ -306,7 +313,7 @@ export default function CreateSpaceScreen() {
                   spaceType === "public_gathering" && styles.toggleLabelActiveCyan,
                 ]}
               >
-                Public Movie Gathering
+                MovieSpace
               </Text>
             </TouchableOpacity>
 
@@ -329,7 +336,7 @@ export default function CreateSpaceScreen() {
                   spaceType === "private_rental" && styles.toggleLabelActivePink,
                 ]}
               >
-                Private Theater Rental
+                Watch Party / Custom Venue
               </Text>
             </TouchableOpacity>
           </View>
@@ -376,7 +383,26 @@ export default function CreateSpaceScreen() {
                     rentalActivityType === "movie" && styles.afterChipTextActive,
                   ]}
                 >
-                  Watching a Movie
+                  Movie
+                </Text>
+              </TouchableOpacity>
+              <TouchableOpacity
+                activeOpacity={0.8}
+                style={[styles.afterChip, rentalActivityType === "tv" && styles.afterChipActive]}
+                onPress={() => {
+                  setRentalActivityType("tv");
+                  setMovieName("");
+                  setTmdbMovieId(null);
+                }}
+              >
+                <Text style={styles.afterChipEmoji}>📺</Text>
+                <Text
+                  style={[
+                    styles.afterChipText,
+                    rentalActivityType === "tv" && styles.afterChipTextActive,
+                  ]}
+                >
+                  TV Series / Premiere
                 </Text>
               </TouchableOpacity>
               <TouchableOpacity
@@ -388,14 +414,14 @@ export default function CreateSpaceScreen() {
                   setTmdbMovieId(null);
                 }}
               >
-                <Text style={styles.afterChipEmoji}>🎉</Text>
+                <Text style={styles.afterChipEmoji}>🏆</Text>
                 <Text
                   style={[
                     styles.afterChipText,
                     rentalActivityType === "other" && styles.afterChipTextActive,
                   ]}
                 >
-                  Something Else (games, party...)
+                  Sports / Gaming / Other
                 </Text>
               </TouchableOpacity>
             </View>
@@ -404,7 +430,7 @@ export default function CreateSpaceScreen() {
           {spaceType === "private_rental" && rentalActivityType === "other" ? (
             <TextInput
               style={styles.input}
-              placeholder="What are you doing? (e.g. Game Night, Birthday Party)"
+              placeholder="What's the event? (e.g. Fight Night, Game Tournament, Anime Night)"
               placeholderTextColor={SpaceTheme.mutedOrbit}
               value={movieName}
               onChangeText={setMovieName}
@@ -415,12 +441,22 @@ export default function CreateSpaceScreen() {
               style={styles.pickerField}
               onPress={() => setMovieModalVisible(true)}
             >
-              <Ionicons name="film-outline" size={18} color={SpaceTheme.mutedOrbit} />
+              <Ionicons name={searchingTv ? "tv-outline" : "film-outline"} size={18} color={SpaceTheme.mutedOrbit} />
               <Text style={[styles.pickerFieldText, !movieName && styles.pickerFieldPlaceholder]}>
-                {movieName || "Search for a movie"}
+                {movieName || (searchingTv ? "Search for a TV show" : "Search for a movie")}
               </Text>
               <Ionicons name="chevron-down" size={18} color={SpaceTheme.mutedOrbit} />
             </TouchableOpacity>
+          )}
+
+          {searchingTv && (
+            <TextInput
+              style={styles.input}
+              placeholder="Season & Episode Info (Optional) — e.g. Season 2 Premiere"
+              placeholderTextColor={SpaceTheme.mutedOrbit}
+              value={seasonEpisodeInfo}
+              onChangeText={setSeasonEpisodeInfo}
+            />
           )}
 
           <TouchableOpacity
@@ -435,12 +471,13 @@ export default function CreateSpaceScreen() {
           </TouchableOpacity>
           {datePickerVisible && (
             <DateTimePicker
-              style={styles.pickerNative}
+              style={styles.pickerNativeTime}
               value={dateValue ?? new Date()}
               mode="date"
               minimumDate={new Date()}
               maximumDate={maxBookingDate}
-              display={Platform.OS === "ios" ? "inline" : "default"}
+              display={Platform.OS === "ios" ? "spinner" : "default"}
+              themeVariant="dark"
               onValueChange={onDateChange}
               onDismiss={() => setDatePickerVisible(false)}
             />
@@ -471,6 +508,7 @@ export default function CreateSpaceScreen() {
               value={timeValue ?? new Date()}
               mode="time"
               display={Platform.OS === "ios" ? "spinner" : "default"}
+              themeVariant="dark"
               onValueChange={onTimeChange}
               onDismiss={() => setTimePickerVisible(false)}
             />
@@ -489,25 +527,28 @@ export default function CreateSpaceScreen() {
             <View style={styles.rentalSection}>
               <View style={styles.rentalSectionHeader}>
                 <Ionicons name="storefront-outline" size={16} color={SpaceTheme.supernovaPink} />
-                <Text style={styles.rentalSectionTitle}>Rental Details</Text>
+                <Text style={styles.rentalSectionTitle}>Venue & Event Details</Text>
               </View>
               <Text style={styles.rentalSectionSubtext}>
-                Whether you've already booked this room or you're still gauging interest before
+                Whether you've already booked this venue or you're still gauging interest before
                 spending money, these fields keep guests informed — cost-splitting and capacity
                 only. The app never charges anyone.
               </Text>
 
               <TextInput
                 style={styles.input}
-                placeholder="Total estimated booking cost ($)"
+                placeholder="Total Venue / Event Cost (Optional)"
                 placeholderTextColor={SpaceTheme.mutedOrbit}
                 value={totalCost}
                 onChangeText={setTotalCost}
                 keyboardType="decimal-pad"
               />
+              <Text style={styles.rentalHintText}>
+                💡 Leave at $0 if this event is free for attendees.
+              </Text>
               <TextInput
                 style={styles.input}
-                placeholder="Max room capacity (default 40)"
+                placeholder="Max capacity (default 40)"
                 placeholderTextColor={SpaceTheme.mutedOrbit}
                 value={maxCapacity}
                 onChangeText={setMaxCapacity}
@@ -515,7 +556,7 @@ export default function CreateSpaceScreen() {
               />
               <TextInput
                 style={styles.input}
-                placeholder="Paste confirmation link (Optional if tentative)"
+                placeholder="Event / Venue Link (Optional)"
                 placeholderTextColor={SpaceTheme.mutedOrbit}
                 value={bookingUrl}
                 onChangeText={setBookingUrl}
@@ -523,8 +564,8 @@ export default function CreateSpaceScreen() {
                 keyboardType="url"
               />
               <Text style={styles.rentalHintText}>
-                💡 Leave this blank if you want to make sure enough friends are interested before
-                spending money out of pocket!
+                💡 Paste a reservation link, invite URL, or chip-in link — or leave it blank to
+                gauge interest before spending money out of pocket!
               </Text>
             </View>
           )}
@@ -702,14 +743,16 @@ export default function CreateSpaceScreen() {
         >
           <View style={styles.modalSheet}>
             <View style={styles.modalHeader}>
-              <Text style={styles.modalTitle}>Search for a Movie</Text>
+              <Text style={styles.modalTitle}>
+                {searchingTv ? "Search for a TV Show" : "Search for a Movie"}
+              </Text>
               <TouchableOpacity onPress={() => setMovieModalVisible(false)} hitSlop={10}>
                 <Ionicons name="close" size={24} color={SpaceTheme.mutedOrbit} />
               </TouchableOpacity>
             </View>
             <TextInput
               style={styles.input}
-              placeholder="Search movies..."
+              placeholder={searchingTv ? "Search TV shows..." : "Search movies..."}
               placeholderTextColor={SpaceTheme.mutedOrbit}
               value={movieSearch}
               onChangeText={setMovieSearch}
@@ -741,14 +784,16 @@ export default function CreateSpaceScreen() {
                 )}
                 ListEmptyComponent={
                   movieSearch.trim() ? (
-                    <Text style={styles.modalEmptyText}>No movies found for "{movieSearch}".</Text>
+                    <Text style={styles.modalEmptyText}>
+                      No {searchingTv ? "TV shows" : "movies"} found for "{movieSearch}".
+                    </Text>
                   ) : null
                 }
               />
             )}
             <TextInput
               style={[styles.input, { marginTop: 8 }]}
-              placeholder="Can't find it? Type the movie title"
+              placeholder={searchingTv ? "Can't find it? Type the show title" : "Can't find it? Type the movie title"}
               placeholderTextColor={SpaceTheme.mutedOrbit}
               value={movieName}
               onChangeText={(text) => {
@@ -855,7 +900,6 @@ const styles = StyleSheet.create({
   },
   pickerFieldText: { flex: 1, color: SpaceTheme.starWhite, fontSize: 16 },
   pickerFieldPlaceholder: { color: SpaceTheme.mutedOrbit },
-  pickerNative: { width: "100%", height: 360, marginBottom: 4 },
   pickerNativeTime: { width: "100%", height: 200, marginBottom: 4 },
   afterSectionTitle: {
     fontSize: 14,
@@ -895,6 +939,7 @@ const styles = StyleSheet.create({
     alignSelf: "flex-end",
     paddingVertical: 8,
     paddingHorizontal: 16,
+    marginTop: 8,
     marginBottom: 12,
   },
   pickerDoneButtonText: { color: SpaceTheme.glowCyan, fontWeight: "700", fontSize: 15 },

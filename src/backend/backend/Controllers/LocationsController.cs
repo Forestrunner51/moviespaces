@@ -20,6 +20,12 @@ namespace Backend.Controllers
         // Proxies Google Places API (New) searchNearby so the API key never
         // ships to the client. Field-masked to the handful of fields the app
         // actually renders/stores, to stay on the cheaper Places API tier.
+        //
+        // Covers venues for the broader "Watch Party / Custom Venue" space
+        // type, not just movie theaters — bars and community centers are
+        // legitimate watch-party venues too. Route name kept as
+        // "nearby-theaters" to avoid touching every frontend call site for
+        // what's still fundamentally the same lookup.
         [HttpGet("nearby-theaters")]
         public async Task<IActionResult> GetNearbyTheaters([FromQuery] double latitude, [FromQuery] double longitude)
         {
@@ -31,7 +37,7 @@ namespace Backend.Controllers
 
             var requestBody = new
             {
-                includedTypes = new[] { "movie_theater" },
+                includedTypes = new[] { "movie_theater", "bar", "community_center" },
                 maxResultCount = 15,
                 locationRestriction = new
                 {
