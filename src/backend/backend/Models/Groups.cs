@@ -101,6 +101,12 @@ namespace Backend.Models
         [Column("season_episode_info")]
         public string? SeasonEpisodeInfo { get; set; }
 
+        // Set once the "starting in 2 hours" reminder push has gone out, so
+        // the reminder background service doesn't re-notify the same Space
+        // every time it polls.
+        [Column("reminder_sent")]
+        public bool ReminderSent { get; set; } = false;
+
         public DateTime CreatedAt { get; set; } = DateTime.UtcNow;
         public List<GroupMember> Members { get; set; } = new();
     }

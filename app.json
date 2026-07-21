@@ -74,7 +74,13 @@
           "locationWhenInUsePermission": "Allow MovieSpaces to use your location to find nearby theaters."
         }
       ],
-      "expo-notifications"
+      "expo-notifications",
+      [
+        "expo-calendar",
+        {
+          "calendarPermission": "Allow MovieSpaces to add watch parties to your calendar."
+        }
+      ]
     ],
     "experiments": {
       "typedRoutes": true,

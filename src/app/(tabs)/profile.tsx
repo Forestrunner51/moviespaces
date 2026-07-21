@@ -10,7 +10,8 @@ import {
 } from "react-native";
 import { supabase } from "@/frontend/config/supabase";
 import { useCallback, useEffect, useState } from "react";
-import { useFocusEffect } from "expo-router";
+import { useFocusEffect, router } from "expo-router";
+import { authFetch } from "@/frontend/services/api";
 import * as ImagePicker from "expo-image-picker";
 import { Starfield } from "@/frontend/components/starfield";
 import { SpaceTheme, SpaceStyles } from "@/frontend/constants/theme";
@@ -24,6 +25,16 @@ interface ProfileData {
   email: string | null;
   joinedAt: string | null;
   theaterMemberships: string[];
+}
+
+interface MySpace {
+  id: string;
+  filmName: string;
+  cinemaName: string;
+  showTime: string;
+  showDate: string;
+  screeningTime: string | null;
+  status: string;
 }
 
 export default function ProfileScreen() {
@@ -40,6 +51,18 @@ export default function ProfileScreen() {
     null,
   );
   const [checkingUsername, setCheckingUsername] = useState(false);
+  const [mySpaces, setMySpaces] = useState<MySpace[]>([]);
+
+  const loadMySpaces = useCallback(async () => {
+    try {
+      const res = await authFetch(`${process.env.EXPO_PUBLIC_API_URL}/api/group/mine`);
+      if (!res.ok) return;
+      const data = await res.json();
+      setMySpaces(data);
+    } catch (err) {
+      console.error("Failed to load my spaces:", err);
+    }
+  }, []);
 
   const toggleMembership = (key: string) => {
     setMembershipsInput((prev) =>
@@ -86,7 +109,8 @@ export default function ProfileScreen() {
   useFocusEffect(
     useCallback(() => {
       load();
-    }, [load]),
+      loadMySpaces();
+    }, [load, loadMySpaces]),
   );
 
   const handleSignOut = async () => {
@@ -213,6 +237,14 @@ export default function ProfileScreen() {
       setSaving(false);
     }
   };
+
+  const now = Date.now();
+  const upcomingSpaces = mySpaces
+    .filter((s) => s.status !== "cancelled" && (!s.screeningTime || new Date(s.screeningTime).getTime() >= now))
+    .sort((a, b) => new Date(a.screeningTime ?? 0).getTime() - new Date(b.screeningTime ?? 0).getTime());
+  const pastSpaces = mySpaces
+    .filter((s) => s.status === "cancelled" || (s.screeningTime && new Date(s.screeningTime).getTime() < now))
+    .sort((a, b) => new Date(b.screeningTime ?? 0).getTime() - new Date(a.screeningTime ?? 0).getTime());
 
   if (loading) {
     return (
@@ -370,6 +402,50 @@ export default function ProfileScreen() {
           )}
         </View>
 
+        <View style={styles.spacesSection}>
+          <Text style={styles.spacesSectionTitle}>Upcoming Spaces</Text>
+          {upcomingSpaces.length === 0 ? (
+            <Text style={styles.spacesEmptyText}>No upcoming watch parties yet.</Text>
+          ) : (
+            upcomingSpaces.map((space) => (
+              <TouchableOpacity
+                key={space.id}
+                activeOpacity={0.8}
+                style={styles.spaceRow}
+                onPress={() => router.push({ pathname: "/group", params: { groupId: space.id } })}
+              >
+                <Text style={styles.spaceRowTitle}>{space.filmName}</Text>
+                <Text style={styles.spaceRowSubtitle}>
+                  {space.cinemaName} • {space.showDate} at {space.showTime}
+                </Text>
+              </TouchableOpacity>
+            ))
+          )}
+        </View>
+
+        <View style={styles.spacesSection}>
+          <Text style={styles.spacesSectionTitle}>Past Hangouts</Text>
+          {pastSpaces.length === 0 ? (
+            <Text style={styles.spacesEmptyText}>No past hangouts yet.</Text>
+          ) : (
+            pastSpaces.map((space) => (
+              <TouchableOpacity
+                key={space.id}
+                activeOpacity={0.8}
+                style={styles.spaceRow}
+                onPress={() => router.push({ pathname: "/group", params: { groupId: space.id } })}
+              >
+                <Text style={styles.spaceRowTitle}>
+                  {space.filmName} {space.status === "cancelled" && "(Cancelled)"}
+                </Text>
+                <Text style={styles.spaceRowSubtitle}>
+                  {space.cinemaName} • {space.showDate} at {space.showTime}
+                </Text>
+              </TouchableOpacity>
+            ))
+          )}
+        </View>
+
         <TouchableOpacity activeOpacity={0.8} style={styles.button} onPress={handleSignOut}>
           <Text style={styles.buttonText}>Sign Out</Text>
         </TouchableOpacity>
@@ -495,4 +571,19 @@ const styles = StyleSheet.create({
     alignItems: "center",
   },
   buttonText: { color: SpaceTheme.backgroundVoid, fontWeight: "700", fontSize: 16 },
+  spacesSection: { marginBottom: 24 },
+  spacesSectionTitle: {
+    fontSize: 16,
+    fontWeight: "700",
+    color: SpaceTheme.starWhite,
+    marginBottom: 10,
+  },
+  spacesEmptyText: { fontSize: 13, color: SpaceTheme.mutedOrbit },
+  spaceRow: {
+    ...SpaceStyles.glassCard,
+    padding: 12,
+    marginBottom: 8,
+  },
+  spaceRowTitle: { fontSize: 15, fontWeight: "600", color: SpaceTheme.starWhite },
+  spaceRowSubtitle: { fontSize: 12, color: SpaceTheme.mutedOrbit, marginTop: 2 },
 });

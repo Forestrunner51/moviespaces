@@ -6,6 +6,7 @@ import {
   StyleSheet,
   ActivityIndicator,
   TouchableOpacity,
+  Alert,
 } from "react-native";
 import { router } from "expo-router";
 import { Ionicons } from "@expo/vector-icons";
@@ -15,6 +16,7 @@ import { POST_ACTIVITIES, activityEmoji, activityLabel } from "@/frontend/consta
 import { THEATER_CHAINS, cinemaChain } from "@/frontend/constants/theater-memberships";
 import { getDeviceLocation, Coordinates } from "@/frontend/services/nearby-theaters";
 import { distanceMiles } from "@/frontend/utils/distance";
+import { reportContent } from "@/frontend/services/moderation";
 
 // Matches the Group shape returned by GET /api/group/open
 interface OpenSpace {
@@ -55,6 +57,23 @@ export default function ExploreScreen() {
     fetchOpenSpaces();
     getDeviceLocation().then(setDeviceLocation);
   }, []);
+
+  const handleReportSpace = (spaceId: string) => {
+    Alert.alert("Report this Space?", "Let us know if this listing looks wrong or inappropriate.", [
+      { text: "Cancel", style: "cancel" },
+      {
+        text: "Report",
+        style: "destructive",
+        onPress: async () => {
+          const result = await reportContent("space", spaceId);
+          Alert.alert(
+            result.success ? "Reported" : "Couldn't report",
+            result.success ? "Thanks — our team will review this Space." : result.error || "Please try again.",
+          );
+        },
+      },
+    ]);
+  };
 
   const fetchOpenSpaces = async () => {
     try {
@@ -386,6 +405,16 @@ export default function ExploreScreen() {
                 <Text style={styles.spaceHost} numberOfLines={1}>
                   by {item.hostName}
                 </Text>
+                <TouchableOpacity
+                  activeOpacity={0.7}
+                  hitSlop={8}
+                  onPress={(e) => {
+                    e.stopPropagation();
+                    handleReportSpace(item.id);
+                  }}
+                >
+                  <Text style={styles.reportSpaceLink}>🚩 Report</Text>
+                </TouchableOpacity>
               </View>
             </TouchableOpacity>
           )}
@@ -521,6 +550,7 @@ const styles = StyleSheet.create({
   },
   spaceMembers: { fontSize: 12, color: SpaceTheme.glowCyan, fontWeight: "600" },
   spaceHost: { fontSize: 11, color: SpaceTheme.mutedOrbit, maxWidth: 120 },
+  reportSpaceLink: { fontSize: 11, color: SpaceTheme.mutedOrbit },
   empty: { textAlign: "center", color: SpaceTheme.mutedOrbit, marginTop: 40, fontSize: 16 },
   wideRadiusNotice: {
     fontSize: 12,
