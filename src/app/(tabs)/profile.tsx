@@ -117,6 +117,53 @@ export default function ProfileScreen() {
     await supabase.auth.signOut();
   };
 
+  const [deletingAccount, setDeletingAccount] = useState(false);
+
+  const handleDeleteAccount = () => {
+    Alert.alert(
+      "Delete your account?",
+      "This permanently deletes your profile, your Spaces, and everything else tied to your account. This can't be undone.",
+      [
+        { text: "Cancel", style: "cancel" },
+        {
+          text: "Continue",
+          style: "destructive",
+          onPress: () => {
+            Alert.alert(
+              "Are you absolutely sure?",
+              "There's no way to recover your account after this.",
+              [
+                { text: "Cancel", style: "cancel" },
+                {
+                  text: "Delete My Account",
+                  style: "destructive",
+                  onPress: async () => {
+                    setDeletingAccount(true);
+                    try {
+                      const res = await authFetch(`${process.env.EXPO_PUBLIC_API_URL}/api/account`, {
+                        method: "DELETE",
+                      });
+                      if (!res.ok) {
+                        const body = await res.json().catch(() => ({}));
+                        throw new Error(body.error || "Please try again.");
+                      }
+                      await supabase.auth.signOut();
+                      router.replace("/auth");
+                    } catch (err: any) {
+                      Alert.alert("Couldn't delete account", err.message || "Please try again.");
+                    } finally {
+                      setDeletingAccount(false);
+                    }
+                  },
+                },
+              ],
+            );
+          },
+        },
+      ],
+    );
+  };
+
   const startEditing = () => {
     setNameInput(profile?.displayName ?? "");
     setUsernameInput(profile?.username ?? "");
@@ -449,6 +496,27 @@ export default function ProfileScreen() {
         <TouchableOpacity activeOpacity={0.8} style={styles.button} onPress={handleSignOut}>
           <Text style={styles.buttonText}>Sign Out</Text>
         </TouchableOpacity>
+
+        <TouchableOpacity
+          activeOpacity={0.8}
+          style={styles.deleteAccountButton}
+          onPress={handleDeleteAccount}
+          disabled={deletingAccount}
+        >
+          <Text style={styles.deleteAccountButtonText}>
+            {deletingAccount ? "Deleting..." : "Delete Account"}
+          </Text>
+        </TouchableOpacity>
+
+        <View style={styles.legalLinksRow}>
+          <TouchableOpacity onPress={() => router.push("/legal/terms")}>
+            <Text style={styles.legalLinkText}>Terms of Service</Text>
+          </TouchableOpacity>
+          <Text style={styles.legalLinkSeparator}>•</Text>
+          <TouchableOpacity onPress={() => router.push("/legal/privacy")}>
+            <Text style={styles.legalLinkText}>Privacy Policy</Text>
+          </TouchableOpacity>
+        </View>
       </View>
     </Starfield>
   );
@@ -586,4 +654,19 @@ const styles = StyleSheet.create({
   },
   spaceRowTitle: { fontSize: 15, fontWeight: "600", color: SpaceTheme.starWhite },
   spaceRowSubtitle: { fontSize: 12, color: SpaceTheme.mutedOrbit, marginTop: 2 },
+  legalLinksRow: {
+    flexDirection: "row",
+    justifyContent: "center",
+    alignItems: "center",
+    gap: 8,
+    marginTop: 20,
+  },
+  legalLinkText: { fontSize: 12, color: SpaceTheme.mutedOrbit },
+  legalLinkSeparator: { fontSize: 12, color: SpaceTheme.mutedOrbit },
+  deleteAccountButton: {
+    marginTop: 12,
+    padding: 12,
+    alignItems: "center",
+  },
+  deleteAccountButtonText: { color: SpaceTheme.supernovaPink, fontSize: 13, fontWeight: "600" },
 });

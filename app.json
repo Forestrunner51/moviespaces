@@ -80,7 +80,8 @@
         {
           "calendarPermission": "Allow MovieSpaces to add watch parties to your calendar."
         }
-      ]
+      ],
+      "@sentry/react-native"
     ],
     "experiments": {
       "typedRoutes": true,

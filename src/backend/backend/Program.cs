@@ -3,9 +3,18 @@ using Backend.Services;
 using Microsoft.EntityFrameworkCore;
 using Microsoft.AspNetCore.Authentication.JwtBearer;
 using Microsoft.IdentityModel.Tokens;
+using Sentry.AspNetCore;
 using System.Text;
 
 var builder = WebApplication.CreateBuilder(args);
+
+// Self-disables when Dsn is null/empty (unset in appsettings/env), so this is
+// safe to leave unconfigured in local dev.
+builder.WebHost.UseSentry(options =>
+{
+    options.Dsn = builder.Configuration["Sentry:Dsn"];
+    options.TracesSampleRate = 1.0;
+});
 
 builder.Services.AddHttpClient();
 builder.Services.AddMemoryCache();
