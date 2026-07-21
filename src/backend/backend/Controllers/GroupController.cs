@@ -31,12 +31,12 @@ namespace Backend.Controllers
         // tokens (member never opened the app / denied permission / no
         // native build with expo-notifications yet) are silently skipped —
         // this should never block the booking action itself.
-        private async Task NotifyMembersAsync(Guid groupId, string title, string body)
+        private async Task NotifyMembersAsync(Guid groupId, string title, string body, string? excludeUserId = null)
         {
             try
             {
                 var memberUserIds = await _db.GroupMembers
-                    .Where(m => m.GroupId == groupId && m.UserId != "")
+                    .Where(m => m.GroupId == groupId && m.UserId != "" && m.UserId != excludeUserId)
                     .Select(m => m.UserId)
                     .Distinct()
                     .ToListAsync();
@@ -417,6 +417,20 @@ namespace Backend.Controllers
             return Ok(new { showtimeReportCount = group.ShowtimeReportCount });
         }
 
+        // Group chat itself lives in Supabase (group_messages), not this
+        // backend/EF database — the .NET side has no way to observe a new
+        // message on its own. The client calls this right after a successful
+        // send so the (EF-owned) push token / membership data can be used to
+        // notify everyone else in the Space.
+        [HttpPost("{id}/notify-message")]
+        public async Task<IActionResult> NotifyNewMessage(Guid id, [FromBody] NotifyMessageRequest req)
+        {
+            var senderId = GetUserId();
+            var preview = req.Preview.Length > 120 ? req.Preview.Substring(0, 120) + "…" : req.Preview;
+            await NotifyMembersAsync(id, $"💬 {req.SenderName}", preview, excludeUserId: senderId);
+            return Ok();
+        }
+
         [HttpGet("/.well-known/apple-app-site-association")]
         [AllowAnonymous]
         public IActionResult GetAppleAppSiteAssociation()
@@ -561,5 +575,6 @@ namespace Backend.Controllers
 
     public record JoinGroupRequest(string Name);
     public record UpdateBookingUrlRequest(string? BookingUrl);
+    public record NotifyMessageRequest(string SenderName, string Preview);
     public record TransferOwnershipRequest(string NewHostUserId);
 }

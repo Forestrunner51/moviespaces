@@ -14,6 +14,7 @@ import { Ionicons } from "@expo/vector-icons";
 import { FriendsPanel } from "@/frontend/components/friends-panel";
 import { Starfield } from "@/frontend/components/starfield";
 import { SpaceTheme, SpaceStyles } from "@/frontend/constants/theme";
+import { useUnreadCounts } from "@/frontend/hooks/use-unread-counts";
 
 interface Space {
   id: string;
@@ -72,6 +73,7 @@ export default function MySpacesScreen() {
 
   const rentalSpaces = spaces.filter((s) => s.spaceType === "private_rental");
   const gatheringSpaces = spaces.filter((s) => s.spaceType !== "private_rental");
+  const unreadCounts = useUnreadCounts(spaces.map((s) => s.id));
 
   return (
     <Starfield>
@@ -133,7 +135,16 @@ export default function MySpacesScreen() {
                       })
                     }
                   >
-                    <Text style={styles.filmName}>{item.filmName}</Text>
+                    <View style={styles.cardHeader}>
+                      <Text style={styles.filmName}>{item.filmName}</Text>
+                      {!!unreadCounts[item.id] && (
+                        <View style={styles.unreadBadge}>
+                          <Text style={styles.unreadBadgeText}>
+                            💬 {unreadCounts[item.id] > 9 ? "9+" : unreadCounts[item.id]} new
+                          </Text>
+                        </View>
+                      )}
+                    </View>
                     <Text style={styles.details}>
                       {item.cinemaName} • {item.showTime}
                     </Text>
@@ -191,7 +202,16 @@ export default function MySpacesScreen() {
                     })
                   }
                 >
-                  <Text style={styles.filmName}>{item.filmName}</Text>
+                  <View style={styles.cardHeader}>
+                    <Text style={styles.filmName}>{item.filmName}</Text>
+                    {!!unreadCounts[item.id] && (
+                      <View style={styles.unreadBadge}>
+                        <Text style={styles.unreadBadgeText}>
+                          💬 {unreadCounts[item.id] > 9 ? "9+" : unreadCounts[item.id]} new
+                        </Text>
+                      </View>
+                    )}
+                  </View>
                   <Text style={styles.details}>
                     {item.cinemaName} • {item.showTime}
                   </Text>
@@ -292,12 +312,26 @@ const styles = StyleSheet.create({
     marginBottom: 12,
   },
   rentCardRow: { flexDirection: "row", alignItems: "center", gap: 12 },
+  cardHeader: {
+    flexDirection: "row",
+    justifyContent: "space-between",
+    alignItems: "center",
+    marginBottom: 4,
+    gap: 8,
+  },
   filmName: {
+    flex: 1,
     fontSize: 18,
     fontWeight: "700",
     color: SpaceTheme.starWhite,
-    marginBottom: 4,
   },
+  unreadBadge: {
+    backgroundColor: SpaceTheme.supernovaPink,
+    borderRadius: 10,
+    paddingVertical: 3,
+    paddingHorizontal: 8,
+  },
+  unreadBadgeText: { color: SpaceTheme.backgroundVoid, fontSize: 11, fontWeight: "800" },
   details: { fontSize: 14, color: SpaceTheme.mutedOrbit, marginBottom: 2 },
   date: { fontSize: 12, color: SpaceTheme.mutedOrbit, marginBottom: 8 },
   footer: { flexDirection: "row", justifyContent: "space-between", marginTop: 4 },
