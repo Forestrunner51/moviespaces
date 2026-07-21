@@ -27,6 +27,19 @@ namespace Backend.Controllers
             _httpClientFactory = httpClientFactory;
         }
 
+        // Human-readable share id, e.g. "friday-movie-night-a8f1". The random
+        // suffix makes collisions negligible without a uniqueness retry loop
+        // — good enough for a purely additive, non-critical identifier.
+        private static string GenerateSlug(string title)
+        {
+            var slug = (title ?? "").ToLowerInvariant().Trim();
+            slug = System.Text.RegularExpressions.Regex.Replace(slug, "[^a-z0-9]+", "-").Trim('-');
+            if (string.IsNullOrEmpty(slug)) slug = "space";
+            if (slug.Length > 40) slug = slug.Substring(0, 40).Trim('-');
+            var suffix = Guid.NewGuid().ToString("N").Substring(0, 4);
+            return $"{slug}-{suffix}";
+        }
+
         // Fire-and-forget-ish: best-effort push via Expo's push API. Missing
         // tokens (member never opened the app / denied permission / no
         // native build with expo-notifications yet) are silently skipped —
@@ -91,6 +104,7 @@ namespace Backend.Controllers
 
             var group = new Group
             {
+                Slug = GenerateSlug(req.FilmName),
                 HostName = req.HostName,
                 UserId = userId,
                 CinemaId = req.CinemaId,

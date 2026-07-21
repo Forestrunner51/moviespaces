@@ -58,7 +58,12 @@ export default function GroupChatScreen() {
           </View>
         )}
         <View style={{ flex: 1 }}>
-          <Text style={styles.senderName}>{item.sender_name || "Someone"}</Text>
+          <Text style={styles.senderName}>
+            {item.sender_name || "Someone"}
+            {item.sender_username ? (
+              <Text style={styles.senderUsername}> @{item.sender_username}</Text>
+            ) : null}
+          </Text>
           <View style={[styles.bubble, styles.bubbleThem, { alignSelf: "flex-start", marginBottom: 0 }]}>
             <Text style={styles.bubbleText}>{item.content}</Text>
           </View>
@@ -154,6 +159,7 @@ const styles = StyleSheet.create({
   },
   avatarFallbackText: { color: SpaceTheme.glowCyan, fontSize: 12, fontWeight: "700" },
   senderName: { color: SpaceTheme.mutedOrbit, fontSize: 11, fontWeight: "600", marginBottom: 3, marginLeft: 2 },
+  senderUsername: { color: SpaceTheme.mutedOrbit, fontSize: 11, fontWeight: "400" },
   inputRow: {
     flexDirection: "row",
     alignItems: "flex-end",

@@ -59,7 +59,7 @@ export function FriendsPanel() {
     <View style={styles.container}>
       <TextInput
         style={styles.input}
-        placeholder="Search users by name..."
+        placeholder="Search users by name or @username..."
         placeholderTextColor={SpaceTheme.mutedOrbit}
         value={query}
         onChangeText={handleSearch}
@@ -73,7 +73,10 @@ export function FriendsPanel() {
           <Text style={styles.sectionLabel}>SEARCH RESULTS</Text>
           {results.map((user) => (
             <View key={user.id} style={styles.row}>
-              <Text style={styles.rowText}>{user.display_name}</Text>
+              <View>
+                <Text style={styles.rowText}>{user.display_name}</Text>
+                {user.username && <Text style={styles.rowUsername}>@{user.username}</Text>}
+              </View>
               {friendIds.has(user.id) ? (
                 <Text style={styles.rowSubtext}>Friends</Text>
               ) : requestedIds.has(user.id) ? (
@@ -93,7 +96,12 @@ export function FriendsPanel() {
           <Text style={styles.sectionLabel}>PENDING REQUESTS</Text>
           {pendingRequests.map((req) => (
             <View key={req.id} style={styles.row}>
-              <Text style={styles.rowText}>{req.requester.display_name}</Text>
+              <View>
+                <Text style={styles.rowText}>{req.requester.display_name}</Text>
+                {req.requester.username && (
+                  <Text style={styles.rowUsername}>@{req.requester.username}</Text>
+                )}
+              </View>
               <View style={styles.requestActions}>
                 <TouchableOpacity
                   activeOpacity={0.8}
@@ -138,7 +146,10 @@ export function FriendsPanel() {
                   })
                 }
               >
-                <Text style={styles.rowText}>{item.display_name}</Text>
+                <View>
+                  <Text style={styles.rowText}>{item.display_name}</Text>
+                  {item.username && <Text style={styles.rowUsername}>@{item.username}</Text>}
+                </View>
                 <Text style={styles.rowSubtext}>Message</Text>
               </TouchableOpacity>
             )}
@@ -169,6 +180,7 @@ const styles = StyleSheet.create({
     marginTop: 8,
   },
   rowText: { color: SpaceTheme.starWhite, fontSize: 16 },
+  rowUsername: { color: SpaceTheme.mutedOrbit, fontSize: 12, marginTop: 1 },
   rowSubtext: { color: SpaceTheme.mutedOrbit, fontSize: 13 },
   emptyText: { color: SpaceTheme.mutedOrbit, marginTop: 12 },
   requestActions: { flexDirection: "row", gap: 12 },

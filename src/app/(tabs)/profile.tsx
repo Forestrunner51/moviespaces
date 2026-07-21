@@ -9,15 +9,17 @@ import {
   Alert,
 } from "react-native";
 import { supabase } from "@/frontend/config/supabase";
-import { useCallback, useState } from "react";
+import { useCallback, useEffect, useState } from "react";
 import { useFocusEffect } from "expo-router";
 import * as ImagePicker from "expo-image-picker";
 import { Starfield } from "@/frontend/components/starfield";
 import { SpaceTheme, SpaceStyles } from "@/frontend/constants/theme";
 import { THEATER_MEMBERSHIPS, membershipLabel } from "@/frontend/constants/theater-memberships";
+import { checkUsernameAvailable, normalizeUsername } from "@/frontend/services/username";
 
 interface ProfileData {
   displayName: string;
+  username: string | null;
   avatarUrl: string | null;
   email: string | null;
   joinedAt: string | null;
@@ -33,6 +35,11 @@ export default function ProfileScreen() {
   const [pendingAvatarUri, setPendingAvatarUri] = useState<string | null>(null);
   const [saving, setSaving] = useState(false);
   const [membershipsInput, setMembershipsInput] = useState<string[]>([]);
+  const [usernameInput, setUsernameInput] = useState("");
+  const [usernameCheck, setUsernameCheck] = useState<{ available: boolean; message: string } | null>(
+    null,
+  );
+  const [checkingUsername, setCheckingUsername] = useState(false);
 
   const toggleMembership = (key: string) => {
     setMembershipsInput((prev) =>
@@ -52,7 +59,7 @@ export default function ProfileScreen() {
 
     const { data: row } = await supabase
       .from("profiles")
-      .select("display_name, avatar_url, created_at, theater_memberships")
+      .select("display_name, avatar_url, created_at, theater_memberships, username")
       .eq("id", user.id)
       .maybeSingle();
 
@@ -64,12 +71,14 @@ export default function ProfileScreen() {
 
     setProfile({
       displayName,
+      username: row?.username ?? null,
       avatarUrl: row?.avatar_url ?? null,
       email: user.email ?? null,
       joinedAt: row?.created_at || user.created_at || null,
       theaterMemberships,
     });
     setNameInput(displayName);
+    setUsernameInput(row?.username ?? "");
     setMembershipsInput(theaterMemberships);
     setLoading(false);
   }, []);
@@ -86,10 +95,29 @@ export default function ProfileScreen() {
 
   const startEditing = () => {
     setNameInput(profile?.displayName ?? "");
+    setUsernameInput(profile?.username ?? "");
+    setUsernameCheck(null);
     setMembershipsInput(profile?.theaterMemberships ?? []);
     setPendingAvatarUri(null);
     setEditing(true);
   };
+
+  // Debounced availability check — fires 400ms after typing stops.
+  useEffect(() => {
+    if (!editing) return;
+    const trimmed = usernameInput.trim();
+    if (!trimmed || normalizeUsername(trimmed) === profile?.username) {
+      setUsernameCheck(null);
+      return;
+    }
+    setCheckingUsername(true);
+    const handle = setTimeout(() => {
+      checkUsernameAvailable(trimmed, userId)
+        .then(setUsernameCheck)
+        .finally(() => setCheckingUsername(false));
+    }, 400);
+    return () => clearTimeout(handle);
+  }, [usernameInput, editing, userId, profile?.username]);
 
   const pickAvatar = async () => {
     const permission = await ImagePicker.requestMediaLibraryPermissionsAsync();
@@ -117,6 +145,23 @@ export default function ProfileScreen() {
       return;
     }
 
+    const trimmedUsername = usernameInput.trim();
+    const normalizedUsername = trimmedUsername ? normalizeUsername(trimmedUsername) : null;
+    if (normalizedUsername && normalizedUsername !== profile?.username) {
+      if (usernameCheck?.available === false) {
+        Alert.alert("Username unavailable", usernameCheck.message);
+        return;
+      }
+      // Hasn't finished (or never ran) a check yet — verify right before
+      // saving rather than trusting stale/debounce-pending state.
+      const result = await checkUsernameAvailable(normalizedUsername, userId);
+      if (!result.available) {
+        setUsernameCheck(result);
+        Alert.alert("Username unavailable", result.message);
+        return;
+      }
+    }
+
     setSaving(true);
     try {
       let avatarUrl = profile?.avatarUrl ?? null;
@@ -142,6 +187,7 @@ export default function ProfileScreen() {
         .from("profiles")
         .update({
           display_name: nameInput.trim(),
+          username: normalizedUsername,
           avatar_url: avatarUrl,
           theater_memberships: membershipsInput.length > 0 ? membershipsInput.join(",") : null,
         })
@@ -150,7 +196,13 @@ export default function ProfileScreen() {
 
       setProfile((prev) =>
         prev
-          ? { ...prev, displayName: nameInput.trim(), avatarUrl, theaterMemberships: membershipsInput }
+          ? {
+              ...prev,
+              displayName: nameInput.trim(),
+              username: normalizedUsername,
+              avatarUrl,
+              theaterMemberships: membershipsInput,
+            }
           : prev,
       );
       setEditing(false);
@@ -200,15 +252,43 @@ export default function ProfileScreen() {
           </TouchableOpacity>
 
           {editing ? (
-            <TextInput
-              style={styles.nameInput}
-              value={nameInput}
-              onChangeText={setNameInput}
-              placeholder="Display name"
-              placeholderTextColor={SpaceTheme.mutedOrbit}
-            />
+            <>
+              <TextInput
+                style={styles.nameInput}
+                value={nameInput}
+                onChangeText={setNameInput}
+                placeholder="Display name"
+                placeholderTextColor={SpaceTheme.mutedOrbit}
+              />
+              <TextInput
+                style={[styles.nameInput, styles.usernameInput]}
+                value={usernameInput}
+                onChangeText={(text) => setUsernameInput(text.toLowerCase())}
+                placeholder="username"
+                placeholderTextColor={SpaceTheme.mutedOrbit}
+                autoCapitalize="none"
+                autoCorrect={false}
+              />
+              {checkingUsername ? (
+                <ActivityIndicator size="small" color={SpaceTheme.mutedOrbit} style={{ marginTop: 6 }} />
+              ) : (
+                usernameCheck && (
+                  <Text
+                    style={[
+                      styles.usernameCheckText,
+                      { color: usernameCheck.available ? "#4ADE80" : SpaceTheme.supernovaPink },
+                    ]}
+                  >
+                    {usernameCheck.available ? "✓" : "✗"} {usernameCheck.message}
+                  </Text>
+                )
+              )}
+            </>
           ) : (
-            <Text style={styles.name}>{profile?.displayName}</Text>
+            <>
+              <Text style={styles.name}>{profile?.displayName}</Text>
+              {profile?.username && <Text style={styles.usernameText}>@{profile.username}</Text>}
+            </>
           )}
 
           {profile?.email && <Text style={styles.email}>{profile.email}</Text>}
@@ -345,6 +425,9 @@ const styles = StyleSheet.create({
   },
   avatarEditBadgeText: { color: SpaceTheme.starWhite, fontSize: 11, fontWeight: "700" },
   name: { fontSize: 20, fontWeight: "700", color: SpaceTheme.starWhite },
+  usernameText: { fontSize: 14, color: SpaceTheme.mutedOrbit, marginTop: 2 },
+  usernameInput: { marginTop: 8, fontSize: 15 },
+  usernameCheckText: { fontSize: 12, fontWeight: "600", marginTop: 6 },
   nameInput: {
     fontSize: 18,
     fontWeight: "700",
