@@ -35,9 +35,10 @@ export default function HomeScreen() {
         >
           <Ionicons name="storefront-outline" size={28} color={SpaceTheme.supernovaPink} />
           <View style={{ flex: 1 }}>
-            <Text style={styles.chooseCardTitle}>Rent a Theater</Text>
+            <Text style={styles.chooseCardTitle}>Host a Watch Party</Text>
             <Text style={styles.chooseCardSubtitle}>
-              Find a nearby theater and arrange your own private rental
+              Organize a movie night, fight night, or screening at a theater, local venue, or
+              custom space
             </Text>
           </View>
           <Ionicons name="chevron-forward" size={20} color={SpaceTheme.mutedOrbit} />

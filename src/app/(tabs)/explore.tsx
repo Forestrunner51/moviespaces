@@ -26,6 +26,7 @@ interface OpenSpace {
   theaterLongitude: number | null;
   showTime: string;
   showDate: string;
+  screeningTime: string | null;
   status: string;
   spaceType: string;
   totalCostCents: number | null;
@@ -112,6 +113,35 @@ export default function ExploreScreen() {
     return true;
   });
 
+  // Informational only — "Any" distance already shows every space regardless
+  // of how far away it is, so there's nothing to actually re-filter here.
+  // This just tells the user when what they're seeing skews far away, rather
+  // than silently showing a mix of nearby and distant results with no context.
+  const knownDistances = deviceLocation
+    ? filteredSpaces.map(spaceDistance).filter((d): d is number => d != null)
+    : [];
+  const showWideRadiusNotice =
+    distanceFilter === "any" &&
+    knownDistances.length > 0 &&
+    !knownDistances.some((d) => d <= 10) &&
+    knownDistances.some((d) => d <= 30);
+
+  const confirmedCount = (space: OpenSpace) => space.members.filter((m) => m.confirmed).length;
+
+  const isFillingUpFast = (space: OpenSpace) =>
+    space.maxCapacity > 0 && confirmedCount(space) >= space.maxCapacity * 0.75;
+
+  const isHappeningTonight = (space: OpenSpace) => {
+    if (!space.screeningTime) return false;
+    const eventDate = new Date(space.screeningTime);
+    const now = new Date();
+    return (
+      eventDate.getFullYear() === now.getFullYear() &&
+      eventDate.getMonth() === now.getMonth() &&
+      eventDate.getDate() === now.getDate()
+    );
+  };
+
   if (loading) {
     return (
       <Starfield>
@@ -136,8 +166,8 @@ export default function ExploreScreen() {
                 {(
                   [
                     { key: "all", label: "All" },
-                    { key: "public_gathering", label: "Movie Gatherings" },
-                    { key: "private_rental", label: "Theater Rentals" },
+                    { key: "public_gathering", label: "MovieSpaces" },
+                    { key: "private_rental", label: "Watch Parties" },
                   ] as { key: TypeFilter; label: string }[]
                 ).map(({ key, label }) => (
                   <TouchableOpacity
@@ -271,6 +301,11 @@ export default function ExploreScreen() {
               <Text style={styles.resultsCount}>
                 {filteredSpaces.length} open space{filteredSpaces.length === 1 ? "" : "s"}
               </Text>
+              {showWideRadiusNotice && (
+                <Text style={styles.wideRadiusNotice}>
+                  No events found within 10 miles — showing active Watch Parties nearby:
+                </Text>
+              )}
             </View>
           }
           renderItem={({ item }) => (
@@ -290,9 +325,30 @@ export default function ExploreScreen() {
                   ]}
                 >
                   <Text style={styles.typeBadgeText}>
-                    {item.spaceType === "private_rental" ? "Rental" : "Gathering"}
+                    {item.spaceType === "private_rental" ? "Watch Party" : "MovieSpace"}
                   </Text>
                 </View>
+              </View>
+              <View style={styles.statusRow}>
+                {isHappeningTonight(item) && (
+                  <View style={[styles.statusBadge, styles.statusBadgeHot]}>
+                    <Text style={styles.statusBadgeText}>⚡ Happening Tonight</Text>
+                  </View>
+                )}
+                {isFillingUpFast(item) && (
+                  <View style={[styles.statusBadge, styles.statusBadgeHot]}>
+                    <Text style={styles.statusBadgeText}>🔥 Filling Up Fast</Text>
+                  </View>
+                )}
+                {item.totalCostCents != null && item.totalCostCents > 0 ? (
+                  <View style={styles.statusBadge}>
+                    <Text style={styles.statusBadgeText}>🎟️ Cost-Split</Text>
+                  </View>
+                ) : (
+                  <View style={[styles.statusBadge, styles.statusBadgeFree]}>
+                    <Text style={styles.statusBadgeFreeText}>🎉 Free Event</Text>
+                  </View>
+                )}
               </View>
               {item.postActivities && (
                 <View style={styles.hangoutBadge}>
@@ -335,6 +391,23 @@ export default function ExploreScreen() {
           )}
           ListEmptyComponent={
             <Text style={styles.empty}>No open spaces match these filters yet.</Text>
+          }
+          ListFooterComponent={
+            <TouchableOpacity
+              activeOpacity={0.85}
+              style={styles.ctaCard}
+              onPress={() =>
+                router.push({ pathname: "/create-space", params: { spaceType: "public_gathering" } })
+              }
+            >
+              <Text style={styles.ctaCardTitle}>Don't see what you're looking for?</Text>
+              <Text style={styles.ctaCardSubtitle}>
+                Host a movie night, fight night, or watch party in 60 seconds.
+              </Text>
+              <View style={styles.ctaCardButton}>
+                <Text style={styles.ctaCardButtonText}>+ Create a Space</Text>
+              </View>
+            </TouchableOpacity>
           }
         />
       </View>
@@ -449,4 +522,58 @@ const styles = StyleSheet.create({
   spaceMembers: { fontSize: 12, color: SpaceTheme.glowCyan, fontWeight: "600" },
   spaceHost: { fontSize: 11, color: SpaceTheme.mutedOrbit, maxWidth: 120 },
   empty: { textAlign: "center", color: SpaceTheme.mutedOrbit, marginTop: 40, fontSize: 16 },
+  wideRadiusNotice: {
+    fontSize: 12,
+    color: SpaceTheme.supernovaPink,
+    marginTop: 4,
+    marginBottom: 4,
+    fontStyle: "italic",
+  },
+  statusRow: { flexDirection: "row", flexWrap: "wrap", gap: 6, marginTop: 6 },
+  statusBadge: {
+    backgroundColor: "rgba(56, 189, 248, 0.15)",
+    borderWidth: 1,
+    borderColor: "rgba(56, 189, 248, 0.4)",
+    borderRadius: 6,
+    paddingVertical: 3,
+    paddingHorizontal: 8,
+  },
+  statusBadgeHot: {
+    backgroundColor: "rgba(244, 114, 182, 0.15)",
+    borderColor: "rgba(244, 114, 182, 0.4)",
+  },
+  statusBadgeText: { fontSize: 11, fontWeight: "700", color: SpaceTheme.starWhite },
+  statusBadgeFree: {
+    backgroundColor: "rgba(74, 222, 128, 0.15)",
+    borderColor: "rgba(74, 222, 128, 0.4)",
+  },
+  statusBadgeFreeText: { fontSize: 11, fontWeight: "700", color: "#4ADE80" },
+  ctaCard: {
+    ...SpaceStyles.glassCard,
+    alignItems: "center",
+    padding: 20,
+    marginTop: 8,
+    marginBottom: 20,
+    borderColor: "rgba(56, 189, 248, 0.3)",
+  },
+  ctaCardTitle: {
+    fontSize: 16,
+    fontWeight: "700",
+    color: SpaceTheme.starWhite,
+    marginBottom: 4,
+    textAlign: "center",
+  },
+  ctaCardSubtitle: {
+    fontSize: 13,
+    color: SpaceTheme.mutedOrbit,
+    textAlign: "center",
+    marginBottom: 14,
+  },
+  ctaCardButton: {
+    backgroundColor: SpaceTheme.glowCyan,
+    paddingVertical: 10,
+    paddingHorizontal: 20,
+    borderRadius: 24,
+  },
+  ctaCardButtonText: { color: SpaceTheme.backgroundVoid, fontWeight: "700", fontSize: 14 },
 });

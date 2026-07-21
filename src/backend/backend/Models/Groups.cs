@@ -85,6 +85,13 @@ namespace Backend.Models
         [Column("showtime_report_count")]
         public int ShowtimeReportCount { get; set; } = 0;
 
+        // Only meaningful for TV watch parties (e.g. "Season 2 Premiere",
+        // "Episodes 1 & 2 Double Feature"). Its presence is itself the signal
+        // that a Space is a TV watch party — no separate category column,
+        // since that'd be redundant with a field that already implies it.
+        [Column("season_episode_info")]
+        public string? SeasonEpisodeInfo { get; set; }
+
         public DateTime CreatedAt { get; set; } = DateTime.UtcNow;
         public List<GroupMember> Members { get; set; } = new();
     }

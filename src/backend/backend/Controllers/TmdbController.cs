@@ -37,6 +37,19 @@ namespace Backend.Controllers
             return await ProxyWithCache(cacheKey, url);
         }
 
+        [HttpGet("search-tv")]
+        public async Task<IActionResult> SearchTv([FromQuery] string query)
+        {
+            if (string.IsNullOrWhiteSpace(query))
+            {
+                return Ok(new { results = Array.Empty<object>() });
+            }
+
+            var cacheKey = $"tmdb:search-tv:{query.Trim().ToLowerInvariant()}";
+            var url = $"https://api.themoviedb.org/3/search/tv?query={Uri.EscapeDataString(query)}&include_adult=false";
+            return await ProxyWithCache(cacheKey, url);
+        }
+
         [HttpGet("now-playing")]
         public async Task<IActionResult> NowPlaying()
         {

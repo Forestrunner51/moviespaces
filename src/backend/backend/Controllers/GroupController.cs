@@ -83,8 +83,11 @@ namespace Backend.Controllers
             var userId = GetUserId();
 
             var spaceType = req.SpaceType == "private_rental" ? "private_rental" : "public_gathering";
-            if (spaceType == "private_rental" && (!req.TotalCostCents.HasValue || req.TotalCostCents.Value < 0))
-                return BadRequest(new { error = "Total cost is required for a private rental." });
+            // Cost is optional — a watch party/venue can legitimately be free
+            // (TotalCostCents null/0 means "Free to Attend" in the UI), it's
+            // only invalid if a negative number sneaks through somehow.
+            if (spaceType == "private_rental" && req.TotalCostCents.HasValue && req.TotalCostCents.Value < 0)
+                return BadRequest(new { error = "Cost can't be negative." });
 
             var group = new Group
             {
@@ -111,6 +114,7 @@ namespace Backend.Controllers
                 TheaterLongitude = req.TheaterLongitude,
                 TmdbMovieId = req.TmdbMovieId,
                 ScreeningTime = req.ScreeningTime,
+                SeasonEpisodeInfo = string.IsNullOrWhiteSpace(req.SeasonEpisodeInfo) ? null : req.SeasonEpisodeInfo.Trim(),
             };
 
             group.Members.Add(new GroupMember
@@ -261,7 +265,11 @@ namespace Backend.Controllers
                 // Only filters spaces old enough to have a real ScreeningTime
                 // recorded (post-MovieGlu-removal); older/legacy rows without
                 // one stay visible rather than being hidden by a null check.
-                .Where(g => g.ScreeningTime == null || g.ScreeningTime >= DateTime.UtcNow);
+                .Where(g => g.ScreeningTime == null || g.ScreeningTime >= DateTime.UtcNow)
+                // Capacity guard — don't surface a Space nobody can actually
+                // join anymore. MaxCapacity always has a value (defaults to
+                // 40 at creation), so there's no need to special-case 0/null.
+                .Where(g => g.Members.Count(m => m.Confirmed) < g.MaxCapacity);
 
             if (filmId.HasValue)
                 query = query.Where(g => g.FilmId == filmId.Value);
@@ -270,7 +278,9 @@ namespace Backend.Controllers
                 query = query.Where(g => g.CinemaId == cinemaId.Value);
 
             var spaces = await query
-                .OrderByDescending(g => g.CreatedAt)
+                // Soonest event first; legacy rows with no ScreeningTime sort
+                // to the end rather than being hidden.
+                .OrderBy(g => g.ScreeningTime ?? DateTime.MaxValue)
                 .Take(50)
                 .ToListAsync();
 
@@ -545,7 +555,8 @@ namespace Backend.Controllers
         double? TheaterLatitude,
         double? TheaterLongitude,
         int? TmdbMovieId,
-        DateTime? ScreeningTime
+        DateTime? ScreeningTime,
+        string? SeasonEpisodeInfo
     );
 
     public record JoinGroupRequest(string Name);

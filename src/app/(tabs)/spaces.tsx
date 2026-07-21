@@ -30,7 +30,7 @@ type Tab = "spaces" | "rent" | "friends";
 
 const TABS: { key: Tab; label: string; icon: keyof typeof Ionicons.glyphMap }[] = [
   { key: "spaces", label: "Spaces", icon: "planet-outline" },
-  { key: "rent", label: "Rent a Theater", icon: "storefront-outline" },
+  { key: "rent", label: "Watch Parties", icon: "storefront-outline" },
   { key: "friends", label: "Friends", icon: "people-outline" },
 ];
 
@@ -116,9 +116,9 @@ export default function MySpacesScreen() {
                 onPress={() => router.push("/rent-a-theater")}
               >
                 <Ionicons name="storefront-outline" size={18} color={SpaceTheme.backgroundVoid} />
-                <Text style={styles.newSpaceButtonText}>Find a Theater to Rent</Text>
+                <Text style={styles.newSpaceButtonText}>Find a Venue</Text>
               </TouchableOpacity>
-              <Text style={styles.subtitle}>Private theater rentals you're part of</Text>
+              <Text style={styles.subtitle}>Watch parties you're part of</Text>
               <FlatList
                 data={rentalSpaces}
                 keyExtractor={(item) => item.id}
@@ -155,9 +155,9 @@ export default function MySpacesScreen() {
                 ListEmptyComponent={
                   <View style={styles.emptyState}>
                     <Ionicons name="storefront-outline" size={40} color={SpaceTheme.mutedOrbit} />
-                    <Text style={styles.emptyTitle}>No theater rentals yet</Text>
+                    <Text style={styles.emptyTitle}>No watch parties yet</Text>
                     <Text style={styles.emptySubtitle}>
-                      Find a theater and set up a private rental to see it here
+                      Find a venue and set one up to see it here
                     </Text>
                   </View>
                 }

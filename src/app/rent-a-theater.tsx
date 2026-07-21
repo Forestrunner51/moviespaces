@@ -20,9 +20,9 @@ export default function RentATheaterScreen() {
 
   const handleSelectTheater = (theater: NearbyTheater) => {
     Alert.alert(
-      "🎟️ Ready to Rent?",
-      "You can lock down this theater room two ways:\n\n" +
-        "1. Buy it now on their site, copy the confirmation link, and paste it here to split the cost.\n\n" +
+      "🎟️ Ready to Host?",
+      "You can lock down this venue two ways:\n\n" +
+        "1. Book it now on their site, copy the confirmation link, and paste it here to split the cost.\n\n" +
         "2. Leave the link blank for now to gauge friend interest first, then lock it in once enough people RSVP!",
       [
         { text: "Cancel", style: "cancel" },
@@ -67,12 +67,28 @@ export default function RentATheaterScreen() {
   return (
     <Starfield>
       <View style={styles.container}>
-        <Text style={[styles.title, SpaceStyles.glowText]}>Rent a Theater</Text>
+        <Text style={[styles.title, SpaceStyles.glowText]}>Host a Watch Party</Text>
         <Text style={styles.subtitle}>
-          Pick a theater to start a private rental Space with friends. MovieSpaces doesn't
-          handle the booking itself — tap the link icon to check a theater's rental info
-          directly, or use their site's confirmation link once you've booked.
+          Pick a venue — a theater, bar, community space, or your own place — to start a Space
+          with friends. MovieSpaces doesn't handle the booking itself; use the venue's own
+          confirmation link once you've locked it in.
         </Text>
+
+        <TouchableOpacity
+          activeOpacity={0.8}
+          style={styles.customCard}
+          onPress={() =>
+            router.push({ pathname: "/create-space", params: { spaceType: "private_rental" } })
+          }
+        >
+          <Ionicons name="location-outline" size={20} color={SpaceTheme.glowCyan} />
+          <View style={{ flex: 1 }}>
+            <Text style={styles.filmName}>📍 Custom / Private Address</Text>
+            <Text style={styles.details}>Backyard, someone's place, or anywhere not listed</Text>
+          </View>
+          <Ionicons name="chevron-forward" size={20} color={SpaceTheme.mutedOrbit} />
+        </TouchableOpacity>
+
         {loading ? (
           <ActivityIndicator size="large" color={SpaceTheme.glowCyan} style={{ flex: 1 }} />
         ) : (
@@ -100,14 +116,14 @@ export default function RentATheaterScreen() {
               <View style={styles.emptyState}>
                 <Ionicons name="storefront-outline" size={40} color={SpaceTheme.mutedOrbit} />
                 <Text style={styles.emptyTitle}>
-                  {error ? "Couldn't load theaters" : "No nearby theaters found"}
+                  {error ? "Couldn't load venues" : "No nearby venues found"}
                 </Text>
                 <Text style={styles.emptySubtitle}>
                   {error
                     ? error
                     : locationDenied
-                      ? "Location access was denied — allow it in Settings to see nearby theaters, or create a Space and type the theater name manually."
-                      : "Try again later or search directly with your local theater chain."}
+                      ? "Location access was denied — allow it in Settings to see nearby venues, or use Custom / Private Address above."
+                      : "Try again later, or use Custom / Private Address above."}
                 </Text>
               </View>
             }
@@ -135,6 +151,15 @@ const styles = StyleSheet.create({
     ...SpaceStyles.glassCard,
     padding: 16,
     marginBottom: 12,
+  },
+  customCard: {
+    ...SpaceStyles.glassCard,
+    flexDirection: "row",
+    alignItems: "center",
+    gap: 12,
+    padding: 16,
+    marginBottom: 16,
+    borderColor: "rgba(56, 189, 248, 0.3)",
   },
   rentCardRow: { flexDirection: "row", alignItems: "center", gap: 12 },
   filmName: {
