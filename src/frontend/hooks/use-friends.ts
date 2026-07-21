@@ -4,6 +4,7 @@ import { supabase } from "@/frontend/config/supabase";
 export interface Profile {
   id: string;
   display_name: string;
+  username?: string | null;
   avatar_url?: string;
 }
 
@@ -49,7 +50,7 @@ export function useFriends() {
       if (friendIds.length > 0) {
         const { data: profiles, error: pError } = await supabase
           .from("profiles")
-          .select("id, display_name, avatar_url")
+          .select("id, display_name, username, avatar_url")
           .in("id", friendIds);
         if (pError) throw pError;
         friendsProfiles = profiles || [];
@@ -71,7 +72,7 @@ export function useFriends() {
       if (requesterIds.length > 0) {
         const { data: reqProfiles, error: rpError } = await supabase
           .from("profiles")
-          .select("id, display_name, avatar_url")
+          .select("id, display_name, username, avatar_url")
           .in("id", requesterIds);
         if (rpError) throw rpError;
 
@@ -172,8 +173,8 @@ export function useFriends() {
     try {
       const { data, error } = await supabase
         .from("profiles")
-        .select("id, display_name, avatar_url")
-        .ilike("display_name", `%${query}%`)
+        .select("id, display_name, username, avatar_url")
+        .or(`display_name.ilike.%${query}%,username.ilike.%${query}%`)
         .neq("id", currentUserId)
         .limit(10);
 

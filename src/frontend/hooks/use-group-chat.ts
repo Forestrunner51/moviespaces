@@ -13,6 +13,7 @@ export interface GroupMessage {
   content: string;
   created_at: string;
   sender_name?: string;
+  sender_username?: string | null;
   sender_avatar_url?: string | null;
 }
 
@@ -21,7 +22,7 @@ export function useGroupChat(groupType: GroupChatType, groupId: string) {
   const [messages, setMessages] = useState<GroupMessage[]>([]);
   const [loading, setLoading] = useState(true);
   const [profileCache, setProfileCache] = useState<
-    Record<string, { display_name: string; avatar_url: string | null }>
+    Record<string, { display_name: string; username: string | null; avatar_url: string | null }>
   >({});
 
   useEffect(() => {
@@ -42,12 +43,16 @@ export function useGroupChat(groupType: GroupChatType, groupId: string) {
     if (unknownIds.length > 0) {
       const { data: profiles } = await supabase
         .from("profiles")
-        .select("id, display_name, avatar_url")
+        .select("id, display_name, username, avatar_url")
         .in("id", unknownIds);
 
       const additions: typeof profileCache = {};
       (profiles || []).forEach((p) => {
-        additions[p.id] = { display_name: p.display_name, avatar_url: p.avatar_url ?? null };
+        additions[p.id] = {
+          display_name: p.display_name,
+          username: p.username ?? null,
+          avatar_url: p.avatar_url ?? null,
+        };
       });
       cache = { ...profileCache, ...additions };
       setProfileCache(cache);
@@ -56,6 +61,7 @@ export function useGroupChat(groupType: GroupChatType, groupId: string) {
     return rows.map((m) => ({
       ...m,
       sender_name: cache[m.sender_id]?.display_name,
+      sender_username: cache[m.sender_id]?.username ?? null,
       sender_avatar_url: cache[m.sender_id]?.avatar_url ?? null,
     }));
   };
@@ -114,6 +120,7 @@ export function useGroupChat(groupType: GroupChatType, groupId: string) {
         content,
         created_at: new Date().toISOString(),
         sender_name: profileCache[currentUserId]?.display_name,
+        sender_username: profileCache[currentUserId]?.username ?? null,
         sender_avatar_url: profileCache[currentUserId]?.avatar_url ?? null,
       };
       setMessages((prev) => [...prev, newMsg]);

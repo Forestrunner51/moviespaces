@@ -22,4 +22,16 @@ public class AppDbContext : DbContext
     public DbSet<Group> Groups { get; set; }
     public DbSet<GroupMember> GroupMembers { get; set; }
     public DbSet<PushToken> PushTokens { get; set; }
+
+    protected override void OnModelCreating(ModelBuilder builder)
+    {
+        base.OnModelCreating(builder);
+
+        // Partial unique index — Slug is nullable (legacy rows predate it),
+        // and a unique index over a nullable column in Postgres already
+        // treats multiple NULLs as distinct, so no extra filter is needed.
+        builder.Entity<Group>()
+            .HasIndex(g => g.Slug)
+            .IsUnique();
+    }
 }

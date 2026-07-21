@@ -8,6 +8,15 @@ namespace Backend.Models
     public class Group
     {
         public Guid Id { get; set; } = Guid.NewGuid();
+
+        // Nicer, human-readable share identifier alongside Id (e.g.
+        // "friday-movie-night-a8f1") — additive, not a replacement. Existing
+        // links/routes are all Id-based and keep working unchanged; Slug is
+        // just available for a friendlier share URL if/when wired up.
+        // Nullable since legacy rows predate this column.
+        [Column("slug")]
+        public string? Slug { get; set; }
+
         public string HostName { get; set; } = "";
 
         // 2. Map this property directly to lowercase snake_case
