@@ -129,6 +129,20 @@ export default function AuthScreen() {
               : "Don't have an account? Sign Up"}
           </Text>
         </TouchableOpacity>
+
+        {isSignUp && (
+          <Text style={styles.legalText}>
+            By registering, you agree to our{" "}
+            <Text style={styles.legalLink} onPress={() => router.push("/legal/terms")}>
+              Terms of Service
+            </Text>{" "}
+            and{" "}
+            <Text style={styles.legalLink} onPress={() => router.push("/legal/privacy")}>
+              Privacy Policy
+            </Text>
+            .
+          </Text>
+        )}
       </View>
     </Starfield>
   );
@@ -170,4 +184,12 @@ const styles = StyleSheet.create({
   buttonText: { color: SpaceTheme.backgroundVoid, fontSize: 18, fontWeight: "bold" },
   switchLink: { marginTop: 24, alignItems: "center" },
   switchText: { color: SpaceTheme.mutedOrbit, fontSize: 14 },
+  legalText: {
+    marginTop: 16,
+    fontSize: 12,
+    color: SpaceTheme.mutedOrbit,
+    textAlign: "center",
+    lineHeight: 18,
+  },
+  legalLink: { color: SpaceTheme.glowCyan, fontWeight: "600" },
 });

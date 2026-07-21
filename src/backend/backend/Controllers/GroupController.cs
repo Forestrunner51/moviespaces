@@ -3,6 +3,7 @@ using Microsoft.EntityFrameworkCore;
 using Microsoft.AspNetCore.Authorization;
 using Backend.Data;
 using Backend.Models;
+using Backend.Services;
 using System.Security.Claims;
 using System.Net;
 using System.Text;
@@ -19,12 +20,14 @@ namespace Backend.Controllers
         private readonly AppDbContext _db;
         private readonly ILogger<GroupController> _logger;
         private readonly IHttpClientFactory _httpClientFactory;
+        private readonly PushNotificationService _pushNotificationService;
 
-        public GroupController(AppDbContext db, ILogger<GroupController> logger, IHttpClientFactory httpClientFactory)
+        public GroupController(AppDbContext db, ILogger<GroupController> logger, IHttpClientFactory httpClientFactory, PushNotificationService pushNotificationService)
         {
             _db = db;
             _logger = logger;
             _httpClientFactory = httpClientFactory;
+            _pushNotificationService = pushNotificationService;
         }
 
         // Human-readable share id, e.g. "friday-movie-night-a8f1". The random
@@ -40,50 +43,8 @@ namespace Backend.Controllers
             return $"{slug}-{suffix}";
         }
 
-        // Fire-and-forget-ish: best-effort push via Expo's push API. Missing
-        // tokens (member never opened the app / denied permission / no
-        // native build with expo-notifications yet) are silently skipped —
-        // this should never block the booking action itself.
-        private async Task NotifyMembersAsync(Guid groupId, string title, string body, string? excludeUserId = null)
-        {
-            try
-            {
-                var memberUserIds = await _db.GroupMembers
-                    .Where(m => m.GroupId == groupId && m.UserId != "" && m.UserId != excludeUserId)
-                    .Select(m => m.UserId)
-                    .Distinct()
-                    .ToListAsync();
-
-                if (memberUserIds.Count == 0) return;
-
-                var tokens = await _db.PushTokens
-                    .Where(t => memberUserIds.Contains(t.UserId))
-                    .Select(t => t.Token)
-                    .ToListAsync();
-
-                if (tokens.Count == 0) return;
-
-                var messages = tokens.Select(token => new
-                {
-                    to = token,
-                    sound = "default",
-                    title,
-                    body,
-                });
-
-                var client = _httpClientFactory.CreateClient();
-                var request = new HttpRequestMessage(HttpMethod.Post, "https://exp.host/--/api/v2/push/send")
-                {
-                    Content = new StringContent(JsonSerializer.Serialize(messages), Encoding.UTF8, "application/json"),
-                };
-                request.Headers.Add("Accept", "application/json");
-                await client.SendAsync(request);
-            }
-            catch (Exception ex)
-            {
-                _logger.LogError(ex, "Failed to send booking push notifications for group {GroupId}", groupId);
-            }
-        }
+        private Task NotifyMembersAsync(Guid groupId, string title, string body, string? excludeUserId = null) =>
+            _pushNotificationService.NotifyMembersAsync(_db, groupId, title, body, excludeUserId);
 
         private string GetUserId() =>
             User.FindFirstValue(ClaimTypes.NameIdentifier)
@@ -146,11 +107,13 @@ namespace Backend.Controllers
         }
 
         [HttpGet("{id}")]
-        public async Task<IActionResult> GetGroup(Guid id)
+        public async Task<IActionResult> GetGroup(string id)
         {
-            var group = await _db.Groups
-                .Include(g => g.Members)
-                .FirstOrDefaultAsync(g => g.Id == id);
+            // id is either the raw Guid (every existing caller) or the friendlier
+            // Slug (incoming deep links resolving via the /space/{id} route).
+            var group = Guid.TryParse(id, out var groupId)
+                ? await _db.Groups.Include(g => g.Members).FirstOrDefaultAsync(g => g.Id == groupId)
+                : await _db.Groups.Include(g => g.Members).FirstOrDefaultAsync(g => g.Slug == id);
 
             if (group == null) return NotFound();
             return Ok(group);
@@ -158,11 +121,12 @@ namespace Backend.Controllers
 
         [HttpGet("/space/{id}")]
         [AllowAnonymous]
-        public async Task<IActionResult> SpaceInvitePage(Guid id)
+        public async Task<IActionResult> SpaceInvitePage(string id)
         {
-            var group = await _db.Groups
-                .Include(g => g.Members)
-                .FirstOrDefaultAsync(g => g.Id == id);
+            // id is either the raw Guid (legacy links) or the friendlier Slug.
+            var group = Guid.TryParse(id, out var groupId)
+                ? await _db.Groups.Include(g => g.Members).FirstOrDefaultAsync(g => g.Id == groupId)
+                : await _db.Groups.Include(g => g.Members).FirstOrDefaultAsync(g => g.Slug == id);
 
             if (group == null) return NotFound();
 
@@ -224,18 +188,18 @@ namespace Backend.Controllers
                     <div class='confirmed'>✓ You're in!</div>
                     <p style='color:#888'>The host will be notified.</p>
                 </div>
-                <a href='moviespaces://space/{id}' class='app-link'>Open in the MovieSpace App</a>
+                <a href='moviespaces://space/{group.Id}' class='app-link'>Open in the MovieSpace App</a>
             </div>
 
             <script>
-                const appLink = 'moviespaces://space/{id}';
+                const appLink = 'moviespaces://space/{group.Id}';
                 setTimeout(() => {{ window.location = appLink; }}, 250);
 
                 async function joinSpace() {{
                     const name = document.getElementById('name').value.trim();
                     if (!name) return;
 
-                    const res = await fetch('/api/group/{id}/join-web', {{
+                    const res = await fetch('/api/group/{group.Id}/join-web', {{
                         method: 'POST',
                         headers: {{ 'Content-Type': 'application/json' }},
                         body: JSON.stringify({{ name }})
@@ -562,6 +526,46 @@ namespace Backend.Controllers
             await _db.SaveChangesAsync();
 
             return Ok(new { hostName = group.HostName });
+        }
+
+        // Host-only: flags the Space as cancelled (distinct from DeleteGroup —
+        // this keeps the Space and its history around, just marks it dead and
+        // tells everyone who'd confirmed attendance).
+        [HttpPost("{id}/cancel")]
+        public async Task<IActionResult> CancelGroup(Guid id)
+        {
+            var userId = GetUserId();
+            var group = await _db.Groups.FindAsync(id);
+            if (group == null) return NotFound();
+            if (group.UserId != userId) return Forbid();
+
+            group.Status = "cancelled";
+            await _db.SaveChangesAsync();
+
+            await NotifyMembersAsync(
+                id,
+                "❌ Space cancelled",
+                $"{group.HostName} cancelled {group.FilmName} at {group.CinemaName}."
+            );
+
+            return Ok();
+        }
+
+        // Removes the caller's own membership. The per-person cost split is
+        // derived client-side from confirmed member count, so nothing else
+        // needs recalculating server-side.
+        [HttpPost("{id}/leave")]
+        public async Task<IActionResult> LeaveGroup(Guid id)
+        {
+            var userId = GetUserId();
+            var member = await _db.GroupMembers
+                .FirstOrDefaultAsync(m => m.GroupId == id && m.UserId == userId);
+            if (member == null) return NotFound();
+
+            _db.GroupMembers.Remove(member);
+            await _db.SaveChangesAsync();
+
+            return Ok();
         }
     }
 

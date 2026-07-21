@@ -17,6 +17,7 @@ import {
 } from "react-native";
 import { useLocalSearchParams, router } from "expo-router";
 import * as WebBrowser from "expo-web-browser";
+import * as Calendar from "expo-calendar";
 import { supabase } from "@/frontend/config/supabase";
 import { Starfield } from "@/frontend/components/starfield";
 import { SpaceTheme, SpaceStyles } from "@/frontend/constants/theme";
@@ -31,6 +32,7 @@ interface Member {
 }
 interface Group {
   id: string;
+  slug: string | null;
   userId: string;
   hostName: string;
   cinemaId: number | null;
@@ -39,6 +41,7 @@ interface Group {
   filmName: string;
   showTime: string;
   showDate: string;
+  screeningTime: string | null;
   bookingUrl: string;
   status: string;
   spaceType: "public_gathering" | "private_rental";
@@ -93,15 +96,69 @@ export default function GroupScreen() {
       return;
     }
 
+    const shareId = group?.slug || groupId;
+
     await Share.share({
-      // 👇 CHANGE "/join/" TO "/space/" IN THIS TEMPLATE STRING
-      message: `Join my movie group! Open this link: ${process.env.EXPO_PUBLIC_API_URL}/space/${groupId}`,
+      message: `Join my movie group! Open this link: ${process.env.EXPO_PUBLIC_API_URL}/space/${shareId}`,
     });
   };
 
   const handleGetTickets = async () => {
     if (!group) return;
     await WebBrowser.openBrowserAsync(buildTicketUrl(group.filmName, group.bookingUrl));
+  };
+
+  const [addingToCalendar, setAddingToCalendar] = useState(false);
+
+  const handleAddToCalendar = async () => {
+    if (!group) return;
+
+    // ScreeningTime is the only field with a real Date — ShowDate/ShowTime
+    // are host-typed free text and can't be reliably parsed.
+    if (!group.screeningTime) {
+      Alert.alert(
+        "Can't add to calendar",
+        "This Space doesn't have an exact date/time set, so it can't be added automatically.",
+      );
+      return;
+    }
+
+    setAddingToCalendar(true);
+    try {
+      const { status } = await Calendar.requestCalendarPermissions();
+      if (status !== "granted") {
+        Alert.alert("Permission needed", "Allow calendar access to add this watch party.");
+        return;
+      }
+
+      const calendars = await Calendar.getCalendars(Calendar.EntityTypes.EVENT);
+      const writableCalendar =
+        calendars.find((c) => c.allowsModifications && c.isPrimary) ??
+        calendars.find((c) => c.allowsModifications);
+
+      if (!writableCalendar) {
+        Alert.alert("No calendar available", "Couldn't find a calendar to add this event to.");
+        return;
+      }
+
+      const startDate = new Date(group.screeningTime);
+      const endDate = new Date(startDate.getTime() + 3 * 60 * 60 * 1000);
+
+      await writableCalendar.createEvent({
+        title: group.filmName,
+        startDate,
+        endDate,
+        location: group.cinemaName,
+        notes: `MovieSpace watch party hosted by ${group.hostName}`,
+      });
+
+      Alert.alert("Added!", "This watch party is now on your calendar.");
+    } catch (err) {
+      console.error("Failed to add to calendar:", err);
+      Alert.alert("Couldn't add to calendar", "Please try again.");
+    } finally {
+      setAddingToCalendar(false);
+    }
   };
 
   const [confirming, setConfirming] = useState(false);
@@ -195,13 +252,25 @@ export default function GroupScreen() {
     );
   };
 
+  const [cancellingSpace, setCancellingSpace] = useState(false);
+
+  const handleMarkCancelled = async () => {
+    setCancellingSpace(true);
+    await authFetch(`${process.env.EXPO_PUBLIC_API_URL}/api/group/${groupId}/cancel`, {
+      method: "POST",
+    });
+    await fetchGroup();
+    setCancellingSpace(false);
+  };
+
   const handleCancelSpace = () => {
     const otherMembers = (group?.members ?? []).filter((m) => m.userId !== group?.userId);
     Alert.alert(
       "Cancel this Space?",
-      "You can hand ownership to another member instead, or delete the Space entirely.",
+      "Mark it cancelled to notify everyone while keeping it around, hand it off to another member, or delete it entirely.",
       [
         { text: "Nevermind", style: "cancel" },
+        { text: "Mark Cancelled & Notify", onPress: handleMarkCancelled },
         {
           text: "Hand Ownership",
           onPress: () => {
@@ -213,6 +282,29 @@ export default function GroupScreen() {
           },
         },
         { text: "Delete Permanently", style: "destructive", onPress: handleDeleteGroup },
+      ],
+    );
+  };
+
+  const [leaving, setLeaving] = useState(false);
+
+  const handleLeaveSpace = () => {
+    Alert.alert(
+      "Leave this Space?",
+      "You'll be removed from the member list and the cost split.",
+      [
+        { text: "Cancel", style: "cancel" },
+        {
+          text: "Leave",
+          style: "destructive",
+          onPress: async () => {
+            setLeaving(true);
+            await authFetch(`${process.env.EXPO_PUBLIC_API_URL}/api/group/${groupId}/leave`, {
+              method: "POST",
+            });
+            router.replace("/(tabs)/spaces");
+          },
+        },
       ],
     );
   };
@@ -306,6 +398,11 @@ export default function GroupScreen() {
   return (
     <Starfield>
       <ScrollView style={styles.container} contentContainerStyle={styles.containerContent}>
+        {group.status === "cancelled" && (
+          <View style={styles.cancelledBanner}>
+            <Text style={styles.cancelledBannerText}>❌ This Space has been cancelled</Text>
+          </View>
+        )}
         {group.seasonEpisodeInfo && (
           <View style={styles.tvBadge}>
             <Text style={styles.tvBadgeText}>
@@ -473,6 +570,19 @@ export default function GroupScreen() {
           )
         )}
 
+        {isMember && !isHost && (
+          <TouchableOpacity
+            activeOpacity={0.8}
+            style={styles.leaveSpaceButton}
+            onPress={handleLeaveSpace}
+            disabled={leaving}
+          >
+            <Text style={styles.leaveSpaceButtonText}>
+              {leaving ? "Leaving..." : "🚪 Leave Space"}
+            </Text>
+          </TouchableOpacity>
+        )}
+
         <TouchableOpacity activeOpacity={0.8} style={styles.shareButton} onPress={shareLink}>
           <Text style={styles.buttonText}>📤 Invite Friends</Text>
         </TouchableOpacity>
@@ -506,6 +616,19 @@ export default function GroupScreen() {
             onPress={handleGetTickets}
           >
             <Text style={styles.ticketsButtonText}>🎟 Get Tickets</Text>
+          </TouchableOpacity>
+        )}
+
+        {(isHost || isMember) && (
+          <TouchableOpacity
+            activeOpacity={0.8}
+            style={styles.calendarButton}
+            onPress={handleAddToCalendar}
+            disabled={addingToCalendar}
+          >
+            <Text style={styles.calendarButtonText}>
+              {addingToCalendar ? "Adding..." : "📅 Add to Calendar"}
+            </Text>
           </TouchableOpacity>
         )}
 
@@ -798,6 +921,16 @@ const styles = StyleSheet.create({
     elevation: 6,
   },
   ticketsButtonText: { color: SpaceTheme.backgroundVoid, fontWeight: "800", fontSize: 18 },
+  calendarButton: {
+    backgroundColor: "rgba(255, 255, 255, 0.08)",
+    borderWidth: 1,
+    borderColor: "rgba(255, 255, 255, 0.15)",
+    padding: 14,
+    borderRadius: 12,
+    alignItems: "center",
+    marginBottom: 12,
+  },
+  calendarButtonText: { color: SpaceTheme.starWhite, fontWeight: "600", fontSize: 14 },
   bookButton: {
     backgroundColor: "#4ADE80",
     padding: 14,
@@ -818,6 +951,26 @@ const styles = StyleSheet.create({
     marginTop: 12,
   },
   cancelSpaceButtonText: { color: SpaceTheme.supernovaPink, fontWeight: "600", fontSize: 14 },
+  cancelledBanner: {
+    backgroundColor: "rgba(255, 59, 92, 0.12)",
+    borderWidth: 1,
+    borderColor: SpaceTheme.supernovaPink,
+    borderRadius: 12,
+    padding: 12,
+    marginBottom: 12,
+    alignItems: "center",
+  },
+  cancelledBannerText: { color: SpaceTheme.supernovaPink, fontWeight: "700", fontSize: 14 },
+  leaveSpaceButton: {
+    backgroundColor: "rgba(255, 255, 255, 0.08)",
+    borderWidth: 1,
+    borderColor: "rgba(255, 255, 255, 0.15)",
+    padding: 14,
+    borderRadius: 12,
+    alignItems: "center",
+    marginBottom: 12,
+  },
+  leaveSpaceButtonText: { color: SpaceTheme.mutedOrbit, fontWeight: "600", fontSize: 14 },
   buttonText: { color: SpaceTheme.backgroundVoid, fontWeight: "700", fontSize: 16 },
   rentalReservationButton: {
     backgroundColor: SpaceTheme.glowCyan,

@@ -1,6 +1,8 @@
 import { DarkTheme, ThemeProvider } from "expo-router";
 import { Stack, router } from "expo-router";
 import { useEffect, useState } from "react";
+import * as Sentry from "@sentry/react-native";
+import "@/frontend/services/sentry";
 import { AnimatedSplashOverlay } from "@/frontend/components/animated-icon";
 import { supabase } from "@/frontend/config/supabase";
 import { SpaceTheme } from "@/frontend/constants/theme";
@@ -22,7 +24,7 @@ const SpaceNavigationTheme = {
   },
 };
 
-export default function Layout() {
+function Layout() {
   const [session, setSession] = useState<any>(null);
   const [loading, setLoading] = useState(true);
 
@@ -65,12 +67,17 @@ export default function Layout() {
         <Stack.Screen name="auth" options={{ headerShown: false }} />
         <Stack.Screen name="(tabs)" options={{ headerShown: false }} />
         <Stack.Screen name="group" options={{ title: "Movie Group" }} />
+        <Stack.Screen name="space/[id]" options={{ title: "Opening Space..." }} />
         <Stack.Screen name="join" options={{ title: "Join Group" }} />
         <Stack.Screen name="chat/[userId]" options={{ title: "Chat" }} />
         <Stack.Screen name="group-chat/[id]" options={{ title: "Group Chat" }} />
         <Stack.Screen name="create-space" options={{ title: "Create a Space" }} />
         <Stack.Screen name="rent-a-theater" options={{ title: "Rent a Theater" }} />
+        <Stack.Screen name="legal/terms" options={{ title: "Terms of Service" }} />
+        <Stack.Screen name="legal/privacy" options={{ title: "Privacy Policy" }} />
       </Stack>
     </ThemeProvider>
   );
 }
+
+export default Sentry.wrap(Layout);

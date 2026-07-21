@@ -1,4 +1,4 @@
-import { useRef, useState } from "react";
+import { useEffect, useRef, useState } from "react";
 import {
   View,
   Text,
@@ -10,11 +10,13 @@ import {
   Platform,
   ActivityIndicator,
   Image,
+  Alert,
 } from "react-native";
 import { useLocalSearchParams, Stack } from "expo-router";
 import { Starfield } from "@/frontend/components/starfield";
 import { SpaceTheme, SpaceStyles } from "@/frontend/constants/theme";
 import { useGroupChat, GroupMessage, GroupChatType } from "@/frontend/hooks/use-group-chat";
+import { reportContent, blockUser, getBlockedUserIds } from "@/frontend/services/moderation";
 
 export default function GroupChatScreen() {
   const { id, type, title, showTime, showDate, seasonEpisodeInfo } = useLocalSearchParams<{
@@ -28,6 +30,11 @@ export default function GroupChatScreen() {
   const { currentUserId, messages, loading, sendMessage } = useGroupChat(type, id);
   const [text, setText] = useState("");
   const listRef = useRef<FlatList>(null);
+  const [blockedIds, setBlockedIds] = useState<string[]>([]);
+
+  useEffect(() => {
+    getBlockedUserIds().then(setBlockedIds);
+  }, []);
 
   const handleSend = async () => {
     const content = text.trim();
@@ -35,6 +42,36 @@ export default function GroupChatScreen() {
     setText("");
     await sendMessage(content);
     listRef.current?.scrollToEnd({ animated: true });
+  };
+
+  const handleLongPressMessage = (item: GroupMessage) => {
+    Alert.alert(item.sender_name || "This message", "What would you like to do?", [
+      { text: "Cancel", style: "cancel" },
+      {
+        text: "Report Message",
+        onPress: async () => {
+          const result = await reportContent("message", item.id, item.content);
+          Alert.alert(
+            result.success ? "Reported" : "Couldn't report",
+            result.success
+              ? "Thanks — our team will review this message."
+              : result.error || "Please try again.",
+          );
+        },
+      },
+      {
+        text: `Block ${item.sender_name || "User"}`,
+        style: "destructive",
+        onPress: async () => {
+          const result = await blockUser(item.sender_id);
+          if (result.success) {
+            setBlockedIds((prev) => [...prev, item.sender_id]);
+          } else {
+            Alert.alert("Couldn't block user", result.error || "Please try again.");
+          }
+        },
+      },
+    ]);
   };
 
   const renderItem = ({ item }: { item: GroupMessage }) => {
@@ -47,7 +84,11 @@ export default function GroupChatScreen() {
       );
     }
     return (
-      <View style={styles.rowThem}>
+      <TouchableOpacity
+        activeOpacity={0.9}
+        onLongPress={() => handleLongPressMessage(item)}
+        style={styles.rowThem}
+      >
         {item.sender_avatar_url ? (
           <Image source={{ uri: item.sender_avatar_url }} style={styles.avatar} />
         ) : (
@@ -68,9 +109,11 @@ export default function GroupChatScreen() {
             <Text style={styles.bubbleText}>{item.content}</Text>
           </View>
         </View>
-      </View>
+      </TouchableOpacity>
     );
   };
+
+  const visibleMessages = messages.filter((m) => !blockedIds.includes(m.sender_id));
 
   return (
     <Starfield>
@@ -93,7 +136,7 @@ export default function GroupChatScreen() {
         ) : (
           <FlatList
             ref={listRef}
-            data={messages}
+            data={visibleMessages}
             keyExtractor={(item) => item.id}
             renderItem={renderItem}
             contentContainerStyle={styles.list}
