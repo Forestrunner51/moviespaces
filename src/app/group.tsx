@@ -23,6 +23,7 @@ import { Starfield } from "@/frontend/components/starfield";
 import { SpaceTheme, SpaceStyles } from "@/frontend/constants/theme";
 import { buildTicketUrl } from "@/frontend/services/ticket-links";
 import { activityLabel, activityEmoji } from "@/frontend/constants/activities";
+import { useFriends } from "@/frontend/hooks/use-friends";
 
 interface Member {
   id: string;
@@ -62,6 +63,21 @@ export default function GroupScreen() {
   const [group, setGroup] = useState<Group | null>(null);
   const [loading, setLoading] = useState(true);
   const [currentUserId, setCurrentUserId] = useState<string | null>(null);
+
+  // Friend requests straight from the member list — see who you're watching
+  // with and add them without leaving the Space.
+  const { friends, sendFriendRequest } = useFriends();
+  const [requestedFriendIds, setRequestedFriendIds] = useState<Set<string>>(new Set());
+  const friendIds = new Set(friends.map((f) => f.id));
+
+  const handleAddFriend = async (userId: string) => {
+    const result = await sendFriendRequest(userId);
+    if (result.success || result.error?.includes("already exists")) {
+      setRequestedFriendIds((prev) => new Set(prev).add(userId));
+    } else {
+      Alert.alert("Couldn't send request", result.error || "Please try again.");
+    }
+  };
 
   useEffect(() => {
     supabase.auth.getUser().then(({ data: { user } }) => {
@@ -523,14 +539,37 @@ export default function GroupScreen() {
             data={groupMembers}
             scrollEnabled={false}
             keyExtractor={(item) => item.id}
-            renderItem={({ item }) => (
-              <View style={styles.memberRow}>
-                <Text style={styles.memberName}>{item.name}</Text>
-                <Text style={item.confirmed ? styles.confirmed : styles.pending}>
-                  {item.confirmed ? "✓ In" : "Pending"}
-                </Text>
-              </View>
-            )}
+            renderItem={({ item }) => {
+              // Only app members (non-empty Supabase userId) can be friended —
+              // web/name-only joiners have no account to send a request to.
+              // Never show it for yourself.
+              const canAddFriend =
+                !!item.userId &&
+                item.userId !== currentUserId &&
+                !friendIds.has(item.userId);
+              return (
+                <View style={styles.memberRow}>
+                  <Text style={styles.memberName}>{item.name}</Text>
+                  <View style={styles.memberRowRight}>
+                    {canAddFriend &&
+                      (requestedFriendIds.has(item.userId) ? (
+                        <Text style={styles.friendRequested}>Requested</Text>
+                      ) : (
+                        <TouchableOpacity
+                          activeOpacity={0.8}
+                          onPress={() => handleAddFriend(item.userId)}
+                          hitSlop={8}
+                        >
+                          <Text style={styles.addFriendText}>+ Add Friend</Text>
+                        </TouchableOpacity>
+                      ))}
+                    <Text style={item.confirmed ? styles.confirmed : styles.pending}>
+                      {item.confirmed ? "✓ In" : "Pending"}
+                    </Text>
+                  </View>
+                </View>
+              );
+            }}
           />
         </View>
 
@@ -863,6 +902,9 @@ const styles = StyleSheet.create({
     borderBottomColor: "rgba(255,255,255,0.08)",
   },
   memberName: { fontSize: 16, color: SpaceTheme.starWhite },
+  memberRowRight: { flexDirection: "row", alignItems: "center", gap: 12 },
+  addFriendText: { color: SpaceTheme.glowCyan, fontWeight: "700", fontSize: 13 },
+  friendRequested: { color: SpaceTheme.mutedOrbit, fontSize: 13 },
   confirmed: { color: "#4ADE80", fontWeight: "600" },
   pending: { color: SpaceTheme.supernovaPink, fontWeight: "600" },
   joinButton: {
