@@ -42,7 +42,7 @@ export default function SpaceRedirectScreen() {
     <Starfield>
       <View style={styles.center}>
         {error ? (
-          <Text style={styles.errorText}>This Space link couldn't be found.</Text>
+          <Text style={styles.errorText}>This Space link couldn&apos;t be found.</Text>
         ) : (
           <ActivityIndicator size="large" color={SpaceTheme.glowCyan} />
         )}

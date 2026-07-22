@@ -7,6 +7,7 @@ import {
   StyleSheet,
   ActivityIndicator,
   Alert,
+  ScrollView,
 } from "react-native";
 import { supabase } from "@/frontend/config/supabase";
 import { useCallback, useEffect, useState } from "react";
@@ -288,6 +289,10 @@ export default function ProfileScreen() {
     }
   };
 
+  // Deliberately impure: this needs to read the actual current time on every
+  // render so a Space correctly flips from Upcoming to Past while this screen
+  // stays mounted and time passes — memoizing it would freeze it stale.
+  // eslint-disable-next-line react-hooks/purity -- see comment above
   const now = Date.now();
   // Legacy Spaces predate the screeningTime column and have no exact event
   // time — falling back to createdAt means they still age out of "Upcoming"
@@ -314,7 +319,11 @@ export default function ProfileScreen() {
 
   return (
     <Starfield>
-      <View style={styles.container}>
+      <ScrollView
+        style={styles.container}
+        contentContainerStyle={styles.containerContent}
+        keyboardShouldPersistTaps="handled"
+      >
         <Text style={[styles.title, SpaceStyles.glowText]}>Profile</Text>
 
         <View style={styles.card}>
@@ -531,7 +540,7 @@ export default function ProfileScreen() {
             <Text style={styles.legalLinkText}>Privacy Policy</Text>
           </TouchableOpacity>
         </View>
-      </View>
+      </ScrollView>
     </Starfield>
   );
 }
@@ -539,8 +548,11 @@ export default function ProfileScreen() {
 const styles = StyleSheet.create({
   container: {
     flex: 1,
+  },
+  containerContent: {
     paddingTop: 60,
     paddingHorizontal: 16,
+    paddingBottom: 40,
   },
   title: {
     fontSize: 28,

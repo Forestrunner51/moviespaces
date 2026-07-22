@@ -268,15 +268,11 @@ export default function GroupScreen() {
     );
   };
 
-  const [cancellingSpace, setCancellingSpace] = useState(false);
-
   const handleMarkCancelled = async () => {
-    setCancellingSpace(true);
     await authFetch(`${process.env.EXPO_PUBLIC_API_URL}/api/group/${groupId}/cancel`, {
       method: "POST",
     });
     await fetchGroup();
-    setCancellingSpace(false);
   };
 
   const handleCancelSpace = () => {
@@ -722,7 +718,7 @@ export default function GroupScreen() {
           <View style={styles.modal}>
             <Text style={styles.modalTitle}>Hand Ownership To...</Text>
             <Text style={styles.modalSubtitle}>
-              They'll become the new host — you'll stay on as a regular member.
+              They&apos;ll become the new host — you&apos;ll stay on as a regular member.
             </Text>
             <FlatList
               data={groupMembers.filter((m) => m.userId !== group.userId)}
@@ -764,8 +760,8 @@ export default function GroupScreen() {
           <View style={styles.modal}>
             <Text style={styles.modalTitle}>Add Venue / Event Link</Text>
             <Text style={styles.modalSubtitle}>
-              Paste the reservation, invite, or chip-in link once the venue's locked in — this
-              lets everyone know it's confirmed.
+              Paste the reservation, invite, or chip-in link once the venue&apos;s locked in — this
+              lets everyone know it&apos;s confirmed.
             </Text>
             <TextInput
               style={styles.modalInput}

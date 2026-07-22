@@ -7,6 +7,10 @@ import { supabase } from "@/frontend/config/supabase";
 // not a query per space.
 export function useUnreadCounts(groupIds: string[]) {
   const [counts, setCounts] = useState<Record<string, number>>({});
+  // A stable, primitive dependency for the effect below — an array literal's
+  // identity changes every render even when its contents don't, which would
+  // re-trigger this effect (and its poll interval) constantly.
+  const groupIdsKey = groupIds.join(",");
 
   useEffect(() => {
     if (groupIds.length === 0) {
@@ -61,7 +65,7 @@ export function useUnreadCounts(groupIds: string[]) {
       cancelled = true;
       clearInterval(interval);
     };
-  }, [groupIds.join(",")]);
+  }, [groupIdsKey]);
 
   return counts;
 }

@@ -13,6 +13,7 @@ import { supabase } from "../frontend/config/supabase";
 import { useRouter } from "expo-router";
 import { Starfield } from "@/frontend/components/starfield";
 import { SpaceTheme, SpaceStyles } from "@/frontend/constants/theme";
+import { consumePendingRedirect } from "@/frontend/services/pending-redirect";
 
 export default function AuthScreen() {
   const router = useRouter();
@@ -32,7 +33,7 @@ export default function AuthScreen() {
     if (isSignUp) {
       // Handle Registration — pass name as user_metadata so it's attached
       // to the account itself, not just this device.
-      const { data, error } = await supabase.auth.signUp({
+      const { error } = await supabase.auth.signUp({
         email: email,
         password: password,
         options: {
@@ -44,7 +45,7 @@ export default function AuthScreen() {
         Alert.alert("Sign Up Error", error.message);
       } else {
         await AsyncStorage.setItem("userName", name.trim());
-        router.replace("/"); // go straight in, no confirmation needed
+        router.replace(consumePendingRedirect() ?? "/"); // go straight in, no confirmation needed
       }
     } else {
       // Handle Login
@@ -62,7 +63,7 @@ export default function AuthScreen() {
         if (fullName) {
           await AsyncStorage.setItem("userName", fullName);
         }
-        router.replace("/");
+        router.replace(consumePendingRedirect() ?? "/");
       }
     }
     setLoading(false);

@@ -353,21 +353,24 @@ namespace Backend.Controllers
             return Ok(new { memberId = member.Id });
         }
 
-        // Host-only: confirming/unconfirming a member's attendance is a host
-        // action (the UI only surfaces the toggle to the host). Without this
-        // check any authenticated user could flip anyone's RSVP on any Space.
+        // A member confirms/cancels their own RSVP (group.tsx's "Confirm
+        // You're Going" / "Tap to Cancel" button); the host may additionally
+        // toggle any member's RSVP. Without an ownership check here at all,
+        // any authenticated user could flip anyone's RSVP on any Space just
+        // by knowing the memberId — so the caller must be either the host or
+        // the member being confirmed.
         [HttpPost("{id}/confirm/{memberId}")]
         public async Task<IActionResult> ConfirmMember(Guid id, Guid memberId)
         {
             var userId = GetUserId();
             var group = await _db.Groups.FindAsync(id);
             if (group == null) return NotFound();
-            if (group.UserId != userId) return Forbid();
 
             var member = await _db.GroupMembers
                 .FirstOrDefaultAsync(m => m.Id == memberId && m.GroupId == id);
-
             if (member == null) return NotFound();
+
+            if (group.UserId != userId && member.UserId != userId) return Forbid();
 
             member.Confirmed = true;
             await _db.SaveChangesAsync();
@@ -381,12 +384,12 @@ namespace Backend.Controllers
             var userId = GetUserId();
             var group = await _db.Groups.FindAsync(id);
             if (group == null) return NotFound();
-            if (group.UserId != userId) return Forbid();
 
             var member = await _db.GroupMembers
                 .FirstOrDefaultAsync(m => m.Id == memberId && m.GroupId == id);
-
             if (member == null) return NotFound();
+
+            if (group.UserId != userId && member.UserId != userId) return Forbid();
 
             member.Confirmed = false;
             await _db.SaveChangesAsync();

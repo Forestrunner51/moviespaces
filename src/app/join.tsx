@@ -5,6 +5,7 @@ import {
   TextInput,
   TouchableOpacity,
   StyleSheet,
+  Alert,
 } from "react-native";
 import { useLocalSearchParams, router } from "expo-router";
 import AsyncStorage from "@react-native-async-storage/async-storage";
@@ -26,20 +27,28 @@ export default function JoinScreen() {
   const handleJoin = async () => {
     if (!name.trim()) return;
     setLoading(true);
-    await AsyncStorage.setItem("userName", name.trim());
-    const res = await authFetch(
-      `${process.env.EXPO_PUBLIC_API_URL}/api/group/${groupId}/join`,
-      {
-        method: "POST",
-        body: JSON.stringify({ name }),
-      },
-    );
-    await res.json();
-    setLoading(false);
-    router.replace({
-      pathname: "/group",
-      params: { groupId, hostName: "" },
-    });
+    try {
+      await AsyncStorage.setItem("userName", name.trim());
+      const res = await authFetch(
+        `${process.env.EXPO_PUBLIC_API_URL}/api/group/${groupId}/join`,
+        {
+          method: "POST",
+          body: JSON.stringify({ name: name.trim() }),
+        },
+      );
+      if (!res.ok) {
+        const body = await res.json().catch(() => null);
+        throw new Error(body?.error || "Couldn't join this Space. Please try again.");
+      }
+      router.replace({
+        pathname: "/group",
+        params: { groupId, hostName: "" },
+      });
+    } catch (err: any) {
+      Alert.alert("Couldn't join", err.message || "Please try again.");
+    } finally {
+      setLoading(false);
+    }
   };
 
   return (
