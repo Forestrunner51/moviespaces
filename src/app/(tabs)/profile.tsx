@@ -35,6 +35,7 @@ interface MySpace {
   showDate: string;
   screeningTime: string | null;
   status: string;
+  createdAt: string;
 }
 
 export default function ProfileScreen() {
@@ -286,12 +287,17 @@ export default function ProfileScreen() {
   };
 
   const now = Date.now();
+  // Legacy Spaces predate the screeningTime column and have no exact event
+  // time — falling back to createdAt means they still age out of "Upcoming"
+  // eventually instead of being stuck there forever just because we can't
+  // pin down their real showtime.
+  const effectiveTime = (s: MySpace) => new Date(s.screeningTime ?? s.createdAt).getTime();
   const upcomingSpaces = mySpaces
-    .filter((s) => s.status !== "cancelled" && (!s.screeningTime || new Date(s.screeningTime).getTime() >= now))
-    .sort((a, b) => new Date(a.screeningTime ?? 0).getTime() - new Date(b.screeningTime ?? 0).getTime());
+    .filter((s) => s.status !== "cancelled" && effectiveTime(s) >= now)
+    .sort((a, b) => effectiveTime(a) - effectiveTime(b));
   const pastSpaces = mySpaces
-    .filter((s) => s.status === "cancelled" || (s.screeningTime && new Date(s.screeningTime).getTime() < now))
-    .sort((a, b) => new Date(b.screeningTime ?? 0).getTime() - new Date(a.screeningTime ?? 0).getTime());
+    .filter((s) => s.status === "cancelled" || effectiveTime(s) < now)
+    .sort((a, b) => effectiveTime(b) - effectiveTime(a));
 
   if (loading) {
     return (
