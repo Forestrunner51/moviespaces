@@ -124,13 +124,30 @@ export default function CreateSpaceScreen() {
 
   // Invite friends already on the app — after the Space is created we DM each
   // selected friend the invite link (reuses the friends-only messages table).
+  // Picked via a modal (not inline chips) so this doesn't turn into an
+  // unbounded, unfilterable wall of chips for hosts with a lot of friends.
   const { currentUserId, friends } = useFriends();
   const [invitedFriendIds, setInvitedFriendIds] = useState<Set<string>>(new Set());
+  const [friendsModalVisible, setFriendsModalVisible] = useState(false);
+  const [friendSearch, setFriendSearch] = useState("");
+
+  const filteredFriends = friends.filter((f) => {
+    const query = friendSearch.trim().toLowerCase();
+    if (!query) return true;
+    return (
+      f.display_name.toLowerCase().includes(query) ||
+      (f.username ?? "").toLowerCase().includes(query)
+    );
+  });
 
   const toggleInviteFriend = (id: string) => {
     setInvitedFriendIds((prev) => {
       const next = new Set(prev);
-      next.has(id) ? next.delete(id) : next.add(id);
+      if (next.has(id)) {
+        next.delete(id);
+      } else {
+        next.add(id);
+      }
       return next;
     });
   };
@@ -495,7 +512,18 @@ export default function CreateSpaceScreen() {
           <TouchableOpacity
             activeOpacity={0.8}
             style={styles.pickerField}
-            onPress={() => setDatePickerVisible(true)}
+            onPress={() => {
+              // Seed a real value immediately (not just whatever the
+              // spinner happens to be showing) — otherwise tapping "Done"
+              // without ever touching the wheel leaves showDate/dateValue
+              // unset, since onValueChange only fires on user interaction.
+              if (!dateValue) {
+                const initial = new Date();
+                setDateValue(initial);
+                setShowDate(formatDate(initial));
+              }
+              setDatePickerVisible(true);
+            }}
           >
             <Ionicons name="calendar-outline" size={18} color={SpaceTheme.mutedOrbit} />
             <Text style={[styles.pickerFieldText, !showDate && styles.pickerFieldPlaceholder]}>
@@ -528,7 +556,17 @@ export default function CreateSpaceScreen() {
           <TouchableOpacity
             activeOpacity={0.8}
             style={styles.pickerField}
-            onPress={() => setTimePickerVisible(true)}
+            onPress={() => {
+              // Same fix as the date field above — seed a real value up
+              // front so "Done" always has something to commit even if the
+              // user never touches the spinner.
+              if (!timeValue) {
+                const initial = new Date();
+                setTimeValue(initial);
+                setShowTime(formatTime(initial));
+              }
+              setTimePickerVisible(true);
+            }}
           >
             <Ionicons name="time-outline" size={18} color={SpaceTheme.mutedOrbit} />
             <Text style={[styles.pickerFieldText, !showTime && styles.pickerFieldPlaceholder]}>
@@ -563,7 +601,7 @@ export default function CreateSpaceScreen() {
                 <Text style={styles.rentalSectionTitle}>Venue & Event Details</Text>
               </View>
               <Text style={styles.rentalSectionSubtext}>
-                Whether you've already booked this venue or you're still gauging interest before
+                Whether you&apos;ve already booked this venue or you&apos;re still gauging interest before
                 spending money, these fields keep guests informed — cost-splitting and capacity
                 only. The app never charges anyone.
               </Text>
@@ -669,30 +707,38 @@ export default function CreateSpaceScreen() {
           {friends.length > 0 && (
             <>
               <Text style={styles.afterSectionTitle}>Invite friends (optional)</Text>
-              <View style={styles.chipRow}>
-                {friends.map((friend) => {
-                  const selected = invitedFriendIds.has(friend.id);
-                  return (
-                    <TouchableOpacity
-                      key={friend.id}
-                      activeOpacity={0.8}
-                      style={[styles.afterChip, selected && styles.afterChipActive]}
-                      onPress={() => toggleInviteFriend(friend.id)}
-                    >
-                      <Ionicons
-                        name={selected ? "checkmark-circle" : "person-add-outline"}
-                        size={14}
-                        color={selected ? SpaceTheme.glowCyan : SpaceTheme.mutedOrbit}
-                      />
-                      <Text
-                        style={[styles.afterChipText, selected && styles.afterChipTextActive]}
+              <TouchableOpacity
+                activeOpacity={0.8}
+                style={styles.pickerField}
+                onPress={() => setFriendsModalVisible(true)}
+              >
+                <Ionicons name="person-add-outline" size={18} color={SpaceTheme.mutedOrbit} />
+                <Text style={styles.pickerFieldText}>
+                  {invitedFriendIds.size === 0
+                    ? `Select from ${friends.length} friend${friends.length === 1 ? "" : "s"}`
+                    : `${invitedFriendIds.size} friend${invitedFriendIds.size === 1 ? "" : "s"} selected`}
+                </Text>
+                <Ionicons name="chevron-down" size={18} color={SpaceTheme.mutedOrbit} />
+              </TouchableOpacity>
+              {invitedFriendIds.size > 0 && (
+                <View style={styles.chipRow}>
+                  {friends
+                    .filter((f) => invitedFriendIds.has(f.id))
+                    .map((friend) => (
+                      <TouchableOpacity
+                        key={friend.id}
+                        activeOpacity={0.8}
+                        style={[styles.afterChip, styles.afterChipActive]}
+                        onPress={() => toggleInviteFriend(friend.id)}
                       >
-                        {friend.display_name}
-                      </Text>
-                    </TouchableOpacity>
-                  );
-                })}
-              </View>
+                        <Text style={[styles.afterChipText, styles.afterChipTextActive]}>
+                          {friend.display_name}
+                        </Text>
+                        <Ionicons name="close" size={14} color={SpaceTheme.glowCyan} />
+                      </TouchableOpacity>
+                    ))}
+                </View>
+              )}
               <Text style={styles.rentalHintText}>
                 💡 Selected friends get the invite link sent to them in the app.
               </Text>
@@ -851,7 +897,7 @@ export default function CreateSpaceScreen() {
                 ListEmptyComponent={
                   movieSearch.trim() ? (
                     <Text style={styles.modalEmptyText}>
-                      No {searchingTv ? "TV shows" : "movies"} found for "{movieSearch}".
+                      No {searchingTv ? "TV shows" : "movies"} found for &quot;{movieSearch}&quot;.
                     </Text>
                   ) : null
                 }
@@ -873,6 +919,79 @@ export default function CreateSpaceScreen() {
               onPress={() => {
                 setMovieModalVisible(false);
                 setMovieSearch("");
+              }}
+            >
+              <Text style={styles.pickerDoneButtonText}>Done</Text>
+            </TouchableOpacity>
+          </View>
+        </KeyboardAvoidingView>
+      </Modal>
+
+      <Modal
+        visible={friendsModalVisible}
+        animationType="slide"
+        transparent
+        onRequestClose={() => setFriendsModalVisible(false)}
+      >
+        <KeyboardAvoidingView
+          style={styles.modalBackdrop}
+          behavior={Platform.OS === "ios" ? "padding" : undefined}
+        >
+          <View style={styles.modalSheet}>
+            <View style={styles.modalHeader}>
+              <Text style={styles.modalTitle}>Invite Friends</Text>
+              <TouchableOpacity onPress={() => setFriendsModalVisible(false)} hitSlop={10}>
+                <Ionicons name="close" size={24} color={SpaceTheme.mutedOrbit} />
+              </TouchableOpacity>
+            </View>
+            <TextInput
+              style={styles.input}
+              placeholder="Search friends by name or @username..."
+              placeholderTextColor={SpaceTheme.mutedOrbit}
+              value={friendSearch}
+              onChangeText={setFriendSearch}
+              autoCapitalize="none"
+            />
+            <FlatList
+              data={filteredFriends}
+              keyExtractor={(item) => item.id}
+              keyboardShouldPersistTaps="handled"
+              renderItem={({ item }) => {
+                const selected = invitedFriendIds.has(item.id);
+                return (
+                  <TouchableOpacity
+                    activeOpacity={0.8}
+                    style={styles.modalRow}
+                    onPress={() => toggleInviteFriend(item.id)}
+                  >
+                    <View style={styles.friendModalRowContent}>
+                      <View>
+                        <Text style={styles.modalRowTitle}>{item.display_name}</Text>
+                        {item.username && (
+                          <Text style={styles.modalRowSubtitle}>@{item.username}</Text>
+                        )}
+                      </View>
+                      <Ionicons
+                        name={selected ? "checkmark-circle" : "ellipse-outline"}
+                        size={22}
+                        color={selected ? SpaceTheme.glowCyan : SpaceTheme.mutedOrbit}
+                      />
+                    </View>
+                  </TouchableOpacity>
+                );
+              }}
+              ListEmptyComponent={
+                <Text style={styles.modalEmptyText}>
+                  No friends found for &quot;{friendSearch}&quot;.
+                </Text>
+              }
+            />
+            <TouchableOpacity
+              activeOpacity={0.8}
+              style={styles.pickerDoneButton}
+              onPress={() => {
+                setFriendsModalVisible(false);
+                setFriendSearch("");
               }}
             >
               <Text style={styles.pickerDoneButtonText}>Done</Text>
@@ -1035,6 +1154,11 @@ const styles = StyleSheet.create({
   },
   modalRowTitle: { fontSize: 15, fontWeight: "600", color: SpaceTheme.starWhite, marginBottom: 2 },
   modalRowSubtitle: { fontSize: 13, color: SpaceTheme.mutedOrbit },
+  friendModalRowContent: {
+    flexDirection: "row",
+    alignItems: "center",
+    justifyContent: "space-between",
+  },
   modalEmptyText: {
     color: SpaceTheme.mutedOrbit,
     fontSize: 14,

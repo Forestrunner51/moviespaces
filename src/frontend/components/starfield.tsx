@@ -22,6 +22,13 @@ interface Star {
 export function Starfield({ children, starCount = 90 }: StarfieldProps) {
   const { width, height } = Dimensions.get("window");
 
+  // Deliberately impure inside useMemo: a purely decorative, randomized star
+  // field that's meant to reshuffle only when starCount/width/height change
+  // (e.g. device rotation), not on every re-render. There's no correctness
+  // requirement for determinism here (unlike data derived from props/state),
+  // so this is a safe, intentional exception to the purity rule rather than
+  // an oversight.
+  /* eslint-disable react-hooks/purity -- see comment above */
   const stars = useMemo<Star[]>(
     () =>
       Array.from({ length: starCount }, (_, i) => ({
@@ -33,6 +40,7 @@ export function Starfield({ children, starCount = 90 }: StarfieldProps) {
       })),
     [starCount, width, height],
   );
+  /* eslint-enable react-hooks/purity */
 
   return (
     <View style={styles.container}>

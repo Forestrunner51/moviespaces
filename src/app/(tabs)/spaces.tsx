@@ -120,7 +120,7 @@ export default function MySpacesScreen() {
                 <Ionicons name="storefront-outline" size={18} color={SpaceTheme.backgroundVoid} />
                 <Text style={styles.newSpaceButtonText}>Find a Venue</Text>
               </TouchableOpacity>
-              <Text style={styles.subtitle}>Watch parties you're part of</Text>
+              <Text style={styles.subtitle}>Watch parties you&apos;re part of</Text>
               <FlatList
                 data={rentalSpaces}
                 keyExtractor={(item) => item.id}

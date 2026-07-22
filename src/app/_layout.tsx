@@ -1,12 +1,12 @@
-import { DarkTheme, ThemeProvider } from "expo-router";
-import { Stack, router } from "expo-router";
-import { useEffect, useState } from "react";
+import { DarkTheme, ThemeProvider, Stack, router, usePathname } from "expo-router";
+import { useEffect, useRef, useState } from "react";
 import * as Sentry from "@sentry/react-native";
 import "@/frontend/services/sentry";
 import { AnimatedSplashOverlay } from "@/frontend/components/animated-icon";
 import { supabase } from "@/frontend/config/supabase";
 import { SpaceTheme } from "@/frontend/constants/theme";
 import { registerForPushNotifications } from "@/frontend/services/push-notifications";
+import { setPendingRedirect } from "@/frontend/services/pending-redirect";
 
 // Every screen uses the cosmic theme now, regardless of system light/dark
 // mode — so the native header (back button, title bar) should match rather
@@ -27,6 +27,28 @@ const SpaceNavigationTheme = {
 function Layout() {
   const [session, setSession] = useState<any>(null);
   const [loading, setLoading] = useState(true);
+  const pathname = usePathname();
+  // Read via ref (not the `pathname` closure) inside the callbacks below —
+  // those are registered once by a mount-only effect, so a plain closure
+  // would keep seeing whatever pathname was current on mount forever instead
+  // of wherever the user actually is when their session drops. Updated in an
+  // effect, not during render — mutating a ref directly in the render body
+  // breaks under concurrent rendering / StrictMode's double-invoke.
+  const pathnameRef = useRef(pathname);
+  useEffect(() => {
+    pathnameRef.current = pathname;
+  }, [pathname]);
+
+  // A Space invite link (the only deep-link target this app registers) can
+  // open the app before the user is signed in. Stash where they were headed
+  // so auth.tsx can send them there after sign-in instead of dropping them on
+  // the home tab.
+  const stashDeepLinkAndRedirectToAuth = () => {
+    if (pathnameRef.current?.startsWith("/space/")) {
+      setPendingRedirect(pathnameRef.current as any);
+    }
+    router.replace("/auth");
+  };
 
   useEffect(() => {
     supabase.auth.getSession().then(({ data: { session } }) => {
@@ -39,7 +61,7 @@ function Layout() {
     } = supabase.auth.onAuthStateChange((_event, session) => {
       setSession(session);
       if (!session) {
-        router.replace("/auth");
+        stashDeepLinkAndRedirectToAuth();
       }
     });
 
@@ -49,7 +71,7 @@ function Layout() {
   useEffect(() => {
     if (!loading) {
       if (!session) {
-        router.replace("/auth");
+        stashDeepLinkAndRedirectToAuth();
       }
     }
   }, [session, loading]);

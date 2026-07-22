@@ -53,6 +53,20 @@ export default function ExploreScreen() {
   const [activityFilter, setActivityFilter] = useState<string | null>(null);
   const [chainFilter, setChainFilter] = useState<string | null>(null);
 
+  const fetchOpenSpaces = async () => {
+    try {
+      const res = await fetch(`${process.env.EXPO_PUBLIC_API_URL}/api/group/open`);
+      if (res.ok) {
+        const data = await res.json();
+        setOpenSpaces(data || []);
+      }
+    } catch (err) {
+      console.warn("Failed to load open spaces:", err);
+    } finally {
+      setLoading(false);
+    }
+  };
+
   useEffect(() => {
     fetchOpenSpaces();
     getDeviceLocation().then(setDeviceLocation);
@@ -73,20 +87,6 @@ export default function ExploreScreen() {
         },
       },
     ]);
-  };
-
-  const fetchOpenSpaces = async () => {
-    try {
-      const res = await fetch(`${process.env.EXPO_PUBLIC_API_URL}/api/group/open`);
-      if (res.ok) {
-        const data = await res.json();
-        setOpenSpaces(data || []);
-      }
-    } catch (err) {
-      console.warn("Failed to load open spaces:", err);
-    } finally {
-      setLoading(false);
-    }
   };
 
   // Distance is computed straight from each space's stored theater lat/lng
@@ -429,7 +429,7 @@ export default function ExploreScreen() {
                 router.push({ pathname: "/create-space", params: { spaceType: "public_gathering" } })
               }
             >
-              <Text style={styles.ctaCardTitle}>Don't see what you're looking for?</Text>
+              <Text style={styles.ctaCardTitle}>Don&apos;t see what you&apos;re looking for?</Text>
               <Text style={styles.ctaCardSubtitle}>
                 Host a movie night, fight night, or watch party in 60 seconds.
               </Text>

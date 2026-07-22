@@ -1,4 +1,4 @@
-import { useState, useEffect } from "react";
+import { useState, useEffect, useRef } from "react";
 import { supabase } from "@/frontend/config/supabase";
 import { authFetch } from "@/frontend/services/api";
 
@@ -21,7 +21,13 @@ export function useGroupChat(groupType: GroupChatType, groupId: string) {
   const [currentUserId, setCurrentUserId] = useState<string | null>(null);
   const [messages, setMessages] = useState<GroupMessage[]>([]);
   const [loading, setLoading] = useState(true);
-  const [profileCache, setProfileCache] = useState<
+  // A ref, not state: this cache is never rendered directly (only merged into
+  // `messages`), and the 4s poll below is a stable interval callback set up
+  // once per groupId — if this were state, that callback would keep closing
+  // over whatever profileCache was at effect-setup time, so newly cached
+  // senders would never be seen by later polls and get needlessly re-fetched
+  // from Supabase every 4s for the lifetime of the screen.
+  const profileCacheRef = useRef<
     Record<string, { display_name: string; username: string | null; avatar_url: string | null }>
   >({});
 
@@ -35,27 +41,24 @@ export function useGroupChat(groupType: GroupChatType, groupId: string) {
   // profiles and merge in, caching per-user across fetches so we don't
   // re-fetch the same senders' profiles every 4s poll.
   const withSenderInfo = async (rows: GroupMessage[]) => {
+    const cache = profileCacheRef.current;
     const unknownIds = [...new Set(rows.map((m) => m.sender_id))].filter(
-      (id) => !profileCache[id],
+      (id) => !cache[id],
     );
 
-    let cache = profileCache;
     if (unknownIds.length > 0) {
       const { data: profiles } = await supabase
         .from("profiles")
         .select("id, display_name, username, avatar_url")
         .in("id", unknownIds);
 
-      const additions: typeof profileCache = {};
       (profiles || []).forEach((p) => {
-        additions[p.id] = {
+        cache[p.id] = {
           display_name: p.display_name,
           username: p.username ?? null,
           avatar_url: p.avatar_url ?? null,
         };
       });
-      cache = { ...profileCache, ...additions };
-      setProfileCache(cache);
     }
 
     return rows.map((m) => ({
@@ -119,9 +122,9 @@ export function useGroupChat(groupType: GroupChatType, groupId: string) {
         sender_id: currentUserId,
         content,
         created_at: new Date().toISOString(),
-        sender_name: profileCache[currentUserId]?.display_name,
-        sender_username: profileCache[currentUserId]?.username ?? null,
-        sender_avatar_url: profileCache[currentUserId]?.avatar_url ?? null,
+        sender_name: profileCacheRef.current[currentUserId]?.display_name,
+        sender_username: profileCacheRef.current[currentUserId]?.username ?? null,
+        sender_avatar_url: profileCacheRef.current[currentUserId]?.avatar_url ?? null,
       };
       setMessages((prev) => [...prev, newMsg]);
 
