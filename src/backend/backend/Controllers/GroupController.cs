@@ -353,9 +353,17 @@ namespace Backend.Controllers
             return Ok(new { memberId = member.Id });
         }
 
+        // Host-only: confirming/unconfirming a member's attendance is a host
+        // action (the UI only surfaces the toggle to the host). Without this
+        // check any authenticated user could flip anyone's RSVP on any Space.
         [HttpPost("{id}/confirm/{memberId}")]
         public async Task<IActionResult> ConfirmMember(Guid id, Guid memberId)
         {
+            var userId = GetUserId();
+            var group = await _db.Groups.FindAsync(id);
+            if (group == null) return NotFound();
+            if (group.UserId != userId) return Forbid();
+
             var member = await _db.GroupMembers
                 .FirstOrDefaultAsync(m => m.Id == memberId && m.GroupId == id);
 
@@ -370,6 +378,11 @@ namespace Backend.Controllers
         [HttpPost("{id}/unconfirm/{memberId}")]
         public async Task<IActionResult> UnconfirmMember(Guid id, Guid memberId)
         {
+            var userId = GetUserId();
+            var group = await _db.Groups.FindAsync(id);
+            if (group == null) return NotFound();
+            if (group.UserId != userId) return Forbid();
+
             var member = await _db.GroupMembers
                 .FirstOrDefaultAsync(m => m.Id == memberId && m.GroupId == id);
 
@@ -403,6 +416,18 @@ namespace Backend.Controllers
         public async Task<IActionResult> NotifyNewMessage(Guid id, [FromBody] NotifyMessageRequest req)
         {
             var senderId = GetUserId();
+
+            // Gate on membership: only someone actually in the Space (host or a
+            // joined member) may fan a "new message" push out to everyone else.
+            // Otherwise any authenticated user could spam arbitrary sender names
+            // and previews to every member of any group id they guess.
+            var group = await _db.Groups
+                .Include(g => g.Members)
+                .FirstOrDefaultAsync(g => g.Id == id);
+            if (group == null) return NotFound();
+            var isMember = group.UserId == senderId || group.Members.Any(m => m.UserId == senderId);
+            if (!isMember) return Forbid();
+
             var preview = req.Preview.Length > 120 ? req.Preview.Substring(0, 120) + "…" : req.Preview;
             await NotifyMembersAsync(id, $"💬 {req.SenderName}", preview, excludeUserId: senderId);
             return Ok();

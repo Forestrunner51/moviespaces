@@ -17,6 +17,7 @@ import { Starfield } from "@/frontend/components/starfield";
 import { SpaceTheme, SpaceStyles } from "@/frontend/constants/theme";
 import { useGroupChat, GroupMessage, GroupChatType } from "@/frontend/hooks/use-group-chat";
 import { reportContent, blockUser, getBlockedUserIds } from "@/frontend/services/moderation";
+import { useFriends } from "@/frontend/hooks/use-friends";
 
 export default function GroupChatScreen() {
   const { id, type, title, showTime, showDate, seasonEpisodeInfo } = useLocalSearchParams<{
@@ -28,6 +29,7 @@ export default function GroupChatScreen() {
     seasonEpisodeInfo?: string;
   }>();
   const { currentUserId, messages, loading, sendMessage } = useGroupChat(type, id);
+  const { friends, sendFriendRequest } = useFriends();
   const [text, setText] = useState("");
   const listRef = useRef<FlatList>(null);
   const [blockedIds, setBlockedIds] = useState<string[]>([]);
@@ -35,6 +37,18 @@ export default function GroupChatScreen() {
   useEffect(() => {
     getBlockedUserIds().then(setBlockedIds);
   }, []);
+
+  const handleAddFriend = async (userId: string, name: string) => {
+    const result = await sendFriendRequest(userId);
+    Alert.alert(
+      result.success ? "Friend request sent" : "Couldn't send request",
+      result.success
+        ? `We let ${name} know you'd like to be friends.`
+        : result.error?.includes("already exists")
+          ? `You've already got a friend request going with ${name}.`
+          : result.error || "Please try again.",
+    );
+  };
 
   const handleSend = async () => {
     const content = text.trim();
@@ -45,8 +59,17 @@ export default function GroupChatScreen() {
   };
 
   const handleLongPressMessage = (item: GroupMessage) => {
+    const alreadyFriends = friends.some((f) => f.id === item.sender_id);
     Alert.alert(item.sender_name || "This message", "What would you like to do?", [
       { text: "Cancel", style: "cancel" },
+      ...(alreadyFriends
+        ? []
+        : [
+            {
+              text: `Add ${item.sender_name || "User"} as Friend`,
+              onPress: () => handleAddFriend(item.sender_id, item.sender_name || "them"),
+            },
+          ]),
       {
         text: "Report Message",
         onPress: async () => {

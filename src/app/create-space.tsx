@@ -18,9 +18,11 @@ import AsyncStorage from "@react-native-async-storage/async-storage";
 import DateTimePicker from "@react-native-community/datetimepicker";
 import { Ionicons } from "@expo/vector-icons";
 import { authFetch } from "@/frontend/services/api";
+import { supabase } from "@/frontend/config/supabase";
 import { Starfield } from "@/frontend/components/starfield";
 import { SpaceTheme, SpaceStyles } from "@/frontend/constants/theme";
 import { POST_ACTIVITIES } from "@/frontend/constants/activities";
+import { useFriends } from "@/frontend/hooks/use-friends";
 import { searchMovies, searchTvShows, getNowPlaying, TmdbMovie } from "@/frontend/services/tmdb";
 import {
   getDeviceLocation,
@@ -119,6 +121,36 @@ export default function CreateSpaceScreen() {
   };
 
   const [creating, setCreating] = useState(false);
+
+  // Invite friends already on the app — after the Space is created we DM each
+  // selected friend the invite link (reuses the friends-only messages table).
+  const { currentUserId, friends } = useFriends();
+  const [invitedFriendIds, setInvitedFriendIds] = useState<Set<string>>(new Set());
+
+  const toggleInviteFriend = (id: string) => {
+    setInvitedFriendIds((prev) => {
+      const next = new Set(prev);
+      next.has(id) ? next.delete(id) : next.add(id);
+      return next;
+    });
+  };
+
+  // Best-effort: DM the invite link to each friend the host picked. A failure
+  // here should never block the Space from being created / navigated to.
+  const sendFriendInvites = async (groupId: string) => {
+    if (!currentUserId || invitedFriendIds.size === 0) return;
+    const link = `${process.env.EXPO_PUBLIC_API_URL}/space/${groupId}`;
+    const rows = Array.from(invitedFriendIds).map((receiverId) => ({
+      sender_id: currentUserId,
+      receiver_id: receiverId,
+      content: `🎬 ${hostName.trim() || "A friend"} invited you to a watch party for ${movieName.trim()}! Join here: ${link}`,
+    }));
+    try {
+      await supabase.from("messages").insert(rows);
+    } catch (err) {
+      console.warn("Failed to send friend invites:", err);
+    }
+  };
 
   const [theaters, setTheaters] = useState<NearbyTheater[]>([]);
   const [theatersLoading, setTheatersLoading] = useState(true);
@@ -273,6 +305,7 @@ export default function CreateSpaceScreen() {
       }
 
       const data = await res.json();
+      await sendFriendInvites(data.groupId);
       setCreating(false);
       router.replace({
         pathname: "/group",
@@ -631,6 +664,39 @@ export default function CreateSpaceScreen() {
               onChangeText={setHangoutNotes}
               multiline
             />
+          )}
+
+          {friends.length > 0 && (
+            <>
+              <Text style={styles.afterSectionTitle}>Invite friends (optional)</Text>
+              <View style={styles.chipRow}>
+                {friends.map((friend) => {
+                  const selected = invitedFriendIds.has(friend.id);
+                  return (
+                    <TouchableOpacity
+                      key={friend.id}
+                      activeOpacity={0.8}
+                      style={[styles.afterChip, selected && styles.afterChipActive]}
+                      onPress={() => toggleInviteFriend(friend.id)}
+                    >
+                      <Ionicons
+                        name={selected ? "checkmark-circle" : "person-add-outline"}
+                        size={14}
+                        color={selected ? SpaceTheme.glowCyan : SpaceTheme.mutedOrbit}
+                      />
+                      <Text
+                        style={[styles.afterChipText, selected && styles.afterChipTextActive]}
+                      >
+                        {friend.display_name}
+                      </Text>
+                    </TouchableOpacity>
+                  );
+                })}
+              </View>
+              <Text style={styles.rentalHintText}>
+                💡 Selected friends get the invite link sent to them in the app.
+              </Text>
+            </>
           )}
 
           <TouchableOpacity

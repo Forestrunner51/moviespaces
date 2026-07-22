@@ -17,6 +17,7 @@ import { Starfield } from "@/frontend/components/starfield";
 import { SpaceTheme, SpaceStyles } from "@/frontend/constants/theme";
 import { THEATER_MEMBERSHIPS, membershipLabel } from "@/frontend/constants/theater-memberships";
 import { checkUsernameAvailable, normalizeUsername } from "@/frontend/services/username";
+import { useFriends } from "@/frontend/hooks/use-friends";
 
 interface ProfileData {
   displayName: string;
@@ -53,6 +54,7 @@ export default function ProfileScreen() {
   );
   const [checkingUsername, setCheckingUsername] = useState(false);
   const [mySpaces, setMySpaces] = useState<MySpace[]>([]);
+  const { friends } = useFriends();
 
   const loadMySpaces = useCallback(async () => {
     try {
@@ -387,6 +389,12 @@ export default function ProfileScreen() {
             </Text>
           )}
 
+          {!editing && (
+            <Text style={styles.friendCount}>
+              {friends.length} {friends.length === 1 ? "Friend" : "Friends"}
+            </Text>
+          )}
+
           {editing ? (
             <View style={styles.membershipsSection}>
               <Text style={styles.membershipsLabel}>Theater Memberships</Text>
@@ -593,6 +601,7 @@ const styles = StyleSheet.create({
   },
   email: { fontSize: 15, color: SpaceTheme.mutedOrbit, marginTop: 4 },
   joined: { fontSize: 13, color: SpaceTheme.mutedOrbit, marginTop: 8 },
+  friendCount: { fontSize: 15, fontWeight: "700", color: SpaceTheme.glowCyan, marginTop: 10 },
   membershipsSection: { marginTop: 16, width: "100%" },
   membershipsLabel: {
     fontSize: 12,
