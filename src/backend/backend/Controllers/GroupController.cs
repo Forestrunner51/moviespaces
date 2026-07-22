@@ -240,10 +240,11 @@ namespace Backend.Controllers
             var query = _db.Groups
                 .Include(g => g.Members)
                 .Where(g => g.Status == "pending")
-                // Only filters spaces old enough to have a real ScreeningTime
-                // recorded (post-MovieGlu-removal); older/legacy rows without
-                // one stay visible rather than being hidden by a null check.
-                .Where(g => g.ScreeningTime == null || g.ScreeningTime >= DateTime.UtcNow)
+                // create-space.tsx (the only creation path) always sets
+                // ScreeningTime now, so a null one means this row predates
+                // that column and is guaranteed stale — hide it rather than
+                // showing an already-past Space forever.
+                .Where(g => g.ScreeningTime != null && g.ScreeningTime >= DateTime.UtcNow)
                 // Capacity guard — don't surface a Space nobody can actually
                 // join anymore. MaxCapacity always has a value (defaults to
                 // 40 at creation), so there's no need to special-case 0/null.
@@ -256,9 +257,7 @@ namespace Backend.Controllers
                 query = query.Where(g => g.CinemaId == cinemaId.Value);
 
             var spaces = await query
-                // Soonest event first; legacy rows with no ScreeningTime sort
-                // to the end rather than being hidden.
-                .OrderBy(g => g.ScreeningTime ?? DateTime.MaxValue)
+                .OrderBy(g => g.ScreeningTime)
                 .Take(50)
                 .ToListAsync();
 
