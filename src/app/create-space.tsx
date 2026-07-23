@@ -54,12 +54,16 @@ export default function CreateSpaceScreen() {
     theaterLat: prefillLat,
     theaterLng: prefillLng,
     spaceType: prefillSpaceType,
+    movieName: prefillMovieName,
+    tmdbMovieId: prefillTmdbMovieId,
   } = useLocalSearchParams<{
     theaterName?: string;
     theaterPlaceId?: string;
     theaterLat?: string;
     theaterLng?: string;
     spaceType?: SpaceType;
+    movieName?: string;
+    tmdbMovieId?: string;
   }>();
   const [spaceType, setSpaceType] = useState<SpaceType>(
     prefillSpaceType === "private_rental" ? "private_rental" : "public_gathering",
@@ -78,8 +82,10 @@ export default function CreateSpaceScreen() {
   const [theaterLng, setTheaterLng] = useState<number | null>(
     prefillLng ? parseFloat(prefillLng) : null,
   );
-  const [movieName, setMovieName] = useState("");
-  const [tmdbMovieId, setTmdbMovieId] = useState<number | null>(null);
+  const [movieName, setMovieName] = useState(prefillMovieName ?? "");
+  const [tmdbMovieId, setTmdbMovieId] = useState<number | null>(
+    prefillTmdbMovieId ? parseInt(prefillTmdbMovieId, 10) : null,
+  );
   const [showDate, setShowDate] = useState("");
   const [showTime, setShowTime] = useState("");
 

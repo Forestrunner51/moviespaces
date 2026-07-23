@@ -52,6 +52,7 @@ interface Group {
   hangoutNotes: string | null;
   showtimeReportCount: number;
   seasonEpisodeInfo: string | null;
+  createdAt: string;
   members: Member[];
 }
 
@@ -406,14 +407,28 @@ export default function GroupScreen() {
   const isMember =
     !!currentUserId && groupMembers.some((m) => m.userId === currentUserId);
   const myMember = groupMembers.find((m) => m.userId === currentUserId);
+  // Legacy Spaces predate the screeningTime column and have no exact event
+  // time — falling back to createdAt (same pattern as profile.tsx's spaces
+  // list) means they're still treated as past rather than staying "active"
+  // forever just because we can't pin down their real showtime.
+  // Deliberately impure: needs the actual current time on every render so
+  // this screen correctly locks down while it stays mounted past the event.
+  // eslint-disable-next-line react-hooks/purity -- see comment above
+  const hasPassed = new Date(group.screeningTime ?? group.createdAt).getTime() < Date.now();
 
   return (
     <Starfield>
       <ScrollView style={styles.container} contentContainerStyle={styles.containerContent}>
-        {group.status === "cancelled" && (
+        {group.status === "cancelled" ? (
           <View style={styles.cancelledBanner}>
             <Text style={styles.cancelledBannerText}>❌ This Space has been cancelled</Text>
           </View>
+        ) : (
+          hasPassed && (
+            <View style={styles.cancelledBanner}>
+              <Text style={styles.cancelledBannerText}>⏳ This event has passed</Text>
+            </View>
+          )
         )}
         {group.seasonEpisodeInfo && (
           <View style={styles.tvBadge}>
@@ -429,14 +444,16 @@ export default function GroupScreen() {
 
         <View style={styles.manualRow}>
           <Text style={styles.manualBadge}>👤 Showtime scheduled manually by host</Text>
-          <TouchableOpacity
-            activeOpacity={0.8}
-            onPress={handleReportShowtime}
-            disabled={reporting}
-            hitSlop={8}
-          >
-            <Text style={styles.reportLink}>🚩 Report</Text>
-          </TouchableOpacity>
+          {!hasPassed && (
+            <TouchableOpacity
+              activeOpacity={0.8}
+              onPress={handleReportShowtime}
+              disabled={reporting}
+              hitSlop={8}
+            >
+              <Text style={styles.reportLink}>🚩 Report</Text>
+            </TouchableOpacity>
+          )}
         </View>
         {group.showtimeReportCount > 0 && (
           <Text style={styles.reportCountText}>
@@ -491,15 +508,17 @@ export default function GroupScreen() {
 
             {group.bookingUrl ? (
               <>
-                <TouchableOpacity
-                  activeOpacity={0.8}
-                  style={styles.rentalReservationButton}
-                  onPress={() => WebBrowser.openBrowserAsync(group.bookingUrl)}
-                >
-                  <Text style={styles.rentalReservationButtonText}>
-                    🔗 View Event / Venue Link
-                  </Text>
-                </TouchableOpacity>
+                {!hasPassed && (
+                  <TouchableOpacity
+                    activeOpacity={0.8}
+                    style={styles.rentalReservationButton}
+                    onPress={() => WebBrowser.openBrowserAsync(group.bookingUrl)}
+                  >
+                    <Text style={styles.rentalReservationButtonText}>
+                      🔗 View Event / Venue Link
+                    </Text>
+                  </TouchableOpacity>
+                )}
                 <View style={styles.rentalSecuredBadge}>
                   <Text style={styles.rentalSecuredBadgeText}>🔒 Venue Secured & Confirmed</Text>
                 </View>
@@ -511,7 +530,7 @@ export default function GroupScreen() {
                     ⏳ Tentative Mode — Host will lock in the venue once enough members RSVP!
                   </Text>
                 </View>
-                {isHost && (
+                {isHost && !hasPassed && (
                   <TouchableOpacity
                     activeOpacity={0.8}
                     style={styles.addBookingLinkButton}
@@ -540,6 +559,7 @@ export default function GroupScreen() {
               // web/name-only joiners have no account to send a request to.
               // Never show it for yourself.
               const canAddFriend =
+                !hasPassed &&
                 !!item.userId &&
                 item.userId !== currentUserId &&
                 !friendIds.has(item.userId);
@@ -569,7 +589,7 @@ export default function GroupScreen() {
           />
         </View>
 
-        {!isHost && !isMember && (
+        {!isHost && !isMember && !hasPassed && (
           <TouchableOpacity
             activeOpacity={0.8}
             style={styles.joinButton}
@@ -579,7 +599,7 @@ export default function GroupScreen() {
           </TouchableOpacity>
         )}
 
-        {isMember && myMember && (
+        {isMember && myMember && !hasPassed && (
           myMember.confirmed ? (
             <TouchableOpacity
               activeOpacity={0.8}
@@ -605,7 +625,7 @@ export default function GroupScreen() {
           )
         )}
 
-        {isMember && !isHost && (
+        {isMember && !isHost && !hasPassed && (
           <TouchableOpacity
             activeOpacity={0.8}
             style={styles.leaveSpaceButton}
@@ -618,9 +638,11 @@ export default function GroupScreen() {
           </TouchableOpacity>
         )}
 
-        <TouchableOpacity activeOpacity={0.8} style={styles.shareButton} onPress={shareLink}>
-          <Text style={styles.buttonText}>📤 Invite Friends</Text>
-        </TouchableOpacity>
+        {!hasPassed && (
+          <TouchableOpacity activeOpacity={0.8} style={styles.shareButton} onPress={shareLink}>
+            <Text style={styles.buttonText}>📤 Invite Friends</Text>
+          </TouchableOpacity>
+        )}
 
         {(isHost || isMember) && (
           <TouchableOpacity
@@ -644,7 +666,7 @@ export default function GroupScreen() {
           </TouchableOpacity>
         )}
 
-        {(isHost || isMember) && group.spaceType === "public_gathering" && (
+        {(isHost || isMember) && group.spaceType === "public_gathering" && !hasPassed && (
           <TouchableOpacity
             activeOpacity={0.8}
             style={styles.ticketsButton}
@@ -654,7 +676,7 @@ export default function GroupScreen() {
           </TouchableOpacity>
         )}
 
-        {(isHost || isMember) && (
+        {(isHost || isMember) && !hasPassed && (
           <TouchableOpacity
             activeOpacity={0.8}
             style={styles.calendarButton}
@@ -667,7 +689,7 @@ export default function GroupScreen() {
           </TouchableOpacity>
         )}
 
-        {isHost && group.status !== "booked" && (
+        {isHost && group.status !== "booked" && !hasPassed && (
           <TouchableOpacity
             activeOpacity={0.8}
             style={styles.bookButton}
@@ -681,7 +703,7 @@ export default function GroupScreen() {
           </TouchableOpacity>
         )}
 
-        {isHost && group.status === "booked" && (
+        {isHost && group.status === "booked" && !hasPassed && (
           <TouchableOpacity
             activeOpacity={0.8}
             style={styles.unbookButton}
@@ -694,7 +716,7 @@ export default function GroupScreen() {
           </TouchableOpacity>
         )}
 
-        {isHost && (
+        {isHost && !hasPassed && (
           <TouchableOpacity
             activeOpacity={0.8}
             style={styles.cancelSpaceButton}

@@ -31,6 +31,19 @@ export function FriendsPanel() {
 
   const friendIds = new Set(friends.map((f) => f.id));
 
+  // The same search box doubles as a live filter over your existing friends
+  // — without this, a large friends list has no way to jump to a specific
+  // person other than scrolling through an unfiltered wall of rows.
+  const visibleFriends = query.trim()
+    ? friends.filter((f) => {
+        const q = query.trim().toLowerCase();
+        return (
+          f.display_name.toLowerCase().includes(q) ||
+          (f.username ?? "").toLowerCase().includes(q)
+        );
+      })
+    : friends;
+
   const handleSearch = async (text: string) => {
     setQuery(text);
     if (!text.trim()) {
@@ -129,11 +142,15 @@ export function FriendsPanel() {
           <ActivityIndicator color={SpaceTheme.glowCyan} style={{ marginVertical: 16 }} />
         ) : (
           <FlatList
-            data={friends}
+            data={visibleFriends}
             keyExtractor={(item) => item.id}
             scrollEnabled={false}
             ListEmptyComponent={
-              <Text style={styles.emptyText}>No friends yet — search above to add some.</Text>
+              <Text style={styles.emptyText}>
+                {friends.length === 0
+                  ? "No friends yet — search above to add some."
+                  : `No friends match "${query.trim()}".`}
+              </Text>
             }
             renderItem={({ item }) => (
               <TouchableOpacity

@@ -19,5 +19,9 @@ export const supabase = createClient(supabaseUrl, supabaseAnonKey, {
     autoRefreshToken: true,
     persistSession: true,
     detectSessionInUrl: false, // Required for React Native/Expo environments
+    // Google SSO (services/sso.ts) exchanges an OAuth `code` param for a
+    // session via exchangeCodeForSession — that's the PKCE flow, so it must
+    // be explicit here (the code verifier gets stored via `storage` above).
+    flowType: "pkce",
   },
 });

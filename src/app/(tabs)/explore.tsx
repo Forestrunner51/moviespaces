@@ -52,6 +52,9 @@ export default function ExploreScreen() {
   const [openOnly, setOpenOnly] = useState(false);
   const [activityFilter, setActivityFilter] = useState<string | null>(null);
   const [chainFilter, setChainFilter] = useState<string | null>(null);
+  // Filters live behind a collapsed "Filters" toggle rather than always
+  // taking up the top of the screen — most visits just want the list.
+  const [filtersOpen, setFiltersOpen] = useState(false);
 
   const fetchOpenSpaces = async () => {
     try {
@@ -132,6 +135,14 @@ export default function ExploreScreen() {
     return true;
   });
 
+  const activeFilterCount =
+    (typeFilter !== "all" ? 1 : 0) +
+    (priceFilter !== "any" ? 1 : 0) +
+    (distanceFilter !== "any" ? 1 : 0) +
+    (chainFilter !== null ? 1 : 0) +
+    (activityFilter !== null ? 1 : 0) +
+    (openOnly ? 1 : 0);
+
   // Informational only — "Any" distance already shows every space regardless
   // of how far away it is, so there's nothing to actually re-filter here.
   // This just tells the user when what they're seeing skews far away, rather
@@ -180,146 +191,188 @@ export default function ExploreScreen() {
           keyExtractor={(item) => item.id}
           ListHeaderComponent={
             <View style={styles.filters}>
-              <Text style={styles.filterLabel}>Type</Text>
-              <View style={styles.chipRow}>
-                {(
-                  [
-                    { key: "all", label: "All" },
-                    { key: "public_gathering", label: "MovieSpaces" },
-                    { key: "private_rental", label: "Watch Parties" },
-                  ] as { key: TypeFilter; label: string }[]
-                ).map(({ key, label }) => (
-                  <TouchableOpacity
-                    key={key}
-                    activeOpacity={0.8}
-                    style={[styles.chip, typeFilter === key && styles.chipActive]}
-                    onPress={() => setTypeFilter(key)}
-                  >
-                    <Text style={[styles.chipText, typeFilter === key && styles.chipTextActive]}>
-                      {label}
-                    </Text>
-                  </TouchableOpacity>
-                ))}
-              </View>
-
-              <Text style={styles.filterLabel}>Price</Text>
-              <View style={styles.chipRow}>
-                {(
-                  [
-                    { key: "any", label: "Any" },
-                    { key: "under50", label: "Under $50" },
-                    { key: "50to150", label: "$50–150" },
-                    { key: "150plus", label: "$150+" },
-                  ] as { key: PriceFilter; label: string }[]
-                ).map(({ key, label }) => (
-                  <TouchableOpacity
-                    key={key}
-                    activeOpacity={0.8}
-                    style={[styles.chip, priceFilter === key && styles.chipActive]}
-                    onPress={() => setPriceFilter(key)}
-                  >
-                    <Text style={[styles.chipText, priceFilter === key && styles.chipTextActive]}>
-                      {label}
-                    </Text>
-                  </TouchableOpacity>
-                ))}
-              </View>
-
-              <Text style={styles.filterLabel}>Distance</Text>
-              <View style={styles.chipRow}>
-                {(
-                  [
-                    { key: "any", label: "Any" },
-                    { key: "5", label: "< 5 mi" },
-                    { key: "10", label: "< 10 mi" },
-                    { key: "25", label: "< 25 mi" },
-                  ] as { key: DistanceFilter; label: string }[]
-                ).map(({ key, label }) => (
-                  <TouchableOpacity
-                    key={key}
-                    activeOpacity={0.8}
-                    style={[styles.chip, distanceFilter === key && styles.chipActive]}
-                    onPress={() => setDistanceFilter(key)}
-                  >
-                    <Text
-                      style={[styles.chipText, distanceFilter === key && styles.chipTextActive]}
-                    >
-                      {label}
-                    </Text>
-                  </TouchableOpacity>
-                ))}
-              </View>
-
-              <Text style={styles.filterLabel}>Theater Chain</Text>
-              <View style={styles.chipRow}>
+              <View style={styles.filterBarRow}>
                 <TouchableOpacity
                   activeOpacity={0.8}
-                  style={[styles.chip, chainFilter === null && styles.chipActive]}
-                  onPress={() => setChainFilter(null)}
+                  style={[
+                    styles.filterToggle,
+                    (filtersOpen || activeFilterCount > 0) && styles.filterToggleActive,
+                  ]}
+                  onPress={() => setFiltersOpen((v) => !v)}
                 >
-                  <Text style={[styles.chipText, chainFilter === null && styles.chipTextActive]}>
-                    Any
-                  </Text>
-                </TouchableOpacity>
-                {THEATER_CHAINS.map((chain) => (
-                  <TouchableOpacity
-                    key={chain}
-                    activeOpacity={0.8}
-                    style={[styles.chip, chainFilter === chain && styles.chipActive]}
-                    onPress={() => setChainFilter(chain)}
+                  <Ionicons
+                    name="options-outline"
+                    size={16}
+                    color={
+                      filtersOpen || activeFilterCount > 0
+                        ? SpaceTheme.backgroundVoid
+                        : SpaceTheme.mutedOrbit
+                    }
+                  />
+                  <Text
+                    style={[
+                      styles.filterToggleText,
+                      (filtersOpen || activeFilterCount > 0) && styles.filterToggleTextActive,
+                    ]}
                   >
-                    <Text style={[styles.chipText, chainFilter === chain && styles.chipTextActive]}>
-                      {chain}
-                    </Text>
-                  </TouchableOpacity>
-                ))}
-              </View>
-
-              <Text style={styles.filterLabel}>After the Movie</Text>
-              <View style={styles.chipRow}>
-                <TouchableOpacity
-                  activeOpacity={0.8}
-                  style={[styles.chip, activityFilter === null && styles.chipActive]}
-                  onPress={() => setActivityFilter(null)}
-                >
-                  <Text style={[styles.chipText, activityFilter === null && styles.chipTextActive]}>
-                    Any
+                    Filters{activeFilterCount > 0 ? ` (${activeFilterCount})` : ""}
                   </Text>
+                  <Ionicons
+                    name={filtersOpen ? "chevron-up" : "chevron-down"}
+                    size={16}
+                    color={
+                      filtersOpen || activeFilterCount > 0
+                        ? SpaceTheme.backgroundVoid
+                        : SpaceTheme.mutedOrbit
+                    }
+                  />
                 </TouchableOpacity>
-                {POST_ACTIVITIES.map((a) => (
-                  <TouchableOpacity
-                    key={a.key}
-                    activeOpacity={0.8}
-                    style={[styles.chip, activityFilter === a.key && styles.chipActive]}
-                    onPress={() => setActivityFilter(a.key)}
-                  >
-                    <Text
-                      style={[styles.chipText, activityFilter === a.key && styles.chipTextActive]}
-                    >
-                      {a.emoji} {a.label}
-                    </Text>
-                  </TouchableOpacity>
-                ))}
-              </View>
-
-              <TouchableOpacity
-                activeOpacity={0.8}
-                style={[styles.chip, styles.toggleChip, openOnly && styles.chipActive]}
-                onPress={() => setOpenOnly((v) => !v)}
-              >
-                <Ionicons
-                  name={openOnly ? "checkbox" : "square-outline"}
-                  size={16}
-                  color={openOnly ? SpaceTheme.backgroundVoid : SpaceTheme.mutedOrbit}
-                />
-                <Text style={[styles.chipText, openOnly && styles.chipTextActive]}>
-                  Only show spaces with room left
+                <Text style={styles.resultsCount}>
+                  {filteredSpaces.length} open space{filteredSpaces.length === 1 ? "" : "s"}
                 </Text>
-              </TouchableOpacity>
+              </View>
 
-              <Text style={styles.resultsCount}>
-                {filteredSpaces.length} open space{filteredSpaces.length === 1 ? "" : "s"}
-              </Text>
+              {filtersOpen && (
+                <View style={styles.filterDropdown}>
+                  <Text style={styles.filterLabel}>Type</Text>
+                  <View style={styles.chipRow}>
+                    {(
+                      [
+                        { key: "all", label: "All" },
+                        { key: "public_gathering", label: "MovieSpaces" },
+                        { key: "private_rental", label: "Watch Parties" },
+                      ] as { key: TypeFilter; label: string }[]
+                    ).map(({ key, label }) => (
+                      <TouchableOpacity
+                        key={key}
+                        activeOpacity={0.8}
+                        style={[styles.chip, typeFilter === key && styles.chipActive]}
+                        onPress={() => setTypeFilter(key)}
+                      >
+                        <Text style={[styles.chipText, typeFilter === key && styles.chipTextActive]}>
+                          {label}
+                        </Text>
+                      </TouchableOpacity>
+                    ))}
+                  </View>
+
+                  <Text style={styles.filterLabel}>Price</Text>
+                  <View style={styles.chipRow}>
+                    {(
+                      [
+                        { key: "any", label: "Any" },
+                        { key: "under50", label: "Under $50" },
+                        { key: "50to150", label: "$50–150" },
+                        { key: "150plus", label: "$150+" },
+                      ] as { key: PriceFilter; label: string }[]
+                    ).map(({ key, label }) => (
+                      <TouchableOpacity
+                        key={key}
+                        activeOpacity={0.8}
+                        style={[styles.chip, priceFilter === key && styles.chipActive]}
+                        onPress={() => setPriceFilter(key)}
+                      >
+                        <Text style={[styles.chipText, priceFilter === key && styles.chipTextActive]}>
+                          {label}
+                        </Text>
+                      </TouchableOpacity>
+                    ))}
+                  </View>
+
+                  <Text style={styles.filterLabel}>Distance</Text>
+                  <View style={styles.chipRow}>
+                    {(
+                      [
+                        { key: "any", label: "Any" },
+                        { key: "5", label: "< 5 mi" },
+                        { key: "10", label: "< 10 mi" },
+                        { key: "25", label: "< 25 mi" },
+                      ] as { key: DistanceFilter; label: string }[]
+                    ).map(({ key, label }) => (
+                      <TouchableOpacity
+                        key={key}
+                        activeOpacity={0.8}
+                        style={[styles.chip, distanceFilter === key && styles.chipActive]}
+                        onPress={() => setDistanceFilter(key)}
+                      >
+                        <Text
+                          style={[styles.chipText, distanceFilter === key && styles.chipTextActive]}
+                        >
+                          {label}
+                        </Text>
+                      </TouchableOpacity>
+                    ))}
+                  </View>
+
+                  <Text style={styles.filterLabel}>Theater Chain</Text>
+                  <View style={styles.chipRow}>
+                    <TouchableOpacity
+                      activeOpacity={0.8}
+                      style={[styles.chip, chainFilter === null && styles.chipActive]}
+                      onPress={() => setChainFilter(null)}
+                    >
+                      <Text style={[styles.chipText, chainFilter === null && styles.chipTextActive]}>
+                        Any
+                      </Text>
+                    </TouchableOpacity>
+                    {THEATER_CHAINS.map((chain) => (
+                      <TouchableOpacity
+                        key={chain}
+                        activeOpacity={0.8}
+                        style={[styles.chip, chainFilter === chain && styles.chipActive]}
+                        onPress={() => setChainFilter(chain)}
+                      >
+                        <Text style={[styles.chipText, chainFilter === chain && styles.chipTextActive]}>
+                          {chain}
+                        </Text>
+                      </TouchableOpacity>
+                    ))}
+                  </View>
+
+                  <Text style={styles.filterLabel}>After the Movie</Text>
+                  <View style={styles.chipRow}>
+                    <TouchableOpacity
+                      activeOpacity={0.8}
+                      style={[styles.chip, activityFilter === null && styles.chipActive]}
+                      onPress={() => setActivityFilter(null)}
+                    >
+                      <Text style={[styles.chipText, activityFilter === null && styles.chipTextActive]}>
+                        Any
+                      </Text>
+                    </TouchableOpacity>
+                    {POST_ACTIVITIES.map((a) => (
+                      <TouchableOpacity
+                        key={a.key}
+                        activeOpacity={0.8}
+                        style={[styles.chip, activityFilter === a.key && styles.chipActive]}
+                        onPress={() => setActivityFilter(a.key)}
+                      >
+                        <Text
+                          style={[styles.chipText, activityFilter === a.key && styles.chipTextActive]}
+                        >
+                          {a.emoji} {a.label}
+                        </Text>
+                      </TouchableOpacity>
+                    ))}
+                  </View>
+
+                  <TouchableOpacity
+                    activeOpacity={0.8}
+                    style={[styles.chip, styles.toggleChip, openOnly && styles.chipActive]}
+                    onPress={() => setOpenOnly((v) => !v)}
+                  >
+                    <Ionicons
+                      name={openOnly ? "checkbox" : "square-outline"}
+                      size={16}
+                      color={openOnly ? SpaceTheme.backgroundVoid : SpaceTheme.mutedOrbit}
+                    />
+                    <Text style={[styles.chipText, openOnly && styles.chipTextActive]}>
+                      Only show spaces with room left
+                    </Text>
+                  </TouchableOpacity>
+                </View>
+              )}
+
               {showWideRadiusNotice && (
                 <Text style={styles.wideRadiusNotice}>
                   No events found within 10 miles — showing active Watch Parties nearby:
@@ -453,6 +506,31 @@ const styles = StyleSheet.create({
   title: { fontSize: 28, fontWeight: "bold", color: SpaceTheme.starWhite },
   subtitle: { fontSize: 14, color: SpaceTheme.mutedOrbit, marginBottom: 16 },
   filters: { marginBottom: 8 },
+  filterBarRow: {
+    flexDirection: "row",
+    alignItems: "center",
+    justifyContent: "space-between",
+    marginBottom: 4,
+  },
+  filterToggle: {
+    ...SpaceStyles.glassCard,
+    flexDirection: "row",
+    alignItems: "center",
+    gap: 6,
+    paddingVertical: 8,
+    paddingHorizontal: 12,
+  },
+  filterToggleActive: {
+    backgroundColor: SpaceTheme.glowCyan,
+    borderColor: SpaceTheme.glowCyan,
+  },
+  filterToggleText: { fontSize: 13, fontWeight: "600", color: SpaceTheme.mutedOrbit },
+  filterToggleTextActive: { color: SpaceTheme.backgroundVoid },
+  filterDropdown: {
+    ...SpaceStyles.glassCard,
+    padding: 12,
+    marginTop: 8,
+  },
   filterLabel: {
     fontSize: 13,
     fontWeight: "700",
@@ -480,8 +558,6 @@ const styles = StyleSheet.create({
   resultsCount: {
     fontSize: 13,
     color: SpaceTheme.mutedOrbit,
-    marginTop: 16,
-    marginBottom: 4,
   },
   spaceCard: {
     ...SpaceStyles.glassCard,

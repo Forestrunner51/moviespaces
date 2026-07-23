@@ -81,6 +81,7 @@
           "calendarPermission": "Allow MovieSpaces to add watch parties to your calendar."
         }
       ],
+      "expo-apple-authentication",
       "@sentry/react-native"
     ],
     "experiments": {

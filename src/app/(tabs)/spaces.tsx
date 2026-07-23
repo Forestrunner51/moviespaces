@@ -22,6 +22,8 @@ interface Space {
   cinemaName: string;
   showTime: string;
   showDate: string;
+  screeningTime: string | null;
+  createdAt: string;
   status: string;
   spaceType: string;
   members: { id: string; name: string; confirmed: boolean }[];
@@ -74,6 +76,15 @@ export default function MySpacesScreen() {
   const rentalSpaces = spaces.filter((s) => s.spaceType === "private_rental");
   const gatheringSpaces = spaces.filter((s) => s.spaceType !== "private_rental");
   const unreadCounts = useUnreadCounts(spaces.map((s) => s.id));
+
+  // Legacy Spaces predate the screeningTime column — fall back to createdAt
+  // (same pattern as profile.tsx and group.tsx) so they still register as
+  // past rather than staying "active" forever with no real showtime to check.
+  // Deliberately impure: needs to read the actual current time on every call
+  // so a card correctly flips to "passed" while this screen stays mounted.
+  const isPast = (space: Space) =>
+    // eslint-disable-next-line react-hooks/purity -- see comment above
+    new Date(space.screeningTime ?? space.createdAt).getTime() < Date.now();
 
   return (
     <Starfield>
@@ -145,6 +156,11 @@ export default function MySpacesScreen() {
                         </View>
                       )}
                     </View>
+                    {isPast(item) && (
+                      <View style={styles.pastBadge}>
+                        <Text style={styles.pastBadgeText}>⏳ This event has passed</Text>
+                      </View>
+                    )}
                     <Text style={styles.details}>
                       {item.cinemaName} • {item.showTime}
                     </Text>
@@ -212,6 +228,11 @@ export default function MySpacesScreen() {
                       </View>
                     )}
                   </View>
+                  {isPast(item) && (
+                    <View style={styles.pastBadge}>
+                      <Text style={styles.pastBadgeText}>⏳ This event has passed</Text>
+                    </View>
+                  )}
                   <Text style={styles.details}>
                     {item.cinemaName} • {item.showTime}
                   </Text>
@@ -332,6 +353,15 @@ const styles = StyleSheet.create({
     paddingHorizontal: 8,
   },
   unreadBadgeText: { color: SpaceTheme.backgroundVoid, fontSize: 11, fontWeight: "800" },
+  pastBadge: {
+    alignSelf: "flex-start",
+    backgroundColor: "rgba(255,255,255,0.08)",
+    borderRadius: 6,
+    paddingVertical: 3,
+    paddingHorizontal: 8,
+    marginBottom: 6,
+  },
+  pastBadgeText: { color: SpaceTheme.mutedOrbit, fontSize: 11, fontWeight: "700" },
   details: { fontSize: 14, color: SpaceTheme.mutedOrbit, marginBottom: 2 },
   date: { fontSize: 12, color: SpaceTheme.mutedOrbit, marginBottom: 8 },
   footer: { flexDirection: "row", justifyContent: "space-between", marginTop: 4 },
