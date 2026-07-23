@@ -51,7 +51,8 @@ export function useFriends() {
         const { data: profiles, error: pError } = await supabase
           .from("profiles")
           .select("id, display_name, username, avatar_url")
-          .in("id", friendIds);
+          .in("id", friendIds)
+          .order("display_name");
         if (pError) throw pError;
         friendsProfiles = profiles || [];
       }

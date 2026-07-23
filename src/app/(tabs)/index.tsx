@@ -1,10 +1,68 @@
-import { View, Text, TouchableOpacity, StyleSheet } from "react-native";
+import { useEffect, useState } from "react";
+import {
+  View,
+  Text,
+  TouchableOpacity,
+  StyleSheet,
+  FlatList,
+  Image,
+  ActivityIndicator,
+} from "react-native";
 import { router } from "expo-router";
 import { Ionicons } from "@expo/vector-icons";
 import { Starfield } from "@/frontend/components/starfield";
 import { SpaceTheme, SpaceStyles } from "@/frontend/constants/theme";
+import { getNowPlaying, TmdbMovie } from "@/frontend/services/tmdb";
+
+interface NearbySpace {
+  id: string;
+  hostName: string;
+  filmName: string;
+  cinemaName: string;
+  showDate: string;
+  showTime: string;
+}
+
+// Fisher-Yates-ish partial shuffle — good enough for picking a handful of
+// items out of at most 50 (GetOpenSpaces already caps the feed at that).
+function pickRandom<T>(arr: T[], count: number): T[] {
+  const copy = [...arr];
+  for (let i = copy.length - 1; i > 0; i--) {
+    const j = Math.floor(Math.random() * (i + 1));
+    [copy[i], copy[j]] = [copy[j], copy[i]];
+  }
+  return copy.slice(0, count);
+}
 
 export default function HomeScreen() {
+  const [nearbySpaces, setNearbySpaces] = useState<NearbySpace[]>([]);
+  const [spacesLoading, setSpacesLoading] = useState(true);
+  const [nowPlaying, setNowPlaying] = useState<TmdbMovie[]>([]);
+  const [moviesLoading, setMoviesLoading] = useState(true);
+
+  useEffect(() => {
+    fetch(`${process.env.EXPO_PUBLIC_API_URL}/api/group/open`)
+      .then((res) => (res.ok ? res.json() : []))
+      .then((data: NearbySpace[]) => {
+        // Picked once here (not recomputed on every render) so the sample
+        // doesn't reshuffle every time this screen re-renders.
+        setNearbySpaces(pickRandom(data || [], 5));
+      })
+      .catch((err) => {
+        console.warn("Failed to load open spaces for home screen:", err);
+        setNearbySpaces([]);
+      })
+      .finally(() => setSpacesLoading(false));
+
+    getNowPlaying()
+      .then(setNowPlaying)
+      .catch((err) => {
+        console.warn("Failed to load now-playing movies:", err);
+        setNowPlaying([]);
+      })
+      .finally(() => setMoviesLoading(false));
+  }, []);
+
   return (
     <Starfield>
       <View style={styles.container}>
@@ -43,6 +101,96 @@ export default function HomeScreen() {
           </View>
           <Ionicons name="chevron-forward" size={20} color={SpaceTheme.mutedOrbit} />
         </TouchableOpacity>
+
+        <Text style={styles.sectionTitle}>Upcoming Spaces</Text>
+        {spacesLoading ? (
+          <ActivityIndicator color={SpaceTheme.glowCyan} style={styles.sectionLoading} />
+        ) : nearbySpaces.length === 0 ? (
+          <View style={styles.emptySection}>
+            <Text style={styles.emptySectionText}>
+              No spaces available — you can check Explore for a larger list of spaces.
+            </Text>
+            <TouchableOpacity
+              activeOpacity={0.8}
+              onPress={() => router.push({ pathname: "/(tabs)/explore" })}
+            >
+              <Text style={styles.emptySectionLink}>Go to Explore →</Text>
+            </TouchableOpacity>
+          </View>
+        ) : (
+          <FlatList
+            horizontal
+            showsHorizontalScrollIndicator={false}
+            data={nearbySpaces}
+            keyExtractor={(item) => item.id}
+            contentContainerStyle={styles.carouselContent}
+            renderItem={({ item }) => (
+              <TouchableOpacity
+                activeOpacity={0.85}
+                style={styles.spaceCard}
+                onPress={() => router.push({ pathname: "/group", params: { groupId: item.id } })}
+              >
+                <View style={styles.spaceCardIcon}>
+                  <Ionicons name="film-outline" size={22} color={SpaceTheme.glowCyan} />
+                </View>
+                <Text style={styles.spaceCardTitle} numberOfLines={1}>
+                  {item.filmName}
+                </Text>
+                <Text style={styles.spaceCardSubtitle} numberOfLines={1}>
+                  {item.cinemaName}
+                </Text>
+                <Text style={styles.spaceCardTime} numberOfLines={1}>
+                  {item.showDate} • {item.showTime}
+                </Text>
+                <Text style={styles.spaceCardHost} numberOfLines={1}>
+                  Hosted by {item.hostName}
+                </Text>
+              </TouchableOpacity>
+            )}
+          />
+        )}
+
+        <Text style={styles.sectionTitle}>Popular in Theaters</Text>
+        {moviesLoading ? (
+          <ActivityIndicator color={SpaceTheme.glowCyan} style={styles.sectionLoading} />
+        ) : nowPlaying.length === 0 ? (
+          <Text style={styles.emptySectionText}>Couldn&apos;t load movies right now.</Text>
+        ) : (
+          <FlatList
+            horizontal
+            showsHorizontalScrollIndicator={false}
+            data={nowPlaying}
+            keyExtractor={(item) => item.id.toString()}
+            contentContainerStyle={styles.carouselContent}
+            renderItem={({ item }) => (
+              <TouchableOpacity
+                activeOpacity={0.85}
+                style={styles.movieCard}
+                onPress={() =>
+                  router.push({
+                    pathname: "/create-space",
+                    params: {
+                      spaceType: "public_gathering",
+                      movieName: item.title,
+                      tmdbMovieId: item.id.toString(),
+                    },
+                  })
+                }
+              >
+                {item.posterPath ? (
+                  <Image source={{ uri: item.posterPath }} style={styles.moviePoster} />
+                ) : (
+                  <View style={[styles.moviePoster, styles.moviePosterFallback]}>
+                    <Ionicons name="film-outline" size={24} color={SpaceTheme.mutedOrbit} />
+                  </View>
+                )}
+                <Text style={styles.movieTitle} numberOfLines={2}>
+                  {item.title}
+                </Text>
+              </TouchableOpacity>
+            )}
+          />
+        )}
       </View>
     </Starfield>
   );
@@ -76,4 +224,36 @@ const styles = StyleSheet.create({
     marginBottom: 4,
   },
   chooseCardSubtitle: { fontSize: 13, color: SpaceTheme.mutedOrbit, lineHeight: 18 },
+  sectionTitle: {
+    fontSize: 17,
+    fontWeight: "700",
+    color: SpaceTheme.starWhite,
+    marginTop: 12,
+    marginBottom: 12,
+  },
+  sectionLoading: { marginBottom: 16, alignItems: "flex-start" },
+  emptySection: { marginBottom: 20 },
+  emptySectionText: { fontSize: 13, color: SpaceTheme.mutedOrbit, marginBottom: 8 },
+  emptySectionLink: { fontSize: 13, color: SpaceTheme.glowCyan, fontWeight: "700" },
+  carouselContent: { gap: 12, paddingBottom: 20 },
+  spaceCard: {
+    ...SpaceStyles.glassCard,
+    width: 160,
+    padding: 14,
+  },
+  spaceCardIcon: { marginBottom: 8 },
+  spaceCardTitle: { fontSize: 15, fontWeight: "700", color: SpaceTheme.starWhite, marginBottom: 2 },
+  spaceCardSubtitle: { fontSize: 12, color: SpaceTheme.mutedOrbit, marginBottom: 4 },
+  spaceCardTime: { fontSize: 12, color: SpaceTheme.glowCyan, fontWeight: "600", marginBottom: 6 },
+  spaceCardHost: { fontSize: 11, color: SpaceTheme.mutedOrbit },
+  movieCard: { width: 120 },
+  moviePoster: {
+    width: 120,
+    height: 180,
+    borderRadius: 12,
+    backgroundColor: "rgba(255,255,255,0.05)",
+    marginBottom: 6,
+  },
+  moviePosterFallback: { alignItems: "center", justifyContent: "center" },
+  movieTitle: { fontSize: 13, fontWeight: "600", color: SpaceTheme.starWhite },
 });

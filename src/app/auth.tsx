@@ -1,4 +1,4 @@
-import React, { useState } from "react";
+import React, { useEffect, useState } from "react";
 import {
   StyleSheet,
   Text,
@@ -9,11 +9,13 @@ import {
   Alert,
 } from "react-native";
 import AsyncStorage from "@react-native-async-storage/async-storage";
+import * as AppleAuthentication from "expo-apple-authentication";
 import { supabase } from "../frontend/config/supabase";
 import { useRouter } from "expo-router";
 import { Starfield } from "@/frontend/components/starfield";
 import { SpaceTheme, SpaceStyles } from "@/frontend/constants/theme";
 import { consumePendingRedirect } from "@/frontend/services/pending-redirect";
+import { signInWithGoogle, signInWithApple, isAppleSignInAvailable } from "@/frontend/services/sso";
 
 export default function AuthScreen() {
   const router = useRouter();
@@ -22,6 +24,53 @@ export default function AuthScreen() {
   const [email, setEmail] = useState("");
   const [password, setPassword] = useState("");
   const [loading, setLoading] = useState(false);
+  const [ssoLoading, setSsoLoading] = useState<"google" | "apple" | null>(null);
+  const [appleAvailable, setAppleAvailable] = useState(false);
+
+  useEffect(() => {
+    isAppleSignInAvailable().then(setAppleAvailable);
+  }, []);
+
+  // SSO never collects a display name up front (unlike email/password
+  // sign-up), so pull whatever the provider handed back — Supabase's
+  // handle_new_user() trigger already writes it into profiles.display_name
+  // on first login, same as it does for the full_name passed at signUp().
+  const finishSsoLogin = async () => {
+    const {
+      data: { user },
+    } = await supabase.auth.getUser();
+    const fullName = user?.user_metadata?.full_name || user?.user_metadata?.name;
+    if (fullName) {
+      await AsyncStorage.setItem("userName", fullName);
+    }
+    router.replace(consumePendingRedirect() ?? "/");
+  };
+
+  const handleGoogleSignIn = async () => {
+    if (ssoLoading || loading) return;
+    setSsoLoading("google");
+    const result = await signInWithGoogle();
+    setSsoLoading(null);
+    if (result.success) {
+      await finishSsoLogin();
+    } else if (!result.cancelled) {
+      Alert.alert("Couldn't sign in with Google", result.error || "Please try again.");
+    }
+  };
+
+  const handleAppleSignIn = async () => {
+    // Guards double-taps — the native AppleAuthenticationButton has no
+    // built-in disabled/loading prop, unlike the custom Google button below.
+    if (ssoLoading || loading) return;
+    setSsoLoading("apple");
+    const result = await signInWithApple();
+    setSsoLoading(null);
+    if (result.success) {
+      await finishSsoLogin();
+    } else if (!result.cancelled) {
+      Alert.alert("Couldn't sign in with Apple", result.error || "Please try again.");
+    }
+  };
 
   async function handleAuth() {
     if (!email || !password || (isSignUp && !name)) {
@@ -77,6 +126,35 @@ export default function AuthScreen() {
           {isSignUp ? "Create a new account" : "Sign in to your account"}
         </Text>
 
+        {appleAvailable && (
+          <AppleAuthentication.AppleAuthenticationButton
+            buttonType={AppleAuthentication.AppleAuthenticationButtonType.CONTINUE}
+            buttonStyle={AppleAuthentication.AppleAuthenticationButtonStyle.WHITE}
+            cornerRadius={12}
+            style={styles.appleButton}
+            onPress={handleAppleSignIn}
+          />
+        )}
+
+        <TouchableOpacity
+          activeOpacity={0.8}
+          style={styles.googleButton}
+          onPress={handleGoogleSignIn}
+          disabled={ssoLoading !== null || loading}
+        >
+          {ssoLoading === "google" ? (
+            <ActivityIndicator color={SpaceTheme.backgroundVoid} />
+          ) : (
+            <Text style={styles.googleButtonText}>Continue with Google</Text>
+          )}
+        </TouchableOpacity>
+
+        <View style={styles.dividerRow}>
+          <View style={styles.dividerLine} />
+          <Text style={styles.dividerText}>OR</Text>
+          <View style={styles.dividerLine} />
+        </View>
+
         {isSignUp && (
           <TextInput
             style={styles.input}
@@ -110,7 +188,7 @@ export default function AuthScreen() {
           activeOpacity={0.8}
           style={styles.button}
           onPress={handleAuth}
-          disabled={loading}
+          disabled={loading || ssoLoading !== null}
         >
           {loading ? (
             <ActivityIndicator color={SpaceTheme.backgroundVoid} />
@@ -167,6 +245,31 @@ const styles = StyleSheet.create({
     color: SpaceTheme.mutedOrbit,
     textAlign: "center",
     marginBottom: 32,
+  },
+  appleButton: {
+    width: "100%",
+    height: 50,
+    marginBottom: 12,
+  },
+  googleButton: {
+    ...SpaceStyles.glassCard,
+    height: 50,
+    alignItems: "center",
+    justifyContent: "center",
+    marginBottom: 16,
+  },
+  googleButtonText: { color: SpaceTheme.starWhite, fontSize: 16, fontWeight: "700" },
+  dividerRow: {
+    flexDirection: "row",
+    alignItems: "center",
+    marginBottom: 20,
+  },
+  dividerLine: { flex: 1, height: 1, backgroundColor: "rgba(255,255,255,0.12)" },
+  dividerText: {
+    color: SpaceTheme.mutedOrbit,
+    fontSize: 12,
+    fontWeight: "700",
+    marginHorizontal: 12,
   },
   input: {
     ...SpaceStyles.glassCard,
