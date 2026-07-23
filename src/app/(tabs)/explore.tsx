@@ -16,6 +16,7 @@ import { POST_ACTIVITIES, activityEmoji, activityLabel } from "@/frontend/consta
 import { THEATER_CHAINS, cinemaChain } from "@/frontend/constants/theater-memberships";
 import { getDeviceLocation, Coordinates } from "@/frontend/services/nearby-theaters";
 import { distanceMiles } from "@/frontend/utils/distance";
+import { MoviePoster } from "@/frontend/components/movie-poster";
 import { reportContent } from "@/frontend/services/moderation";
 
 // Matches the Group shape returned by GET /api/group/open
@@ -34,6 +35,7 @@ interface OpenSpace {
   totalCostCents: number | null;
   maxCapacity: number;
   postActivities: string | null;
+  posterPath: string | null;
   members: { id: string; name: string; confirmed: boolean }[];
 }
 
@@ -183,7 +185,7 @@ export default function ExploreScreen() {
   return (
     <Starfield>
       <View style={styles.container}>
-        <Text style={[styles.title, SpaceStyles.glowText]}>Explore Spaces</Text>
+        <Text style={[styles.title, SpaceStyles.glowText, SpaceStyles.wordmark]}>Explore Spaces</Text>
         <Text style={styles.subtitle}>Open Spaces near you, filtered your way</Text>
 
         <FlatList
@@ -386,6 +388,8 @@ export default function ExploreScreen() {
               style={styles.spaceCard}
               onPress={() => router.push({ pathname: "/group", params: { groupId: item.id } })}
             >
+              <MoviePoster uri={item.posterPath} width={72} style={styles.spaceCardPoster} />
+              <View style={styles.spaceCardBody}>
               <View style={styles.spaceCardHeader}>
                 <Text style={styles.spaceFilmName} numberOfLines={1}>
                   {item.filmName}
@@ -404,12 +408,16 @@ export default function ExploreScreen() {
               <View style={styles.statusRow}>
                 {isHappeningTonight(item) && (
                   <View style={[styles.statusBadge, styles.statusBadgeHot]}>
-                    <Text style={styles.statusBadgeText}>⚡ Happening Tonight</Text>
+                    <Text style={[styles.statusBadgeText, styles.statusBadgeHotText]}>
+                      ⚡ Happening Tonight
+                    </Text>
                   </View>
                 )}
                 {isFillingUpFast(item) && (
                   <View style={[styles.statusBadge, styles.statusBadgeHot]}>
-                    <Text style={styles.statusBadgeText}>🔥 Filling Up Fast</Text>
+                    <Text style={[styles.statusBadgeText, styles.statusBadgeHotText]}>
+                      🔥 Filling Up Fast
+                    </Text>
                   </View>
                 )}
                 {item.totalCostCents != null && item.totalCostCents > 0 ? (
@@ -468,6 +476,7 @@ export default function ExploreScreen() {
                 >
                   <Text style={styles.reportSpaceLink}>🚩 Report</Text>
                 </TouchableOpacity>
+              </View>
               </View>
             </TouchableOpacity>
           )}
@@ -561,9 +570,14 @@ const styles = StyleSheet.create({
   },
   spaceCard: {
     ...SpaceStyles.glassCard,
-    padding: 16,
+    flexDirection: "row",
+    gap: 12,
+    padding: 12,
     marginBottom: 12,
+    alignItems: "flex-start",
   },
+  spaceCardPoster: { marginTop: 2 },
+  spaceCardBody: { flex: 1 },
   spaceCardHeader: {
     flexDirection: "row",
     justifyContent: "space-between",
@@ -592,7 +606,7 @@ const styles = StyleSheet.create({
   typeBadgeText: { fontSize: 11, fontWeight: "700", color: SpaceTheme.starWhite },
   spaceDetails: { fontSize: 13, color: SpaceTheme.mutedOrbit, marginBottom: 2 },
   manualBadge: { fontSize: 11, color: SpaceTheme.mutedOrbit, fontStyle: "italic", marginTop: 2 },
-  spacePrice: { fontSize: 13, color: SpaceTheme.supernovaPink, fontWeight: "700", marginTop: 4 },
+  spacePrice: { fontSize: 13, color: SpaceTheme.accentGold, fontWeight: "700", marginTop: 4 },
   hangoutBadge: {
     alignSelf: "flex-start",
     backgroundColor: "rgba(244, 114, 182, 0.15)",
@@ -645,9 +659,10 @@ const styles = StyleSheet.create({
     paddingHorizontal: 8,
   },
   statusBadgeHot: {
-    backgroundColor: "rgba(244, 114, 182, 0.15)",
-    borderColor: "rgba(244, 114, 182, 0.4)",
+    backgroundColor: "rgba(245, 197, 24, 0.15)",
+    borderColor: "rgba(245, 197, 24, 0.45)",
   },
+  statusBadgeHotText: { color: SpaceTheme.accentGold },
   statusBadgeText: { fontSize: 11, fontWeight: "700", color: SpaceTheme.starWhite },
   statusBadgeFree: {
     backgroundColor: "rgba(74, 222, 128, 0.15)",

@@ -324,7 +324,7 @@ export default function ProfileScreen() {
         contentContainerStyle={styles.containerContent}
         keyboardShouldPersistTaps="handled"
       >
-        <Text style={[styles.title, SpaceStyles.glowText]}>Profile</Text>
+        <Text style={[styles.title, SpaceStyles.glowText, SpaceStyles.wordmark]}>Profile</Text>
 
         <View style={styles.card}>
           <TouchableOpacity
@@ -695,5 +695,5 @@ const styles = StyleSheet.create({
     padding: 12,
     alignItems: "center",
   },
-  deleteAccountButtonText: { color: SpaceTheme.supernovaPink, fontSize: 13, fontWeight: "600" },
+  deleteAccountButtonText: { color: SpaceTheme.danger, fontSize: 13, fontWeight: "600" },
 });

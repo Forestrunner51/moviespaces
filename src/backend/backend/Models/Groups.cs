@@ -79,6 +79,13 @@ namespace Backend.Models
         [Column("tmdb_movie_id")]
         public int? TmdbMovieId { get; set; }
 
+        // Full TMDb poster URL, captured from the client at creation time (the
+        // movie picker already has it) so the app can show real poster art on
+        // Space cards without an extra TMDb lookup per card. Nullable — legacy
+        // Spaces and "other"-type events (no movie) have none.
+        [Column("poster_path")]
+        public string? PosterPath { get; set; }
+
         // Real chronological showtime, combining the host-picked date + time.
         // ShowDate/ShowTime stay as the display strings everything already
         // renders; this column exists so the backend can actually filter out

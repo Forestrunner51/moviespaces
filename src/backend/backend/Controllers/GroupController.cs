@@ -88,6 +88,7 @@ namespace Backend.Controllers
                 TheaterLatitude = req.TheaterLatitude,
                 TheaterLongitude = req.TheaterLongitude,
                 TmdbMovieId = req.TmdbMovieId,
+                PosterPath = req.PosterPath,
                 ScreeningTime = req.ScreeningTime,
                 SeasonEpisodeInfo = string.IsNullOrWhiteSpace(req.SeasonEpisodeInfo) ? null : req.SeasonEpisodeInfo.Trim(),
             };
@@ -146,8 +147,8 @@ namespace Backend.Controllers
         <head>
             <meta charset='utf-8'>
             <meta name='viewport' content='width=device-width, initial-scale=1'>
-            <title>{filmName} - MovieSpace</title>
-            <meta property='og:title' content='{filmName} - MovieSpace'>
+            <title>{filmName} - MovieSpaces</title>
+            <meta property='og:title' content='{filmName} - MovieSpaces'>
             <meta property='og:description' content='{hostName} is watching {filmName} at {cinemaName} on {showDate} at {showTime}. Join them!'>
             <style>
                 * {{ margin: 0; padding: 0; box-sizing: border-box; }}
@@ -188,7 +189,7 @@ namespace Backend.Controllers
                     <div class='confirmed'>✓ You're in!</div>
                     <p style='color:#888'>The host will be notified.</p>
                 </div>
-                <a href='moviespaces://space/{group.Id}' class='app-link'>Open in the MovieSpace App</a>
+                <a href='moviespaces://space/{group.Id}' class='app-link'>Open in the MovieSpaces App</a>
             </div>
 
             <script>
@@ -634,7 +635,8 @@ namespace Backend.Controllers
         double? TheaterLongitude,
         int? TmdbMovieId,
         DateTime? ScreeningTime,
-        string? SeasonEpisodeInfo
+        string? SeasonEpisodeInfo,
+        string? PosterPath
     );
 
     public record JoinGroupRequest(string Name);

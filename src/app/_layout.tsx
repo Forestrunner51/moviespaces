@@ -1,6 +1,14 @@
+// Must load before supabase-js so a secure crypto.getRandomValues exists when
+// it generates the PKCE code verifier for OAuth (Google SSO). Without it, RN
+// has no WebCrypto and supabase falls back to a weaker source. Native module —
+// only takes effect after a fresh EAS build. (The code CHALLENGE still uses the
+// `plain` method since RN lacks crypto.subtle for SHA-256; that's expected and
+// supported — this fixes the verifier's randomness, the part that matters.)
+import "react-native-get-random-values";
 import { DarkTheme, ThemeProvider, Stack, router, usePathname } from "expo-router";
 import { useEffect, useRef, useState } from "react";
 import * as Sentry from "@sentry/react-native";
+import { useFonts, BebasNeue_400Regular } from "@expo-google-fonts/bebas-neue";
 import "@/frontend/services/sentry";
 import { AnimatedSplashOverlay } from "@/frontend/components/animated-icon";
 import { supabase } from "@/frontend/config/supabase";
@@ -27,6 +35,9 @@ const SpaceNavigationTheme = {
 function Layout() {
   const [session, setSession] = useState<any>(null);
   const [loading, setLoading] = useState(true);
+  // Display font for the wordmark/titles. Rendering waits for it so titles
+  // don't flash in the system font first, then snap to Bebas Neue.
+  const [fontsLoaded] = useFonts({ BebasNeue_400Regular });
   const pathname = usePathname();
   // Read via ref (not the `pathname` closure) inside the callbacks below —
   // those are registered once by a mount-only effect, so a plain closure
@@ -81,6 +92,12 @@ function Layout() {
       registerForPushNotifications();
     }
   }, [session]);
+
+  // Hold on the animated splash until the display font is ready (keeps titles
+  // from flashing in the system font). The overlay covers the blank frame.
+  if (!fontsLoaded) {
+    return <AnimatedSplashOverlay />;
+  }
 
   return (
     <ThemeProvider value={SpaceNavigationTheme}>

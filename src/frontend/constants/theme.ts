@@ -35,8 +35,44 @@ export const SpaceTheme = {
   starWhite: "#FFFFFF",
   glowCyan: "#38BDF8",
   supernovaPink: "#F472B6",
-  mutedOrbit: "#475569",
+  // Warm cinema accent (marquee gold) — the counterweight to the cool
+  // cyan/pink so the palette reads a bit more "movies" and less "generic
+  // neon startup". Used sparingly for highlights (ratings, price, hot spaces).
+  accentGold: "#F5C518",
+  // Real red for destructive actions, kept distinct from supernovaPink so
+  // pink can mean one thing (the Watch Party category) instead of also
+  // doubling as the delete color.
+  danger: "#F87171",
+  success: "#4ADE80",
+  // Secondary text/icons. Was #475569 (~3:1 on backgroundVoid — under WCAG
+  // AA), which made every subtitle/placeholder/metadata line hard to read.
+  // #94A3B8 lands around 7:1 while still reading clearly as secondary.
+  mutedOrbit: "#94A3B8",
 } as const;
+
+// Semantic colour ROLES — the single source of truth for "what colour means
+// what". Screens should reach for these (primary/destructive/…) rather than
+// picking a raw hue, so the app teaches a consistent visual language:
+//   primary  = the main go-forward action (cyan)
+//   positive = confirm / success (green)
+//   destructive = delete / cancel (red)
+//   watchParty = the private-rental category accent (pink)
+//   highlight = premium/attention accent (gold)
+export const Roles = {
+  primary: SpaceTheme.glowCyan,
+  onPrimary: SpaceTheme.backgroundVoid,
+  positive: SpaceTheme.success,
+  onPositive: SpaceTheme.backgroundVoid,
+  destructive: SpaceTheme.danger,
+  watchParty: SpaceTheme.supernovaPink,
+  highlight: SpaceTheme.accentGold,
+} as const;
+
+// The display/wordmark typeface. Bebas Neue is a tall condensed marquee face —
+// it reads "cinema" and gives titles a distinct identity vs. the system font
+// used for body text. Loaded at runtime via useFonts in the root layout
+// (no native rebuild needed); `undefined` fallback = system font until loaded.
+export const DisplayFont = "BebasNeue_400Regular";
 
 // Shared glassmorphism/glow style fragments so every screen doesn't
 // redeclare the same numbers. Spread into a component's own StyleSheet, e.g.
@@ -48,12 +84,19 @@ export const SpaceStyles = {
     borderWidth: 1,
     borderColor: "rgba(255, 255, 255, 0.08)",
   },
-  // React Native's text-glow uses textShadow*, not the View shadow* props —
-  // shadowColor/shadowRadius/shadowOpacity don't render a glow on <Text>.
+  // React Native's text-glow uses textShadow*, not the View shadow* props.
+  // Softened from a tight radius-4 hard glow to a wider, dimmer bloom — the
+  // hard glow read a bit cheap/gamer-y; this is a subtler premium halo.
   glowText: {
-    textShadowColor: SpaceTheme.glowCyan,
+    textShadowColor: "rgba(56, 189, 248, 0.45)",
     textShadowOffset: { width: 0, height: 0 },
-    textShadowRadius: 4,
+    textShadowRadius: 12,
+  },
+  // Brand wordmark — display font + generous letter tracking, for the big
+  // "MovieSpaces" titles (auth, home).
+  wordmark: {
+    fontFamily: DisplayFont,
+    letterSpacing: 2,
   },
 } as const;
 

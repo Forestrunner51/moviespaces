@@ -19,7 +19,10 @@ import { useLocalSearchParams, router } from "expo-router";
 import * as WebBrowser from "expo-web-browser";
 import * as Calendar from "expo-calendar";
 import { supabase } from "@/frontend/config/supabase";
+import { Ionicons } from "@expo/vector-icons";
 import { Starfield } from "@/frontend/components/starfield";
+import { ActionButton } from "@/frontend/components/action-button";
+import { MoviePoster } from "@/frontend/components/movie-poster";
 import { SpaceTheme, SpaceStyles } from "@/frontend/constants/theme";
 import { buildTicketUrl } from "@/frontend/services/ticket-links";
 import { activityLabel, activityEmoji } from "@/frontend/constants/activities";
@@ -52,6 +55,7 @@ interface Group {
   hangoutNotes: string | null;
   showtimeReportCount: number;
   seasonEpisodeInfo: string | null;
+  posterPath: string | null;
   createdAt: string;
   members: Member[];
 }
@@ -199,7 +203,7 @@ export default function GroupScreen() {
         startDate,
         endDate,
         location: group.cinemaName,
-        notes: `MovieSpace watch party hosted by ${group.hostName}`,
+        notes: `MovieSpaces watch party hosted by ${group.hostName}`,
       });
 
       Alert.alert("Added!", "This watch party is now on your calendar.");
@@ -430,26 +434,37 @@ export default function GroupScreen() {
       <ScrollView style={styles.container} contentContainerStyle={styles.containerContent}>
         {group.status === "cancelled" ? (
           <View style={styles.cancelledBanner}>
-            <Text style={styles.cancelledBannerText}>❌ This Space has been cancelled</Text>
+            <Ionicons name="close-circle" size={15} color={SpaceTheme.supernovaPink} />
+            <Text style={styles.cancelledBannerText}>This Space has been cancelled</Text>
           </View>
         ) : (
           hasPassed && (
             <View style={styles.cancelledBanner}>
-              <Text style={styles.cancelledBannerText}>⏳ This event has passed</Text>
+              <Ionicons name="time-outline" size={15} color={SpaceTheme.supernovaPink} />
+              <Text style={styles.cancelledBannerText}>This event has passed</Text>
             </View>
           )
         )}
         {group.seasonEpisodeInfo && (
           <View style={styles.tvBadge}>
+            <Ionicons name="tv-outline" size={14} color={SpaceTheme.glowCyan} />
             <Text style={styles.tvBadgeText}>
-              📺 Live TV Watch Party • {group.seasonEpisodeInfo}
+              Live TV Watch Party • {group.seasonEpisodeInfo}
             </Text>
           </View>
         )}
-        <Text style={[styles.title, SpaceStyles.glowText]}>{group.filmName}</Text>
-        <Text style={styles.subtitle}>
-          {group.cinemaName} • {group.showTime}
-        </Text>
+        <View style={styles.hero}>
+          <MoviePoster uri={group.posterPath} width={92} />
+          <View style={styles.heroInfo}>
+            <Text style={[styles.title, SpaceStyles.glowText, SpaceStyles.wordmark]}>
+              {group.filmName}
+            </Text>
+            <Text style={styles.subtitle}>
+              {group.cinemaName} • {group.showTime}
+            </Text>
+            <Text style={styles.heroDate}>{group.showDate}</Text>
+          </View>
+        </View>
 
         <View style={styles.manualRow}>
           <Text style={styles.manualBadge}>👤 Showtime scheduled manually by host</Text>
@@ -459,8 +474,10 @@ export default function GroupScreen() {
               onPress={handleReportShowtime}
               disabled={reporting}
               hitSlop={8}
+              style={styles.reportRow}
             >
-              <Text style={styles.reportLink}>🚩 Report</Text>
+              <Ionicons name="flag-outline" size={13} color={SpaceTheme.mutedOrbit} />
+              <Text style={styles.reportLink}>Report</Text>
             </TouchableOpacity>
           )}
         </View>
@@ -518,15 +535,14 @@ export default function GroupScreen() {
             {group.bookingUrl ? (
               <>
                 {!hasPassed && (
-                  <TouchableOpacity
-                    activeOpacity={0.8}
-                    style={styles.rentalReservationButton}
+                  <ActionButton
+                    icon="link-outline"
+                    label="View Event / Venue Link"
                     onPress={() => WebBrowser.openBrowserAsync(group.bookingUrl)}
-                  >
-                    <Text style={styles.rentalReservationButtonText}>
-                      🔗 View Event / Venue Link
-                    </Text>
-                  </TouchableOpacity>
+                    style={styles.rentalReservationButton}
+                    textStyle={styles.rentalReservationButtonText}
+                    iconColor={SpaceTheme.backgroundVoid}
+                  />
                 )}
                 <View style={styles.rentalSecuredBadge}>
                   <Text style={styles.rentalSecuredBadgeText}>🔒 Venue Secured & Confirmed</Text>
@@ -540,15 +556,14 @@ export default function GroupScreen() {
                   </Text>
                 </View>
                 {isHost && !hasPassed && (
-                  <TouchableOpacity
-                    activeOpacity={0.8}
-                    style={styles.addBookingLinkButton}
+                  <ActionButton
+                    icon="create-outline"
+                    label="Add Venue / Event Link"
                     onPress={openBookingUrlModal}
-                  >
-                    <Text style={styles.addBookingLinkButtonText}>
-                      ✏️ Add Venue / Event Link
-                    </Text>
-                  </TouchableOpacity>
+                    style={styles.addBookingLinkButton}
+                    textStyle={styles.addBookingLinkButtonText}
+                    iconColor={SpaceTheme.glowCyan}
+                  />
                 )}
               </>
             )}
@@ -599,64 +614,67 @@ export default function GroupScreen() {
         </View>
 
         {!isHost && !isMember && !hasPassed && (
-          <TouchableOpacity
-            activeOpacity={0.8}
-            style={styles.joinButton}
+          <ActionButton
+            icon="person-add-outline"
+            label="Join This Space"
             onPress={() => router.push({ pathname: "/join", params: { groupId: group.id } })}
-          >
-            <Text style={styles.buttonText}>🙋 Join This Space</Text>
-          </TouchableOpacity>
+            style={styles.joinButton}
+            textStyle={styles.buttonText}
+            iconColor={SpaceTheme.backgroundVoid}
+          />
         )}
 
         {isMember && myMember && !hasPassed && (
           myMember.confirmed ? (
-            <TouchableOpacity
-              activeOpacity={0.8}
-              style={styles.confirmedButton}
+            <ActionButton
+              icon="checkmark-done-outline"
+              label="You're Confirmed — Tap to Cancel"
               onPress={() => handleCancelAttendance(myMember.id)}
-              disabled={confirming}
-            >
-              <Text style={styles.confirmedButtonText}>
-                {confirming ? "..." : "✓ You're Confirmed — Tap to Cancel"}
-              </Text>
-            </TouchableOpacity>
+              loading={confirming}
+              style={styles.confirmedButton}
+              textStyle={styles.confirmedButtonText}
+              iconColor={SpaceTheme.mutedOrbit}
+            />
           ) : (
-            <TouchableOpacity
-              activeOpacity={0.8}
-              style={styles.confirmButton}
+            <ActionButton
+              icon="checkmark-circle-outline"
+              label="Confirm You're Going"
               onPress={() => handleConfirmAttendance(myMember.id)}
-              disabled={confirming}
-            >
-              <Text style={styles.buttonText}>
-                {confirming ? "..." : "✓ Confirm You're Going"}
-              </Text>
-            </TouchableOpacity>
+              loading={confirming}
+              style={styles.confirmButton}
+              textStyle={styles.buttonText}
+              iconColor={SpaceTheme.backgroundVoid}
+            />
           )
         )}
 
         {isMember && !isHost && !hasPassed && (
-          <TouchableOpacity
-            activeOpacity={0.8}
-            style={styles.leaveSpaceButton}
+          <ActionButton
+            icon="exit-outline"
+            label="Leave Space"
             onPress={handleLeaveSpace}
-            disabled={leaving}
-          >
-            <Text style={styles.leaveSpaceButtonText}>
-              {leaving ? "Leaving..." : "🚪 Leave Space"}
-            </Text>
-          </TouchableOpacity>
+            loading={leaving}
+            style={styles.leaveSpaceButton}
+            textStyle={styles.leaveSpaceButtonText}
+            iconColor={SpaceTheme.mutedOrbit}
+          />
         )}
 
         {!hasPassed && (
-          <TouchableOpacity activeOpacity={0.8} style={styles.shareButton} onPress={shareLink}>
-            <Text style={styles.buttonText}>📤 Invite Friends</Text>
-          </TouchableOpacity>
+          <ActionButton
+            icon="share-social-outline"
+            label="Invite Friends"
+            onPress={shareLink}
+            style={styles.shareButton}
+            textStyle={styles.buttonText}
+            iconColor={SpaceTheme.backgroundVoid}
+          />
         )}
 
         {(isHost || isMember) && (
-          <TouchableOpacity
-            activeOpacity={0.8}
-            style={styles.chatButton}
+          <ActionButton
+            icon="chatbubbles-outline"
+            label="Group Chat"
             onPress={() =>
               router.push({
                 pathname: "/group-chat/[id]",
@@ -670,72 +688,73 @@ export default function GroupScreen() {
                 },
               })
             }
-          >
-            <Text style={styles.buttonText}>💬 Group Chat</Text>
-          </TouchableOpacity>
+            style={styles.chatButton}
+            textStyle={styles.buttonText}
+            iconColor={SpaceTheme.backgroundVoid}
+          />
         )}
 
         {(isHost || isMember) && group.spaceType === "public_gathering" && !hasPassed && (
-          <TouchableOpacity
-            activeOpacity={0.8}
-            style={styles.ticketsButton}
+          <ActionButton
+            icon="ticket-outline"
+            iconSize={20}
+            label="Get Tickets"
             onPress={handleGetTickets}
-          >
-            <Text style={styles.ticketsButtonText}>🎟 Get Tickets</Text>
-          </TouchableOpacity>
+            style={styles.ticketsButton}
+            textStyle={styles.ticketsButtonText}
+            iconColor={SpaceTheme.backgroundVoid}
+          />
         )}
 
         {(isHost || isMember) && !hasPassed && (
-          <TouchableOpacity
-            activeOpacity={0.8}
-            style={styles.calendarButton}
+          <ActionButton
+            icon="calendar-outline"
+            label="Add to Calendar"
             onPress={handleAddToCalendar}
-            disabled={addingToCalendar}
-          >
-            <Text style={styles.calendarButtonText}>
-              {addingToCalendar ? "Adding..." : "📅 Add to Calendar"}
-            </Text>
-          </TouchableOpacity>
+            loading={addingToCalendar}
+            style={styles.calendarButton}
+            textStyle={styles.calendarButtonText}
+            iconColor={SpaceTheme.starWhite}
+          />
         )}
 
         {isHost && group.status !== "booked" && !hasPassed && (
-          <TouchableOpacity
-            activeOpacity={0.8}
-            style={styles.bookButton}
+          <ActionButton
+            icon={allConfirmed ? "checkmark-circle-outline" : "hourglass-outline"}
+            label={
+              allConfirmed
+                ? "Mark Group Booked"
+                : `Waiting for ${groupMembers.filter((m) => !m.confirmed).length} confirmation(s)`
+            }
             onPress={handleBook}
-          >
-            <Text style={styles.buttonText}>
-              {allConfirmed
-                ? "✓ Mark Group Booked"
-                : `Waiting for ${groupMembers.filter((m) => !m.confirmed).length} confirmation(s)`}
-            </Text>
-          </TouchableOpacity>
+            style={styles.bookButton}
+            textStyle={styles.buttonText}
+            iconColor={SpaceTheme.backgroundVoid}
+          />
         )}
 
         {isHost && group.status === "booked" && !hasPassed && (
-          <TouchableOpacity
-            activeOpacity={0.8}
-            style={styles.unbookButton}
+          <ActionButton
+            icon="arrow-undo-outline"
+            label="Unbook (Revert to Pending)"
             onPress={handleUnbook}
-            disabled={unbooking}
-          >
-            <Text style={styles.buttonText}>
-              {unbooking ? "..." : "↩️ Unbook (Revert to Pending)"}
-            </Text>
-          </TouchableOpacity>
+            loading={unbooking}
+            style={styles.unbookButton}
+            textStyle={styles.unbookButtonText}
+            iconColor={SpaceTheme.starWhite}
+          />
         )}
 
         {isHost && !hasPassed && (
-          <TouchableOpacity
-            activeOpacity={0.8}
-            style={styles.cancelSpaceButton}
+          <ActionButton
+            icon="warning-outline"
+            label="Cancel this Space"
             onPress={handleCancelSpace}
-            disabled={deleting}
-          >
-            <Text style={styles.cancelSpaceButtonText}>
-              {deleting ? "Deleting..." : "⚠️ Cancel this Space"}
-            </Text>
-          </TouchableOpacity>
+            loading={deleting}
+            style={styles.cancelSpaceButton}
+            textStyle={styles.cancelSpaceButtonText}
+            iconColor={SpaceTheme.danger}
+          />
         )}
       </ScrollView>
 
@@ -837,9 +856,15 @@ const styles = StyleSheet.create({
   },
   center: { flex: 1, justifyContent: "center", alignItems: "center" },
   notFoundText: { color: SpaceTheme.mutedOrbit, fontSize: 16 },
-  title: { fontSize: 22, fontWeight: "bold", color: SpaceTheme.starWhite },
-  subtitle: { fontSize: 14, color: SpaceTheme.mutedOrbit, marginBottom: 12 },
+  hero: { flexDirection: "row", gap: 14, marginBottom: 12, alignItems: "flex-start" },
+  heroInfo: { flex: 1, justifyContent: "center" },
+  title: { fontSize: 26, color: SpaceTheme.starWhite },
+  subtitle: { fontSize: 14, color: SpaceTheme.mutedOrbit, marginTop: 4 },
+  heroDate: { fontSize: 13, color: SpaceTheme.glowCyan, fontWeight: "600", marginTop: 4 },
   tvBadge: {
+    flexDirection: "row",
+    alignItems: "center",
+    gap: 5,
     alignSelf: "flex-start",
     backgroundColor: "rgba(56, 189, 248, 0.15)",
     borderWidth: 1,
@@ -857,7 +882,8 @@ const styles = StyleSheet.create({
     marginBottom: 4,
   },
   manualBadge: { fontSize: 12, color: SpaceTheme.mutedOrbit, fontWeight: "600" },
-  reportLink: { fontSize: 12, color: SpaceTheme.supernovaPink, fontWeight: "700" },
+  reportRow: { flexDirection: "row", alignItems: "center", gap: 4 },
+  reportLink: { fontSize: 12, color: SpaceTheme.mutedOrbit, fontWeight: "700" },
   reportCountText: {
     fontSize: 12,
     color: SpaceTheme.supernovaPink,
@@ -902,7 +928,7 @@ const styles = StyleSheet.create({
     fontWeight: "800",
     letterSpacing: 0.5,
   },
-  rentalCostText: { color: SpaceTheme.starWhite, fontSize: 20, fontWeight: "700" },
+  rentalCostText: { color: SpaceTheme.accentGold, fontSize: 20, fontWeight: "700" },
   rentalPerPersonText: { color: SpaceTheme.mutedOrbit, fontSize: 13, marginTop: 2 },
   freeBadge: {
     alignSelf: "flex-start",
@@ -1014,13 +1040,18 @@ const styles = StyleSheet.create({
     borderRadius: 12,
     alignItems: "center",
   },
+  // White, not the dark `buttonText` — this button sits on a dark glass
+  // background, so the previous void-colored label was near-invisible.
+  unbookButtonText: { color: SpaceTheme.starWhite, fontWeight: "700", fontSize: 15 },
   cancelSpaceButton: {
     alignItems: "center",
     padding: 14,
     marginTop: 12,
   },
-  cancelSpaceButtonText: { color: SpaceTheme.supernovaPink, fontWeight: "600", fontSize: 14 },
+  cancelSpaceButtonText: { color: SpaceTheme.danger, fontWeight: "600", fontSize: 14 },
   cancelledBanner: {
+    flexDirection: "row",
+    justifyContent: "center",
     backgroundColor: "rgba(255, 59, 92, 0.12)",
     borderWidth: 1,
     borderColor: SpaceTheme.supernovaPink,
@@ -1028,6 +1059,7 @@ const styles = StyleSheet.create({
     padding: 12,
     marginBottom: 12,
     alignItems: "center",
+    gap: 6,
   },
   cancelledBannerText: { color: SpaceTheme.supernovaPink, fontWeight: "700", fontSize: 14 },
   leaveSpaceButton: {
