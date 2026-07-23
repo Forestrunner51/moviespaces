@@ -1,6 +1,6 @@
 {
   "expo": {
-    "name": "Moviespaces",
+    "name": "MovieSpaces",
     "slug": "Moviespaces",
     "version": "1.0.0",
     "orientation": "portrait",
@@ -82,7 +82,8 @@
         }
       ],
       "expo-apple-authentication",
-      "@sentry/react-native"
+      "@sentry/react-native",
+      "expo-font"
     ],
     "experiments": {
       "typedRoutes": true,

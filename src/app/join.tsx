@@ -54,7 +54,7 @@ export default function JoinScreen() {
   return (
     <Starfield>
       <View style={styles.container}>
-        <Text style={[styles.title, SpaceStyles.glowText]}>Join Movie Group</Text>
+        <Text style={[styles.title, SpaceStyles.glowText, SpaceStyles.wordmark]}>Join Movie Group</Text>
         <Text style={styles.subtitle}>Enter your name to join</Text>
         <TextInput
           style={styles.input}

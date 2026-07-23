@@ -11,7 +11,6 @@ import {
 import { useRouter } from "expo-router";
 import { supabase } from "@/frontend/config/supabase";
 import { Starfield } from "@/frontend/components/starfield";
-import { ShootingStars } from "@/frontend/components/shooting-stars";
 import { SpaceTheme, SpaceStyles } from "@/frontend/constants/theme";
 
 // Uses Supabase's OTP recovery-code flow rather than the emailed-link flow:
@@ -81,10 +80,9 @@ export default function ResetPasswordScreen() {
   };
 
   return (
-    <Starfield>
-      <ShootingStars />
+    <Starfield twinkle>
       <View style={styles.container}>
-        <Text style={[styles.header, SpaceStyles.glowText]}>Reset Password</Text>
+        <Text style={[styles.header, SpaceStyles.glowText, SpaceStyles.wordmark]}>Reset Password</Text>
 
         {stage === "request" ? (
           <>

@@ -13,7 +13,6 @@ import * as AppleAuthentication from "expo-apple-authentication";
 import { supabase } from "../frontend/config/supabase";
 import { useRouter } from "expo-router";
 import { Starfield } from "@/frontend/components/starfield";
-import { ShootingStars } from "@/frontend/components/shooting-stars";
 import { SpaceTheme, SpaceStyles } from "@/frontend/constants/theme";
 import { consumePendingRedirect } from "@/frontend/services/pending-redirect";
 import { signInWithGoogle, signInWithApple, isAppleSignInAvailable } from "@/frontend/services/sso";
@@ -120,10 +119,9 @@ export default function AuthScreen() {
   }
 
   return (
-    <Starfield>
-      <ShootingStars />
+    <Starfield twinkle>
       <View style={styles.container}>
-        <Text style={[styles.header, SpaceStyles.glowText]}>MovieSpaces</Text>
+        <Text style={[styles.header, SpaceStyles.glowText, SpaceStyles.wordmark]}>MovieSpaces</Text>
         <Text style={styles.subHeader}>
           {isSignUp ? "Create a new account" : "Sign in to your account"}
         </Text>

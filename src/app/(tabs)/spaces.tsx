@@ -13,6 +13,7 @@ import { router, useFocusEffect, useLocalSearchParams } from "expo-router";
 import { Ionicons } from "@expo/vector-icons";
 import { FriendsPanel } from "@/frontend/components/friends-panel";
 import { Starfield } from "@/frontend/components/starfield";
+import { MoviePoster } from "@/frontend/components/movie-poster";
 import { SpaceTheme, SpaceStyles } from "@/frontend/constants/theme";
 import { useUnreadCounts } from "@/frontend/hooks/use-unread-counts";
 
@@ -26,6 +27,7 @@ interface Space {
   createdAt: string;
   status: string;
   spaceType: string;
+  posterPath: string | null;
   members: { id: string; name: string; confirmed: boolean }[];
 }
 
@@ -36,6 +38,56 @@ const TABS: { key: Tab; label: string; icon: keyof typeof Ionicons.glyphMap }[] 
   { key: "rent", label: "Watch Parties", icon: "storefront-outline" },
   { key: "friends", label: "Friends", icon: "people-outline" },
 ];
+
+// One card, shared by the Spaces and Watch Parties lists (they were
+// previously two identical inline renderItems). Poster anchors the left,
+// details on the right.
+function SpaceCard({
+  item,
+  unreadCount,
+  past,
+}: {
+  item: Space;
+  unreadCount: number;
+  past: boolean;
+}) {
+  return (
+    <TouchableOpacity
+      activeOpacity={0.8}
+      style={styles.card}
+      onPress={() => router.push({ pathname: "/group", params: { groupId: item.id } })}
+    >
+      <MoviePoster uri={item.posterPath} width={60} />
+      <View style={styles.cardBody}>
+        <View style={styles.cardHeader}>
+          <Text style={styles.filmName}>{item.filmName}</Text>
+          {!!unreadCount && (
+            <View style={styles.unreadBadge}>
+              <Text style={styles.unreadBadgeText}>
+                💬 {unreadCount > 9 ? "9+" : unreadCount} new
+              </Text>
+            </View>
+          )}
+        </View>
+        {past && (
+          <View style={styles.pastBadge}>
+            <Text style={styles.pastBadgeText}>⏳ This event has passed</Text>
+          </View>
+        )}
+        <Text style={styles.details}>
+          {item.cinemaName} • {item.showTime}
+        </Text>
+        <Text style={styles.date}>{item.showDate}</Text>
+        <View style={styles.footer}>
+          <Text style={styles.amount}>{item.members.length} member(s)</Text>
+          <Text style={item.status === "booked" ? styles.statusGood : styles.statusPending}>
+            {item.status === "booked" ? "✓ Booked" : "Pending"}
+          </Text>
+        </View>
+      </View>
+    </TouchableOpacity>
+  );
+}
 
 export default function MySpacesScreen() {
   const { tab: initialTab } = useLocalSearchParams<{ tab?: Tab }>();
@@ -89,7 +141,7 @@ export default function MySpacesScreen() {
   return (
     <Starfield>
       <View style={styles.container}>
-        <Text style={[styles.title, SpaceStyles.glowText]}>My Spaces</Text>
+        <Text style={[styles.title, SpaceStyles.glowText, SpaceStyles.wordmark]}>My Spaces</Text>
 
         <View style={styles.tabBar}>
           {TABS.map(({ key, label, icon }) => {
@@ -136,48 +188,11 @@ export default function MySpacesScreen() {
                 data={rentalSpaces}
                 keyExtractor={(item) => item.id}
                 renderItem={({ item }) => (
-                  <TouchableOpacity
-                    activeOpacity={0.8}
-                    style={styles.card}
-                    onPress={() =>
-                      router.push({
-                        pathname: "/group",
-                        params: { groupId: item.id },
-                      })
-                    }
-                  >
-                    <View style={styles.cardHeader}>
-                      <Text style={styles.filmName}>{item.filmName}</Text>
-                      {!!unreadCounts[item.id] && (
-                        <View style={styles.unreadBadge}>
-                          <Text style={styles.unreadBadgeText}>
-                            💬 {unreadCounts[item.id] > 9 ? "9+" : unreadCounts[item.id]} new
-                          </Text>
-                        </View>
-                      )}
-                    </View>
-                    {isPast(item) && (
-                      <View style={styles.pastBadge}>
-                        <Text style={styles.pastBadgeText}>⏳ This event has passed</Text>
-                      </View>
-                    )}
-                    <Text style={styles.details}>
-                      {item.cinemaName} • {item.showTime}
-                    </Text>
-                    <Text style={styles.date}>{item.showDate}</Text>
-                    <View style={styles.footer}>
-                      <Text style={styles.amount}>
-                        {item.members.length} member(s)
-                      </Text>
-                      <Text
-                        style={
-                          item.status === "booked" ? styles.statusGood : styles.statusPending
-                        }
-                      >
-                        {item.status === "booked" ? "✓ Booked" : "Pending"}
-                      </Text>
-                    </View>
-                  </TouchableOpacity>
+                  <SpaceCard
+                    item={item}
+                    unreadCount={unreadCounts[item.id] ?? 0}
+                    past={isPast(item)}
+                  />
                 )}
                 ListEmptyComponent={
                   <View style={styles.emptyState}>
@@ -208,48 +223,11 @@ export default function MySpacesScreen() {
               data={gatheringSpaces}
               keyExtractor={(item) => item.id}
               renderItem={({ item }) => (
-                <TouchableOpacity
-                  activeOpacity={0.8}
-                  style={styles.card}
-                  onPress={() =>
-                    router.push({
-                      pathname: "/group",
-                      params: { groupId: item.id },
-                    })
-                  }
-                >
-                  <View style={styles.cardHeader}>
-                    <Text style={styles.filmName}>{item.filmName}</Text>
-                    {!!unreadCounts[item.id] && (
-                      <View style={styles.unreadBadge}>
-                        <Text style={styles.unreadBadgeText}>
-                          💬 {unreadCounts[item.id] > 9 ? "9+" : unreadCounts[item.id]} new
-                        </Text>
-                      </View>
-                    )}
-                  </View>
-                  {isPast(item) && (
-                    <View style={styles.pastBadge}>
-                      <Text style={styles.pastBadgeText}>⏳ This event has passed</Text>
-                    </View>
-                  )}
-                  <Text style={styles.details}>
-                    {item.cinemaName} • {item.showTime}
-                  </Text>
-                  <Text style={styles.date}>{item.showDate}</Text>
-                  <View style={styles.footer}>
-                    <Text style={styles.amount}>
-                      {item.members.length} member(s)
-                    </Text>
-                    <Text
-                      style={
-                        item.status === "booked" ? styles.statusGood : styles.statusPending
-                      }
-                    >
-                      {item.status === "booked" ? "✓ Booked" : "Pending"}
-                    </Text>
-                  </View>
-                </TouchableOpacity>
+                <SpaceCard
+                  item={item}
+                  unreadCount={unreadCounts[item.id] ?? 0}
+                  past={isPast(item)}
+                />
               )}
               ListEmptyComponent={
                 <View style={styles.emptyState}>
@@ -329,9 +307,13 @@ const styles = StyleSheet.create({
   newSpaceButtonText: { color: SpaceTheme.backgroundVoid, fontWeight: "700", fontSize: 15 },
   card: {
     ...SpaceStyles.glassCard,
-    padding: 16,
+    flexDirection: "row",
+    gap: 12,
+    padding: 12,
     marginBottom: 12,
+    alignItems: "flex-start",
   },
+  cardBody: { flex: 1, justifyContent: "center" },
   rentCardRow: { flexDirection: "row", alignItems: "center", gap: 12 },
   cardHeader: {
     flexDirection: "row",

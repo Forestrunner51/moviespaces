@@ -67,7 +67,7 @@ export default function RentATheaterScreen() {
   return (
     <Starfield>
       <View style={styles.container}>
-        <Text style={[styles.title, SpaceStyles.glowText]}>Host a Watch Party</Text>
+        <Text style={[styles.title, SpaceStyles.glowText, SpaceStyles.wordmark]}>Host a Watch Party</Text>
         <Text style={styles.subtitle}>
           Pick a venue — a theater, bar, community space, or your own place — to start a Space
           with friends. MovieSpaces doesn&apos;t handle the booking itself; use the venue&apos;s own
@@ -83,7 +83,7 @@ export default function RentATheaterScreen() {
         >
           <Ionicons name="location-outline" size={20} color={SpaceTheme.glowCyan} />
           <View style={{ flex: 1 }}>
-            <Text style={styles.filmName}>📍 Custom / Private Address</Text>
+            <Text style={styles.filmName}>Custom / Private Address</Text>
             <Text style={styles.details}>Backyard, someone&apos;s place, or anywhere not listed</Text>
           </View>
           <Ionicons name="chevron-forward" size={20} color={SpaceTheme.mutedOrbit} />

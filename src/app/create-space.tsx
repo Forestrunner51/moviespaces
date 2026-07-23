@@ -56,6 +56,7 @@ export default function CreateSpaceScreen() {
     spaceType: prefillSpaceType,
     movieName: prefillMovieName,
     tmdbMovieId: prefillTmdbMovieId,
+    posterPath: prefillPosterPath,
   } = useLocalSearchParams<{
     theaterName?: string;
     theaterPlaceId?: string;
@@ -64,6 +65,7 @@ export default function CreateSpaceScreen() {
     spaceType?: SpaceType;
     movieName?: string;
     tmdbMovieId?: string;
+    posterPath?: string;
   }>();
   const [spaceType, setSpaceType] = useState<SpaceType>(
     prefillSpaceType === "private_rental" ? "private_rental" : "public_gathering",
@@ -86,6 +88,9 @@ export default function CreateSpaceScreen() {
   const [tmdbMovieId, setTmdbMovieId] = useState<number | null>(
     prefillTmdbMovieId ? parseInt(prefillTmdbMovieId, 10) : null,
   );
+  // The picked movie's poster URL — stored on the Space at creation so cards
+  // can show poster art without a per-card TMDb lookup.
+  const [posterPath, setPosterPath] = useState<string | null>(prefillPosterPath ?? null);
   const [showDate, setShowDate] = useState("");
   const [showTime, setShowTime] = useState("");
 
@@ -309,6 +314,7 @@ export default function CreateSpaceScreen() {
           theaterLongitude: theaterLng,
           filmName: movieName.trim(),
           tmdbMovieId,
+          posterPath,
           showTime: showTime.trim(),
           showDate: showDate.trim(),
           screeningTime,
@@ -347,7 +353,7 @@ export default function CreateSpaceScreen() {
         behavior={Platform.OS === "ios" ? "padding" : undefined}
       >
         <ScrollView contentContainerStyle={{ paddingBottom: 40 }} keyboardShouldPersistTaps="handled">
-          <Text style={[styles.title, SpaceStyles.glowText]}>Create a Space</Text>
+          <Text style={[styles.title, SpaceStyles.glowText, SpaceStyles.wordmark]}>Create a Space</Text>
 
           <View style={styles.toggleRow}>
             <TouchableOpacity
@@ -430,6 +436,7 @@ export default function CreateSpaceScreen() {
                   setRentalActivityType("movie");
                   setMovieName("");
                   setTmdbMovieId(null);
+                  setPosterPath(null);
                 }}
               >
                 <Text style={styles.afterChipEmoji}>🎬</Text>
@@ -449,6 +456,7 @@ export default function CreateSpaceScreen() {
                   setRentalActivityType("tv");
                   setMovieName("");
                   setTmdbMovieId(null);
+                  setPosterPath(null);
                 }}
               >
                 <Text style={styles.afterChipEmoji}>📺</Text>
@@ -468,6 +476,7 @@ export default function CreateSpaceScreen() {
                   setRentalActivityType("other");
                   setMovieName("");
                   setTmdbMovieId(null);
+                  setPosterPath(null);
                 }}
               >
                 <Text style={styles.afterChipEmoji}>🏆</Text>
@@ -890,6 +899,7 @@ export default function CreateSpaceScreen() {
                     onPress={() => {
                       setMovieName(item.title);
                       setTmdbMovieId(item.id);
+                      setPosterPath(item.posterPath);
                       setMovieModalVisible(false);
                       setMovieSearch("");
                     }}
@@ -917,6 +927,7 @@ export default function CreateSpaceScreen() {
               onChangeText={(text) => {
                 setMovieName(text);
                 setTmdbMovieId(null);
+                setPosterPath(null);
               }}
             />
             <TouchableOpacity

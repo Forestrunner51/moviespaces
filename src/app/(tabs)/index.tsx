@@ -13,12 +13,14 @@ import { Ionicons } from "@expo/vector-icons";
 import { Starfield } from "@/frontend/components/starfield";
 import { SpaceTheme, SpaceStyles } from "@/frontend/constants/theme";
 import { getNowPlaying, TmdbMovie } from "@/frontend/services/tmdb";
+import { MoviePoster } from "@/frontend/components/movie-poster";
 
 interface NearbySpace {
   id: string;
   hostName: string;
   filmName: string;
   cinemaName: string;
+  posterPath: string | null;
   showDate: string;
   showTime: string;
 }
@@ -69,7 +71,7 @@ export default function HomeScreen() {
   return (
     <Starfield>
       <View style={styles.container}>
-        <Text style={[styles.title, SpaceStyles.glowText, styles.titleSpacing]}>MovieSpace</Text>
+        <Text style={[styles.title, SpaceStyles.glowText, SpaceStyles.wordmark, styles.titleSpacing]}>MovieSpaces</Text>
         <Text style={styles.chooseSubtitle}>What do you want to do?</Text>
 
         <TouchableOpacity
@@ -133,9 +135,7 @@ export default function HomeScreen() {
                 style={styles.spaceCard}
                 onPress={() => router.push({ pathname: "/group", params: { groupId: item.id } })}
               >
-                <View style={styles.spaceCardIcon}>
-                  <Ionicons name="film-outline" size={22} color={SpaceTheme.glowCyan} />
-                </View>
+                <MoviePoster uri={item.posterPath} width={132} style={styles.spaceCardPoster} />
                 <Text style={styles.spaceCardTitle} numberOfLines={1}>
                   {item.filmName}
                 </Text>
@@ -176,6 +176,7 @@ export default function HomeScreen() {
                       spaceType: "public_gathering",
                       movieName: item.title,
                       tmdbMovieId: item.id.toString(),
+                      posterPath: item.posterPath ?? "",
                     },
                   })
                 }
@@ -253,7 +254,7 @@ const styles = StyleSheet.create({
     width: 160,
     padding: 14,
   },
-  spaceCardIcon: { marginBottom: 8 },
+  spaceCardPoster: { marginBottom: 10 },
   spaceCardTitle: { fontSize: 15, fontWeight: "700", color: SpaceTheme.starWhite, marginBottom: 2 },
   spaceCardSubtitle: { fontSize: 12, color: SpaceTheme.mutedOrbit, marginBottom: 4 },
   spaceCardTime: { fontSize: 12, color: SpaceTheme.glowCyan, fontWeight: "600", marginBottom: 6 },
