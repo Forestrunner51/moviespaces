@@ -77,6 +77,26 @@ export async function signInWithApple(): Promise<SsoResult> {
     });
     if (error) return { success: false, error: error.message };
 
+    // Apple's identity token has no name — the name only ever arrives in
+    // `credential.fullName`, and only on the very first authorization. If we
+    // don't capture it now, the account is stuck as "Unknown User" (the
+    // profiles trigger's default) forever. Persist it to both user_metadata
+    // (so the rest of the app's name-reading paths see it) and the profiles
+    // row (the actual display name).
+    const appleName = [credential.fullName?.givenName, credential.fullName?.familyName]
+      .filter(Boolean)
+      .join(" ")
+      .trim();
+    if (appleName) {
+      await supabase.auth.updateUser({ data: { full_name: appleName } });
+      const {
+        data: { user },
+      } = await supabase.auth.getUser();
+      if (user) {
+        await supabase.from("profiles").update({ display_name: appleName }).eq("id", user.id);
+      }
+    }
+
     return { success: true };
   } catch (err: any) {
     // Apple's own "user tapped Cancel" error — not a real failure.

@@ -307,6 +307,17 @@ namespace Backend.Controllers
                 return Ok(new { memberId = existing.Id });
             }
 
+            // Enforce the advertised capacity/status here — the UI shows
+            // "X / Y spots filled" and hides full Spaces from Explore, but
+            // nothing stopped a direct call to this endpoint from over-filling
+            // a Space or joining a cancelled one.
+            if (group.Status == "cancelled")
+                return BadRequest(new { error = "This Space has been cancelled." });
+
+            var memberCount = await _db.GroupMembers.CountAsync(m => m.GroupId == id);
+            if (memberCount >= group.MaxCapacity)
+                return BadRequest(new { error = "This Space is already full." });
+
             var member = new GroupMember
             {
                 GroupId = id,
@@ -338,6 +349,14 @@ namespace Backend.Controllers
             {
                 return Ok(new { memberId = existing.Id });
             }
+
+            // Same capacity/status enforcement as the authenticated join path.
+            if (group.Status == "cancelled")
+                return BadRequest(new { error = "This Space has been cancelled." });
+
+            var memberCount = await _db.GroupMembers.CountAsync(m => m.GroupId == id);
+            if (memberCount >= group.MaxCapacity)
+                return BadRequest(new { error = "This Space is already full." });
 
             var member = new GroupMember
             {
