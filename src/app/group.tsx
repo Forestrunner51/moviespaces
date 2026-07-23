@@ -91,6 +91,12 @@ export default function GroupScreen() {
       const res = await authFetch(
         `${process.env.EXPO_PUBLIC_API_URL}/api/group/${groupId}`,
       );
+      // On a non-OK response (deleted Space, transient 500 during the 5s
+      // poll, etc.) leave the current state alone rather than clobbering
+      // `group` with the error body — otherwise an error object is truthy,
+      // slips past the "Group not found" guard, and the screen renders with
+      // undefined fields. An initial failure leaves group null → not-found.
+      if (!res.ok) return;
       const data = await res.json();
       setGroup(data);
     } catch (err) {
@@ -105,6 +111,33 @@ export default function GroupScreen() {
     const interval = setInterval(fetchGroup, 5000); // poll every 5 seconds
     return () => clearInterval(interval);
   }, [fetchGroup]);
+
+  // Runs a mutating group action, surfaces the server's error message on
+  // failure, and returns whether it succeeded — so callers can gate
+  // navigation / success UI on a real result. Previously every one of these
+  // handlers fired authFetch and ignored the response, so a failed action
+  // (403, network drop, etc.) silently "succeeded" in the UI: e.g. Mark
+  // Booked showing a confirmation alert, or Delete/Leave navigating away,
+  // even when the request never went through.
+  const runGroupAction = useCallback(
+    async (path: string, options: RequestInit = {}): Promise<boolean> => {
+      try {
+        const res = await authFetch(
+          `${process.env.EXPO_PUBLIC_API_URL}/api/group/${groupId}${path}`,
+          { method: "POST", ...options },
+        );
+        if (!res.ok) {
+          const body = await res.json().catch(() => null);
+          throw new Error(body?.error || "Something went wrong. Please try again.");
+        }
+        return true;
+      } catch (err: any) {
+        Alert.alert("Couldn't complete that action", err.message || "Please try again.");
+        return false;
+      }
+    },
+    [groupId],
+  );
 
   // Fixed: Guarded share handler inside the component scope
   const shareLink = async () => {
@@ -182,21 +215,13 @@ export default function GroupScreen() {
 
   const handleConfirmAttendance = async (memberId: string) => {
     setConfirming(true);
-    await authFetch(
-      `${process.env.EXPO_PUBLIC_API_URL}/api/group/${groupId}/confirm/${memberId}`,
-      { method: "POST" },
-    );
-    await fetchGroup();
+    if (await runGroupAction(`/confirm/${memberId}`)) await fetchGroup();
     setConfirming(false);
   };
 
   const handleCancelAttendance = async (memberId: string) => {
     setConfirming(true);
-    await authFetch(
-      `${process.env.EXPO_PUBLIC_API_URL}/api/group/${groupId}/unconfirm/${memberId}`,
-      { method: "POST" },
-    );
-    await fetchGroup();
+    if (await runGroupAction(`/unconfirm/${memberId}`)) await fetchGroup();
     setConfirming(false);
   };
 
@@ -213,10 +238,7 @@ export default function GroupScreen() {
           style: "destructive",
           onPress: async () => {
             setReporting(true);
-            await fetch(`${process.env.EXPO_PUBLIC_API_URL}/api/group/${groupId}/report-showtime`, {
-              method: "POST",
-            });
-            await fetchGroup();
+            if (await runGroupAction("/report-showtime")) await fetchGroup();
             setReporting(false);
           },
         },
@@ -235,13 +257,14 @@ export default function GroupScreen() {
 
   const handleSaveBookingUrl = async () => {
     setSavingBookingUrl(true);
-    await authFetch(`${process.env.EXPO_PUBLIC_API_URL}/api/group/${groupId}/booking-url`, {
-      method: "POST",
+    const ok = await runGroupAction("/booking-url", {
       body: JSON.stringify({ bookingUrl: bookingUrlInput.trim() }),
     });
-    await fetchGroup();
+    if (ok) {
+      await fetchGroup();
+      setBookingUrlModalVisible(false);
+    }
     setSavingBookingUrl(false);
-    setBookingUrlModalVisible(false);
   };
 
   const [transferModalVisible, setTransferModalVisible] = useState(false);
@@ -259,10 +282,9 @@ export default function GroupScreen() {
           style: "destructive",
           onPress: async () => {
             setDeleting(true);
-            await authFetch(`${process.env.EXPO_PUBLIC_API_URL}/api/group/${groupId}`, {
-              method: "DELETE",
-            });
-            router.replace("/(tabs)/spaces");
+            const ok = await runGroupAction("", { method: "DELETE" });
+            setDeleting(false);
+            if (ok) router.replace("/(tabs)/spaces");
           },
         },
       ],
@@ -270,10 +292,7 @@ export default function GroupScreen() {
   };
 
   const handleMarkCancelled = async () => {
-    await authFetch(`${process.env.EXPO_PUBLIC_API_URL}/api/group/${groupId}/cancel`, {
-      method: "POST",
-    });
-    await fetchGroup();
+    if (await runGroupAction("/cancel")) await fetchGroup();
   };
 
   const handleCancelSpace = () => {
@@ -312,10 +331,9 @@ export default function GroupScreen() {
           style: "destructive",
           onPress: async () => {
             setLeaving(true);
-            await authFetch(`${process.env.EXPO_PUBLIC_API_URL}/api/group/${groupId}/leave`, {
-              method: "POST",
-            });
-            router.replace("/(tabs)/spaces");
+            const ok = await runGroupAction("/leave");
+            setLeaving(false);
+            if (ok) router.replace("/(tabs)/spaces");
           },
         },
       ],
@@ -324,25 +342,19 @@ export default function GroupScreen() {
 
   const handleTransferOwnership = async (member: Member) => {
     setTransferring(true);
-    await authFetch(`${process.env.EXPO_PUBLIC_API_URL}/api/group/${groupId}/transfer-ownership`, {
-      method: "POST",
+    const ok = await runGroupAction("/transfer-ownership", {
       body: JSON.stringify({ newHostUserId: member.userId }),
     });
-    await fetchGroup();
+    if (ok) {
+      await fetchGroup();
+      setTransferModalVisible(false);
+    }
     setTransferring(false);
-    setTransferModalVisible(false);
   };
 
   const handleBook = async () => {
     if (!group) return;
-
-    // Mark group as booked
-    await authFetch(
-      `${process.env.EXPO_PUBLIC_API_URL}/api/group/${groupId}/book`,
-      {
-        method: "POST",
-      },
-    );
+    if (!(await runGroupAction("/book"))) return;
 
     await fetchGroup();
 
@@ -365,10 +377,7 @@ export default function GroupScreen() {
           text: "Unbook",
           onPress: async () => {
             setUnbooking(true);
-            await authFetch(`${process.env.EXPO_PUBLIC_API_URL}/api/group/${groupId}/unbook`, {
-              method: "POST",
-            });
-            await fetchGroup();
+            if (await runGroupAction("/unbook")) await fetchGroup();
             setUnbooking(false);
           },
         },

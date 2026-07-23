@@ -9,6 +9,7 @@ import {
   KeyboardAvoidingView,
   Platform,
   ActivityIndicator,
+  Alert,
 } from "react-native";
 import { useLocalSearchParams, Stack } from "expo-router";
 import { Starfield } from "@/frontend/components/starfield";
@@ -28,7 +29,18 @@ export default function ChatScreen() {
     const content = text.trim();
     if (!content) return;
     setText("");
-    await sendMessage(content);
+    const result = await sendMessage(content);
+    if (!result.success) {
+      // The optimistic bubble is rolled back by the hook's fetchHistory; tell
+      // the user why instead of letting the message just silently disappear
+      // (most likely cause: you can only DM accepted friends).
+      Alert.alert(
+        "Message not sent",
+        "You can only message people you're friends with. Send them a friend request first.",
+      );
+      setText(content);
+      return;
+    }
     listRef.current?.scrollToEnd({ animated: true });
   };
 

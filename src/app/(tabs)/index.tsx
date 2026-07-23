@@ -45,8 +45,11 @@ export default function HomeScreen() {
       .then((res) => (res.ok ? res.json() : []))
       .then((data: NearbySpace[]) => {
         // Picked once here (not recomputed on every render) so the sample
-        // doesn't reshuffle every time this screen re-renders.
-        setNearbySpaces(pickRandom(data || [], 5));
+        // doesn't reshuffle every time this screen re-renders. Capped at 2 —
+        // more than that made the row look sparse/off-center with a small
+        // local feed, and this is meant as a teaser, not the full list
+        // (Explore already covers that).
+        setNearbySpaces(pickRandom(data || [], 2));
       })
       .catch((err) => {
         console.warn("Failed to load open spaces for home screen:", err);
@@ -235,7 +238,16 @@ const styles = StyleSheet.create({
   emptySection: { marginBottom: 20 },
   emptySectionText: { fontSize: 13, color: SpaceTheme.mutedOrbit, marginBottom: 8 },
   emptySectionLink: { fontSize: 13, color: SpaceTheme.glowCyan, fontWeight: "700" },
-  carouselContent: { gap: 12, paddingBottom: 20 },
+  // flexGrow: 0 + alignItems: "flex-start" keeps items packed to the left of
+  // the horizontal scroll area — without it, a short row (e.g. just one or
+  // two cards) stretches to fill the FlatList's width and ends up looking
+  // centered instead of scrolling from the start like the rest of the app.
+  carouselContent: {
+    flexGrow: 0,
+    alignItems: "flex-start",
+    gap: 12,
+    paddingBottom: 20,
+  },
   spaceCard: {
     ...SpaceStyles.glassCard,
     width: 160,

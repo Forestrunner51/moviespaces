@@ -87,7 +87,12 @@ function Layout() {
       <AnimatedSplashOverlay />
       <Stack>
         <Stack.Screen name="auth" options={{ headerShown: false }} />
-        <Stack.Screen name="(tabs)" options={{ headerShown: false }} />
+        <Stack.Screen name="reset-password" options={{ headerShown: false }} />
+        {/* headerShown: false hides the header while ON the tabs, but the
+            back button of whatever screen gets pushed on top still needs a
+            real title — without one, iOS falls back to the raw route name
+            ("(tabs)") for that back label. */}
+        <Stack.Screen name="(tabs)" options={{ headerShown: false, title: "Home" }} />
         <Stack.Screen name="group" options={{ title: "Movie Group" }} />
         <Stack.Screen name="space/[id]" options={{ title: "Opening Space..." }} />
         <Stack.Screen name="join" options={{ title: "Join Group" }} />

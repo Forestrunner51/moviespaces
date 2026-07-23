@@ -13,6 +13,7 @@ import * as AppleAuthentication from "expo-apple-authentication";
 import { supabase } from "../frontend/config/supabase";
 import { useRouter } from "expo-router";
 import { Starfield } from "@/frontend/components/starfield";
+import { ShootingStars } from "@/frontend/components/shooting-stars";
 import { SpaceTheme, SpaceStyles } from "@/frontend/constants/theme";
 import { consumePendingRedirect } from "@/frontend/services/pending-redirect";
 import { signInWithGoogle, signInWithApple, isAppleSignInAvailable } from "@/frontend/services/sso";
@@ -120,6 +121,7 @@ export default function AuthScreen() {
 
   return (
     <Starfield>
+      <ShootingStars />
       <View style={styles.container}>
         <Text style={[styles.header, SpaceStyles.glowText]}>MovieSpaces</Text>
         <Text style={styles.subHeader}>
@@ -209,6 +211,15 @@ export default function AuthScreen() {
           </Text>
         </TouchableOpacity>
 
+        {!isSignUp && (
+          <TouchableOpacity
+            onPress={() => router.push("/reset-password")}
+            style={styles.forgotLink}
+          >
+            <Text style={styles.forgotText}>Forgot password?</Text>
+          </TouchableOpacity>
+        )}
+
         {isSignUp && (
           <Text style={styles.legalText}>
             By registering, you agree to our{" "}
@@ -288,6 +299,8 @@ const styles = StyleSheet.create({
   buttonText: { color: SpaceTheme.backgroundVoid, fontSize: 18, fontWeight: "bold" },
   switchLink: { marginTop: 24, alignItems: "center" },
   switchText: { color: SpaceTheme.mutedOrbit, fontSize: 14 },
+  forgotLink: { marginTop: 14, alignItems: "center" },
+  forgotText: { color: SpaceTheme.glowCyan, fontSize: 14, fontWeight: "600" },
   legalText: {
     marginTop: 16,
     fontSize: 12,
