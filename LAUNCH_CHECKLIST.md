@@ -42,7 +42,7 @@ Everything native only becomes real here: SSO, the "MovieSpaces" name, Bebas Neu
 - [ ] Test each: Google sign-in, Apple sign-in, email signup, email login, forgot-password end-to-end on a real build
 
 ## PHASE 3 — Backend / infra production readiness
-- [ ] Render backend env vars set in production: `MoviesDatabase__ApiKey` (RapidAPI — replaced TMDb; double underscore so .NET maps it to `MoviesDatabase:ApiKey`), `GooglePlaces:ApiKey`, `Supabase:ServiceRoleKey`, `Supabase:Url`, `PostgresConnection`, `Sentry:Dsn` (optional)
+- [ ] Render backend env vars set in production: `Omdb__ApiKey` (OMDb — replaced TMDb/MoviesDatabase; double underscore so .NET maps it to `Omdb:ApiKey`), `GooglePlaces:ApiKey`, `Supabase:ServiceRoleKey`, `Supabase:Url`, `PostgresConnection`, `Sentry:Dsn` (optional)
 - [ ] All Supabase migrations applied to the production DB (friends-only DM policy, reports/blocks, etc.)
 - [ ] Confirm the `AddGroupPosterPath` EF migration ran (poster feature) — the backend auto-migrates on boot
 - [ ] Render cold-start awareness: free tier sleeps after inactivity → first request after idle is slow. Decide if a paid/always-on instance is needed for launch, or accept the cold start
