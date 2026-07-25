@@ -23,6 +23,28 @@ export function buildTicketUrl(filmName: string, bookingUrl?: string | null): st
   return withAffiliateTag(base);
 }
 
+// Direct booking hand-off used when a showtime has no explicit ticket URL
+// from SerpApi. Targets Google's showtime/ticket selector, which surfaces the
+// theater's own "buy tickets" widget for the specific film — closer to a real
+// booking link than a generic Fandango search.
+export function getDirectTicketUrl(
+  movieTitle: string,
+  theaterName: string,
+  dateStr?: string,
+): string {
+  const query = encodeURIComponent(
+    `${movieTitle} ${theaterName} tickets ${dateStr ?? ""}`.trim(),
+  );
+  return withAffiliateTag(`https://www.google.com/search?q=${query}`);
+}
+
+// Last-resort fallback if the Google hand-off isn't desired — a Fandango
+// search scoped to the theater + film.
+export function getFandangoFallbackUrl(movieTitle: string, theaterName: string): string {
+  const query = encodeURIComponent(`${theaterName} ${movieTitle}`);
+  return withAffiliateTag(`https://www.fandango.com/search?q=${query}`);
+}
+
 // "Rent a Theater" is pure discovery/hand-off — the app doesn't know which
 // theaters actually offer private rentals (no data source for that), so this
 // just searches for the theater's own rental/private-event info instead of

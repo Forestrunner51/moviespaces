@@ -24,6 +24,8 @@ import { SpaceTheme, SpaceStyles } from "@/frontend/constants/theme";
 import { POST_ACTIVITIES } from "@/frontend/constants/activities";
 import { useFriends } from "@/frontend/hooks/use-friends";
 import { searchMovies, searchTvShows, getNowPlaying, TmdbMovie } from "@/frontend/services/tmdb";
+import { ShowtimeSelector } from "@/frontend/components/showtime-selector";
+import { SelectedShowtime } from "@/frontend/services/showtimes";
 import {
   getDeviceLocation,
   fetchNearbyTheaters,
@@ -262,6 +264,40 @@ export default function CreateSpaceScreen() {
     if (Platform.OS === "android") setTimePickerVisible(false);
     setTimeValue(selected);
     setShowTime(formatTime(selected));
+  };
+
+  // Parses a SerpApi time string ("7:15pm", "10:30 AM", "12:00pm") into a Date
+  // on the currently-picked screening day (or today), so tapping a real
+  // showtime feeds the same dateValue/timeValue → screeningTime ISO path the
+  // manual picker uses. Returns null if the string doesn't parse (we then just
+  // store the display string and let the host confirm via the picker).
+  const parseShowtime = (raw: string): Date | null => {
+    const m = raw.trim().match(/^(\d{1,2}):(\d{2})\s*([ap]\.?m\.?)?$/i);
+    if (!m) return null;
+    let hours = parseInt(m[1], 10);
+    const minutes = parseInt(m[2], 10);
+    const meridiem = m[3]?.toLowerCase().replace(/\./g, "");
+    if (meridiem === "pm" && hours !== 12) hours += 12;
+    if (meridiem === "am" && hours === 12) hours = 0;
+    if (hours > 23 || minutes > 59) return null;
+    const d = new Date(dateValue ?? new Date());
+    d.setHours(hours, minutes, 0, 0);
+    return d;
+  };
+
+  // A host tapped a verified showtime chip: fill theater (unless locked to a
+  // pre-chosen rental venue), the time, and — when SerpApi gave a real booking
+  // link — the bookingUrl, so the existing "Get Tickets" hand-off uses it.
+  const handleSelectShowtime = (s: SelectedShowtime) => {
+    if (!theaterLocked && s.theaterName) setTheaterName(s.theaterName);
+    const parsed = parseShowtime(s.time);
+    if (parsed) {
+      setTimeValue(parsed);
+      setShowTime(formatTime(parsed));
+    } else {
+      setShowTime(s.time);
+    }
+    if (s.ticketUrl) setBookingUrl(s.ticketUrl);
   };
 
   const handleSubmit = async () => {
@@ -607,6 +643,19 @@ export default function CreateSpaceScreen() {
             >
               <Text style={styles.pickerDoneButtonText}>Done</Text>
             </TouchableOpacity>
+          )}
+
+          {/* Optional: pull real showtimes for the chosen film + theater and
+              tap one to auto-fill the time above. Movie screenings only — a
+              private rental isn't tied to a public showtime. */}
+          {spaceType === "public_gathering" && !!movieName.trim() && !!theaterName.trim() && (
+            <View style={styles.showtimeBlock}>
+              <ShowtimeSelector
+                movieTitle={movieName}
+                location={theaterName}
+                onSelectShowtime={handleSelectShowtime}
+              />
+            </View>
           )}
 
           {spaceType === "private_rental" && (
@@ -1092,6 +1141,7 @@ const styles = StyleSheet.create({
     elevation: 6,
   },
   submitButtonText: { color: SpaceTheme.backgroundVoid, fontWeight: "800", fontSize: 17 },
+  showtimeBlock: { marginTop: 4 },
   pickerField: {
     ...SpaceStyles.glassCard,
     flexDirection: "row",

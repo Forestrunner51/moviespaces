@@ -2,7 +2,7 @@
 // store requirements, but a lawyer should review before this app scales.
 // LAST_UPDATED and the support address are the two things most likely to go
 // stale; update both if either the policy or the contact changes.
-export const LEGAL_LAST_UPDATED = "July 21, 2026";
+export const LEGAL_LAST_UPDATED = "July 24, 2026";
 export const SUPPORT_EMAIL = "airdisciple23@gmail.com";
 
 export interface LegalSection {
@@ -29,7 +29,7 @@ export const TERMS_SECTIONS: LegalSection[] = [
   {
     heading: "User-Generated Content",
     body:
-      `Spaces, group chat messages, hangout notes, and profile content are created by users, not MovieSpaces. You're responsible for what you post. Don't post anything illegal, harassing, hateful, or that infringes someone else's rights. We provide Report and Block tools in-app — use them, and we may remove content or suspend accounts that violate these Terms.`,
+      `Spaces, group chat messages, direct messages, hangout notes, and profile content are created by users, not MovieSpaces. You're responsible for what you post. There is no tolerance for objectionable content or abusive behavior — don't post anything illegal, harassing, hateful, or that infringes someone else's rights. We provide Report and Block tools in-app; when content or a user is reported, we review it and act on violations — removing content and/or suspending or removing the offending user — promptly, typically within 24 hours.`,
   },
   {
     heading: "Location & Showtimes",
@@ -56,7 +56,7 @@ export const PRIVACY_SECTIONS: LegalSection[] = [
   {
     heading: "What We Collect",
     body:
-      `Account info (email, display name, username, profile photo) via Supabase Auth; Space and group chat content you create; theater memberships you select; device location, only if you grant permission, used to find nearby theaters and show distance; a push notification token, only if you grant permission, used to notify you about bookings, reminders, and new messages; and basic crash/error diagnostics if something goes wrong in the app.`,
+      `Account info (email, display name, username, profile photo) via Supabase Auth — including when you sign in with Apple or Google; Space content, group chat messages, and direct messages you create; your friend connections; theater memberships you select; device location, only if you grant permission, used to find nearby theaters and show distance; a push notification token, only if you grant permission, used to notify you about bookings, reminders, and new messages; and basic crash/error diagnostics if something goes wrong in the app.`,
   },
   {
     heading: "How We Use It",
@@ -66,7 +66,7 @@ export const PRIVACY_SECTIONS: LegalSection[] = [
   {
     heading: "Who We Share It With",
     body:
-      `Other members of a Space can see your display name, username, and profile photo, and (if you join) your confirmation status. Group chat messages are visible to everyone in that Space. We use a small number of service providers to run the app: Supabase (accounts, database, chat, photo storage), Expo (push notifications), Google Places (theater search), TMDb (movie/show data), and Sentry (crash and error reporting). These providers process data only as needed to provide their service to us.`,
+      `Other members of a Space can see your display name, username, and profile photo, and (if you join) your confirmation status. Group chat messages are visible to everyone in that Space; direct messages are visible only to you and the friend you're messaging. We use a small number of service providers to run the app: Supabase (accounts, database, chat, photo storage), Apple and Google (only if you choose to sign in with them), Expo (push notifications), Google Places (theater search), TMDb (movie/show data), and Sentry (crash and error reporting). These providers process data only as needed to provide their service to us.`,
   },
   {
     heading: "Reporting & Blocking",

@@ -7,6 +7,9 @@ import {
   TouchableOpacity,
   ActivityIndicator,
   Alert,
+  KeyboardAvoidingView,
+  ScrollView,
+  Platform,
 } from "react-native";
 import AsyncStorage from "@react-native-async-storage/async-storage";
 import * as AppleAuthentication from "expo-apple-authentication";
@@ -82,7 +85,7 @@ export default function AuthScreen() {
     if (isSignUp) {
       // Handle Registration — pass name as user_metadata so it's attached
       // to the account itself, not just this device.
-      const { error } = await supabase.auth.signUp({
+      const { data, error } = await supabase.auth.signUp({
         email: email,
         password: password,
         options: {
@@ -92,9 +95,23 @@ export default function AuthScreen() {
 
       if (error) {
         Alert.alert("Sign Up Error", error.message);
-      } else {
+      } else if (data.session) {
+        // Email confirmation is OFF in Supabase — signUp returned a live
+        // session, so drop them straight into the app.
         await AsyncStorage.setItem("userName", name.trim());
-        router.replace(consumePendingRedirect() ?? "/"); // go straight in, no confirmation needed
+        router.replace(consumePendingRedirect() ?? "/");
+      } else {
+        // Email confirmation is ON — no session yet; the account isn't usable
+        // until they click the link we just emailed. Without handling this,
+        // the app silently bounced back to the login screen (the root layout
+        // redirects whenever there's no session), looking broken. Tell them
+        // what to do and flip to the sign-in view for when they come back.
+        await AsyncStorage.setItem("userName", name.trim());
+        Alert.alert(
+          "Check your email",
+          `We sent a confirmation link to ${email.trim()}. Tap it to activate your account, then sign in.`,
+        );
+        setIsSignUp(false);
       }
     } else {
       // Handle Login
@@ -120,7 +137,14 @@ export default function AuthScreen() {
 
   return (
     <Starfield twinkle>
-      <View style={styles.container}>
+      <KeyboardAvoidingView
+        style={styles.flex}
+        behavior={Platform.OS === "ios" ? "padding" : undefined}
+      >
+      <ScrollView
+        contentContainerStyle={styles.container}
+        keyboardShouldPersistTaps="handled"
+      >
         <Text style={[styles.header, SpaceStyles.glowText, SpaceStyles.wordmark]}>MovieSpaces</Text>
         <Text style={styles.subHeader}>
           {isSignUp ? "Create a new account" : "Sign in to your account"}
@@ -231,14 +255,16 @@ export default function AuthScreen() {
             .
           </Text>
         )}
-      </View>
+      </ScrollView>
+      </KeyboardAvoidingView>
     </Starfield>
   );
 }
 
 const styles = StyleSheet.create({
+  flex: { flex: 1 },
   container: {
-    flex: 1,
+    flexGrow: 1,
     justifyContent: "center",
     padding: 24,
   },

@@ -22,6 +22,7 @@ import { supabase } from "@/frontend/config/supabase";
 import { Ionicons } from "@expo/vector-icons";
 import { Starfield } from "@/frontend/components/starfield";
 import { ActionButton } from "@/frontend/components/action-button";
+import { QuickAction } from "@/frontend/components/quick-action";
 import { MoviePoster } from "@/frontend/components/movie-poster";
 import { SpaceTheme, SpaceStyles } from "@/frontend/constants/theme";
 import { buildTicketUrl } from "@/frontend/services/ticket-links";
@@ -103,8 +104,14 @@ export default function GroupScreen() {
       if (!res.ok) return;
       const data = await res.json();
       setGroup(data);
-    } catch (err) {
-      console.error("Failed to fetch group data:", err);
+    } catch (err: any) {
+      // Expected, not a bug: fires when the 5s poll has a request in flight
+      // right as you navigate away — the OS cancels it mid-request. Logging
+      // this as an error was pure noise (it doesn't affect the app; the
+      // screen is already gone), so only real failures get logged.
+      if (!/cancel/i.test(err?.message ?? "")) {
+        console.error("Failed to fetch group data:", err);
+      }
     } finally {
       setLoading(false);
     }
@@ -274,6 +281,7 @@ export default function GroupScreen() {
   const [transferModalVisible, setTransferModalVisible] = useState(false);
   const [transferring, setTransferring] = useState(false);
   const [deleting, setDeleting] = useState(false);
+  const [cancellingSpace, setCancellingSpace] = useState(false);
 
   const handleDeleteGroup = () => {
     Alert.alert(
@@ -296,19 +304,27 @@ export default function GroupScreen() {
   };
 
   const handleMarkCancelled = async () => {
-    if (await runGroupAction("/cancel")) await fetchGroup();
+    setCancellingSpace(true);
+    const ok = await runGroupAction("/cancel");
+    setCancellingSpace(false);
+    if (ok) await fetchGroup();
   };
 
+  // One button, one menu — Hand Off / Mark Cancelled / Delete used to each
+  // have their own full-width button, which was a lot of stacked options for
+  // something a host only reaches for occasionally. Consolidated back under
+  // the single red "Cancel this Space" button, with a real "Cancel" entry so
+  // it's easy to back out without doing anything.
   const handleCancelSpace = () => {
     const otherMembers = (group?.members ?? []).filter((m) => m.userId !== group?.userId);
     Alert.alert(
       "Cancel this Space?",
       "Mark it cancelled to notify everyone while keeping it around, hand it off to another member, or delete it entirely.",
       [
-        { text: "Nevermind", style: "cancel" },
-        { text: "Mark Cancelled & Notify", onPress: handleMarkCancelled },
+        { text: "Cancel", style: "cancel" },
+        { text: "Mark Cancelled & Notify", style: "destructive", onPress: handleMarkCancelled },
         {
-          text: "Hand Ownership",
+          text: "Hand Off Ownership",
           onPress: () => {
             if (otherMembers.length === 0) {
               Alert.alert("No one to hand it to", "There are no other members in this Space yet.");
@@ -624,7 +640,7 @@ export default function GroupScreen() {
           />
         )}
 
-        {isMember && myMember && !hasPassed && (
+        {isMember && !isHost && myMember && !hasPassed && (
           myMember.confirmed ? (
             <ActionButton
               icon="checkmark-done-outline"
@@ -660,63 +676,44 @@ export default function GroupScreen() {
           />
         )}
 
-        {!hasPassed && (
-          <ActionButton
-            icon="share-social-outline"
-            label="Invite Friends"
-            onPress={shareLink}
-            style={styles.shareButton}
-            textStyle={styles.buttonText}
-            iconColor={SpaceTheme.backgroundVoid}
-          />
-        )}
+        <View style={styles.quickActionsRow}>
+          {!hasPassed && (
+            <QuickAction icon="share-social-outline" label="Invite" onPress={shareLink} />
+          )}
 
-        {(isHost || isMember) && (
-          <ActionButton
-            icon="chatbubbles-outline"
-            label="Group Chat"
-            onPress={() =>
-              router.push({
-                pathname: "/group-chat/[id]",
-                params: {
-                  id: group.id,
-                  type: "group",
-                  title: group.filmName,
-                  showTime: group.showTime,
-                  showDate: group.showDate,
-                  seasonEpisodeInfo: group.seasonEpisodeInfo ?? "",
-                },
-              })
-            }
-            style={styles.chatButton}
-            textStyle={styles.buttonText}
-            iconColor={SpaceTheme.backgroundVoid}
-          />
-        )}
+          {(isHost || isMember) && (
+            <QuickAction
+              icon="chatbubbles-outline"
+              label="Chat"
+              onPress={() =>
+                router.push({
+                  pathname: "/group-chat/[id]",
+                  params: {
+                    id: group.id,
+                    type: "group",
+                    title: group.filmName,
+                    showTime: group.showTime,
+                    showDate: group.showDate,
+                    seasonEpisodeInfo: group.seasonEpisodeInfo ?? "",
+                  },
+                })
+              }
+            />
+          )}
 
-        {(isHost || isMember) && group.spaceType === "public_gathering" && !hasPassed && (
-          <ActionButton
-            icon="ticket-outline"
-            iconSize={20}
-            label="Get Tickets"
-            onPress={handleGetTickets}
-            style={styles.ticketsButton}
-            textStyle={styles.ticketsButtonText}
-            iconColor={SpaceTheme.backgroundVoid}
-          />
-        )}
+          {(isHost || isMember) && group.spaceType === "public_gathering" && !hasPassed && (
+            <QuickAction icon="ticket-outline" label="Tickets" onPress={handleGetTickets} />
+          )}
 
-        {(isHost || isMember) && !hasPassed && (
-          <ActionButton
-            icon="calendar-outline"
-            label="Add to Calendar"
-            onPress={handleAddToCalendar}
-            loading={addingToCalendar}
-            style={styles.calendarButton}
-            textStyle={styles.calendarButtonText}
-            iconColor={SpaceTheme.starWhite}
-          />
-        )}
+          {(isHost || isMember) && !hasPassed && (
+            <QuickAction
+              icon="calendar-outline"
+              label="Calendar"
+              onPress={handleAddToCalendar}
+              loading={addingToCalendar}
+            />
+          )}
+        </View>
 
         {isHost && group.status !== "booked" && !hasPassed && (
           <ActionButton
@@ -750,7 +747,7 @@ export default function GroupScreen() {
             icon="warning-outline"
             label="Cancel this Space"
             onPress={handleCancelSpace}
-            loading={deleting}
+            loading={cancellingSpace || deleting}
             style={styles.cancelSpaceButton}
             textStyle={styles.cancelSpaceButtonText}
             iconColor={SpaceTheme.danger}
@@ -989,43 +986,12 @@ const styles = StyleSheet.create({
     marginBottom: 12,
   },
   confirmedButtonText: { color: SpaceTheme.mutedOrbit, fontWeight: "600", fontSize: 14 },
-  shareButton: {
-    backgroundColor: SpaceTheme.glowCyan,
-    padding: 14,
-    borderRadius: 12,
-    alignItems: "center",
-    marginBottom: 12,
+  quickActionsRow: {
+    flexDirection: "row",
+    flexWrap: "wrap",
+    gap: 16,
+    marginBottom: 20,
   },
-  chatButton: {
-    backgroundColor: "#8B5CF6",
-    padding: 14,
-    borderRadius: 12,
-    alignItems: "center",
-    marginBottom: 12,
-  },
-  ticketsButton: {
-    backgroundColor: SpaceTheme.glowCyan,
-    padding: 18,
-    borderRadius: 14,
-    alignItems: "center",
-    marginBottom: 12,
-    shadowColor: SpaceTheme.glowCyan,
-    shadowOffset: { width: 0, height: 0 },
-    shadowOpacity: 0.5,
-    shadowRadius: 10,
-    elevation: 6,
-  },
-  ticketsButtonText: { color: SpaceTheme.backgroundVoid, fontWeight: "800", fontSize: 18 },
-  calendarButton: {
-    backgroundColor: "rgba(255, 255, 255, 0.08)",
-    borderWidth: 1,
-    borderColor: "rgba(255, 255, 255, 0.15)",
-    padding: 14,
-    borderRadius: 12,
-    alignItems: "center",
-    marginBottom: 12,
-  },
-  calendarButtonText: { color: SpaceTheme.starWhite, fontWeight: "600", fontSize: 14 },
   bookButton: {
     backgroundColor: "#4ADE80",
     padding: 14,
