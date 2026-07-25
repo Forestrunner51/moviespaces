@@ -32,27 +32,6 @@ export async function getDeviceLocation(): Promise<Coordinates | null> {
   }
 }
 
-// Reverse-geocodes coordinates into a "City, Region" string (e.g.
-// "Frisco, Texas") for SerpApi's `location` param, which expects a geographic
-// place — NOT a venue name like "AMC Stonebriar 24". Passing a theater name
-// there makes SerpApi ignore/reject it and Google's showtimes box never
-// renders. Returns null when it can't resolve, so the caller can fall back.
-export async function reverseGeocodeCity(coords: Coordinates): Promise<string | null> {
-  try {
-    const results = await Location.reverseGeocodeAsync({
-      latitude: coords.latitude,
-      longitude: coords.longitude,
-    });
-    const place = results[0];
-    if (!place) return null;
-    const parts = [place.city ?? place.subregion, place.region].filter(Boolean);
-    return parts.length > 0 ? parts.join(", ") : null;
-  } catch (err) {
-    console.warn("Reverse geocode failed:", err);
-    return null;
-  }
-}
-
 // Throws with the server's actual error message on failure (e.g. a missing
 // GooglePlaces:ApiKey on the backend) instead of silently returning an empty
 // list — an empty list looks identical to "no theaters nearby", which made a

@@ -23,13 +23,12 @@ import { Starfield } from "@/frontend/components/starfield";
 import { SpaceTheme, SpaceStyles } from "@/frontend/constants/theme";
 import { POST_ACTIVITIES } from "@/frontend/constants/activities";
 import { useFriends } from "@/frontend/hooks/use-friends";
-import { searchMovies, searchTvShows, getNowPlaying, TmdbMovie } from "@/frontend/services/tmdb";
+import { searchMovies, searchTvShows, getNowPlaying, Movie } from "@/frontend/services/movies";
 import { ShowtimeSelector } from "@/frontend/components/showtime-selector";
 import { SelectedShowtime } from "@/frontend/services/showtimes";
 import {
   getDeviceLocation,
   fetchNearbyTheaters,
-  reverseGeocodeCity,
   NearbyTheater,
 } from "@/frontend/services/nearby-theaters";
 
@@ -58,7 +57,6 @@ export default function CreateSpaceScreen() {
     theaterLng: prefillLng,
     spaceType: prefillSpaceType,
     movieName: prefillMovieName,
-    tmdbMovieId: prefillTmdbMovieId,
     posterPath: prefillPosterPath,
   } = useLocalSearchParams<{
     theaterName?: string;
@@ -67,7 +65,6 @@ export default function CreateSpaceScreen() {
     theaterLng?: string;
     spaceType?: SpaceType;
     movieName?: string;
-    tmdbMovieId?: string;
     posterPath?: string;
   }>();
   const [spaceType, setSpaceType] = useState<SpaceType>(
@@ -88,17 +85,15 @@ export default function CreateSpaceScreen() {
     prefillLng ? parseFloat(prefillLng) : null,
   );
   const [movieName, setMovieName] = useState(prefillMovieName ?? "");
-  const [tmdbMovieId, setTmdbMovieId] = useState<number | null>(
-    prefillTmdbMovieId ? parseInt(prefillTmdbMovieId, 10) : null,
-  );
+  // The picked movie's IMDb id (from MoviesDatabase search) — needed to look
+  // up showtimes. Null when the title was typed by hand, which disables the
+  // showtime lookup (no id to query).
+  const [movieImdbId, setMovieImdbId] = useState<string | null>(null);
   // The picked movie's poster URL — stored on the Space at creation so cards
-  // can show poster art without a per-card TMDb lookup.
+  // can show poster art without a per-card metadata lookup.
   const [posterPath, setPosterPath] = useState<string | null>(prefillPosterPath ?? null);
   const [showDate, setShowDate] = useState("");
   const [showTime, setShowTime] = useState("");
-  // The theater's city ("Frisco, Texas"), resolved from its coordinates and
-  // used as SerpApi's `location` (a geographic place — not the venue name).
-  const [showtimeCity, setShowtimeCity] = useState<string | null>(null);
 
   // Private rental only — a rental doesn't have to be a movie screening at
   // all: "tv" swaps the movie search for a TMDb TV-show search (plus
@@ -194,19 +189,38 @@ export default function CreateSpaceScreen() {
 
   const [movieModalVisible, setMovieModalVisible] = useState(false);
   const [movieSearch, setMovieSearch] = useState("");
-  const [movieResults, setMovieResults] = useState<TmdbMovie[]>([]);
+  const [movieResults, setMovieResults] = useState<Movie[]>([]);
   const [movieSearching, setMovieSearching] = useState(false);
-  const [nowPlaying, setNowPlaying] = useState<TmdbMovie[]>([]);
+  const [nowPlaying, setNowPlaying] = useState<Movie[]>([]);
 
   const [datePickerVisible, setDatePickerVisible] = useState(false);
   const [dateValue, setDateValue] = useState<Date | null>(null);
   const [timePickerVisible, setTimePickerVisible] = useState(false);
   const [timeValue, setTimeValue] = useState<Date | null>(null);
 
+  // Host name is the creator's own profile name — there's no name input on
+  // this screen anymore (you don't rename yourself while creating a Space), so
+  // resolve it automatically: saved name first, then the profile's
+  // display_name, then the auth metadata full_name.
   useEffect(() => {
-    AsyncStorage.getItem("userName").then((savedName) => {
-      if (savedName) setHostName(savedName);
-    });
+    (async () => {
+      const savedName = await AsyncStorage.getItem("userName");
+      if (savedName) {
+        setHostName(savedName);
+        return;
+      }
+      const {
+        data: { user },
+      } = await supabase.auth.getUser();
+      if (!user) return;
+      const { data: profile } = await supabase
+        .from("profiles")
+        .select("display_name")
+        .eq("id", user.id)
+        .single();
+      const name = profile?.display_name || (user.user_metadata?.full_name as string) || "";
+      if (name) setHostName(name);
+    })();
   }, []);
 
   useEffect(() => {
@@ -254,26 +268,6 @@ export default function CreateSpaceScreen() {
     return () => clearTimeout(handle);
   }, [movieSearch, nowPlaying, searchingTv]);
 
-  // Resolve the picked theater's city from its coordinates for the showtime
-  // lookup. Runs only when coords change; if there are none (theater typed by
-  // hand) or geocoding fails, showtimeCity stays null and ShowtimeSelector
-  // falls back to the theater name.
-  useEffect(() => {
-    let cancelled = false;
-    const resolveCity = async () => {
-      if (theaterLat == null || theaterLng == null) {
-        if (!cancelled) setShowtimeCity(null);
-        return;
-      }
-      const city = await reverseGeocodeCity({ latitude: theaterLat, longitude: theaterLng });
-      if (!cancelled) setShowtimeCity(city);
-    };
-    resolveCity();
-    return () => {
-      cancelled = true;
-    };
-  }, [theaterLat, theaterLng]);
-
   const filteredTheaters = theaters.filter((t) =>
     t.name.toLowerCase().includes(theaterSearch.toLowerCase()),
   );
@@ -290,48 +284,31 @@ export default function CreateSpaceScreen() {
     setShowTime(formatTime(selected));
   };
 
-  // Parses a SerpApi time string ("7:15pm", "10:30 AM", "12:00pm") into a Date
-  // on the currently-picked screening day (or today), so tapping a real
-  // showtime feeds the same dateValue/timeValue → screeningTime ISO path the
-  // manual picker uses. Returns null if the string doesn't parse (we then just
-  // store the display string and let the host confirm via the picker).
-  const parseShowtime = (raw: string): Date | null => {
-    const m = raw.trim().match(/^(\d{1,2}):(\d{2})\s*([ap]\.?m\.?)?$/i);
-    if (!m) return null;
-    let hours = parseInt(m[1], 10);
-    const minutes = parseInt(m[2], 10);
-    const meridiem = m[3]?.toLowerCase().replace(/\./g, "");
-    if (meridiem === "pm" && hours !== 12) hours += 12;
-    if (meridiem === "am" && hours === 12) hours = 0;
-    if (hours > 23 || minutes > 59) return null;
-    const d = new Date(dateValue ?? new Date());
-    d.setHours(hours, minutes, 0, 0);
-    return d;
-  };
-
-  // A host tapped a verified showtime chip: fill theater (unless locked to a
-  // pre-chosen rental venue), the time, and — when SerpApi gave a real booking
-  // link — the bookingUrl, so the existing "Get Tickets" hand-off uses it.
+  // Host tapped a real showtime chip: fill the theater (unless locked to a
+  // pre-chosen rental venue), the date + time from the ISO start_at, and —
+  // when the API gave a booking link — the bookingUrl, so the existing
+  // "Get Tickets" hand-off uses it. The ISO carries both the day and the time,
+  // so it feeds the same dateValue/timeValue → screeningTime path as the
+  // manual picker.
   const handleSelectShowtime = (s: SelectedShowtime) => {
     if (!theaterLocked && s.theaterName) setTheaterName(s.theaterName);
-    const parsed = parseShowtime(s.time);
-    if (parsed) {
+    const parsed = new Date(s.time);
+    if (!isNaN(parsed.getTime())) {
+      setDateValue(parsed);
+      setShowDate(formatDate(parsed));
       setTimeValue(parsed);
       setShowTime(formatTime(parsed));
     } else {
       setShowTime(s.time);
     }
-    if (s.ticketUrl) setBookingUrl(s.ticketUrl);
+    if (s.bookingUrl) setBookingUrl(s.bookingUrl);
   };
 
   const handleSubmit = async () => {
     const isOtherActivity = spaceType === "private_rental" && rentalActivityType === "other";
     const mediaLabel = isOtherActivity ? "activity" : searchingTv ? "show" : "movie";
-    if (!hostName.trim() || !theaterName.trim() || !movieName.trim() || !showDate.trim() || !showTime.trim()) {
-      Alert.alert(
-        "Missing info",
-        `Please fill in your name, theater, ${mediaLabel}, date, and time.`,
-      );
+    if (!theaterName.trim() || !movieName.trim() || !showDate.trim() || !showTime.trim()) {
+      Alert.alert("Missing info", `Please fill in your theater, ${mediaLabel}, date, and time.`);
       return;
     }
 
@@ -367,13 +344,12 @@ export default function CreateSpaceScreen() {
       const res = await authFetch(`${process.env.EXPO_PUBLIC_API_URL}/api/group`, {
         method: "POST",
         body: JSON.stringify({
-          hostName: hostName.trim(),
+          hostName: hostName.trim() || "Host",
           cinemaName: theaterName.trim(),
           googlePlaceId: theaterPlaceId,
           theaterLatitude: theaterLat,
           theaterLongitude: theaterLng,
           filmName: movieName.trim(),
-          tmdbMovieId,
           posterPath,
           showTime: showTime.trim(),
           showDate: showDate.trim(),
@@ -463,13 +439,6 @@ export default function CreateSpaceScreen() {
             </TouchableOpacity>
           </View>
 
-          <TextInput
-            style={styles.input}
-            placeholder="Your name"
-            placeholderTextColor={SpaceTheme.mutedOrbit}
-            value={hostName}
-            onChangeText={setHostName}
-          />
           <TouchableOpacity
             activeOpacity={theaterLocked ? 1 : 0.8}
             style={styles.pickerField}
@@ -495,7 +464,7 @@ export default function CreateSpaceScreen() {
                 onPress={() => {
                   setRentalActivityType("movie");
                   setMovieName("");
-                  setTmdbMovieId(null);
+                  setMovieImdbId(null);
                   setPosterPath(null);
                 }}
               >
@@ -515,7 +484,7 @@ export default function CreateSpaceScreen() {
                 onPress={() => {
                   setRentalActivityType("tv");
                   setMovieName("");
-                  setTmdbMovieId(null);
+                  setMovieImdbId(null);
                   setPosterPath(null);
                 }}
               >
@@ -535,7 +504,7 @@ export default function CreateSpaceScreen() {
                 onPress={() => {
                   setRentalActivityType("other");
                   setMovieName("");
-                  setTmdbMovieId(null);
+                  setMovieImdbId(null);
                   setPosterPath(null);
                 }}
               >
@@ -669,18 +638,24 @@ export default function CreateSpaceScreen() {
             </TouchableOpacity>
           )}
 
-          {/* Optional: pull real showtimes for the chosen film + theater and
-              tap one to auto-fill the time above. Movie screenings only — a
-              private rental isn't tied to a public showtime. */}
-          {spaceType === "public_gathering" && !!movieName.trim() && !!theaterName.trim() && (
-            <View style={styles.showtimeBlock}>
-              <ShowtimeSelector
-                movieTitle={movieName}
-                location={showtimeCity ?? theaterName}
-                onSelectShowtime={handleSelectShowtime}
-              />
-            </View>
-          )}
+          {/* Real showtimes (International Showtimes API) for the chosen film
+              near the picked theater — tap one to auto-fill the date/time
+              above. Requires a searched movie (has an IMDb id) + a theater with
+              coordinates; movie screenings only. */}
+          {spaceType === "public_gathering" &&
+            !!movieImdbId &&
+            theaterLat != null &&
+            theaterLng != null && (
+              <View style={styles.showtimeBlock}>
+                <ShowtimeSelector
+                  imdbId={movieImdbId}
+                  lat={theaterLat}
+                  lng={theaterLng}
+                  date={showDate || undefined}
+                  onSelectShowtime={handleSelectShowtime}
+                />
+              </View>
+            )}
 
           {spaceType === "private_rental" && (
             <View style={styles.rentalSection}>
@@ -963,7 +938,7 @@ export default function CreateSpaceScreen() {
             ) : (
               <FlatList
                 data={movieResults}
-                keyExtractor={(item) => item.id.toString()}
+                keyExtractor={(item) => item.imdbId}
                 keyboardShouldPersistTaps="handled"
                 renderItem={({ item }) => (
                   <TouchableOpacity
@@ -971,15 +946,15 @@ export default function CreateSpaceScreen() {
                     style={styles.modalRow}
                     onPress={() => {
                       setMovieName(item.title);
-                      setTmdbMovieId(item.id);
+                      setMovieImdbId(item.imdbId);
                       setPosterPath(item.posterPath);
                       setMovieModalVisible(false);
                       setMovieSearch("");
                     }}
                   >
                     <Text style={styles.modalRowTitle}>{item.title}</Text>
-                    {item.releaseDate ? (
-                      <Text style={styles.modalRowSubtitle}>{item.releaseDate.slice(0, 4)}</Text>
+                    {item.releaseYear ? (
+                      <Text style={styles.modalRowSubtitle}>{item.releaseYear}</Text>
                     ) : null}
                   </TouchableOpacity>
                 )}
@@ -999,7 +974,7 @@ export default function CreateSpaceScreen() {
               value={movieName}
               onChangeText={(text) => {
                 setMovieName(text);
-                setTmdbMovieId(null);
+                setMovieImdbId(null);
                 setPosterPath(null);
               }}
             />

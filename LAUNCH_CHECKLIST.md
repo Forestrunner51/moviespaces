@@ -42,10 +42,9 @@ Everything native only becomes real here: SSO, the "MovieSpaces" name, Bebas Neu
 - [ ] Test each: Google sign-in, Apple sign-in, email signup, email login, forgot-password end-to-end on a real build
 
 ## PHASE 3 — Backend / infra production readiness
-- [ ] Render backend env vars set in production: `Tmdb:ApiKey`, `GooglePlaces:ApiKey`, `SerpApi:ApiKey` (new — showtime autofill), `Supabase:ServiceRoleKey`, `Supabase:Url`, `PostgresConnection`, `Sentry:Dsn` (optional)
+- [ ] Render backend env vars set in production: `MoviesDatabase__ApiKey` (RapidAPI — replaced TMDb; double underscore so .NET maps it to `MoviesDatabase:ApiKey`), `GooglePlaces:ApiKey`, `Supabase:ServiceRoleKey`, `Supabase:Url`, `PostgresConnection`, `Sentry:Dsn` (optional)
 - [ ] All Supabase migrations applied to the production DB (friends-only DM policy, reports/blocks, etc.)
 - [ ] Confirm the `AddGroupPosterPath` EF migration ran (poster feature) — the backend auto-migrates on boot
-- [ ] Confirm the `AddShowtimeCache` EF migration ran (showtime autofill) — check the `ShowtimeCaches` table exists after deploy. **Without `SerpApi:ApiKey` set, showtimes degrade gracefully to the empty state ("Enter manually below") — not a crash — so the app is safe to ship even if the key lands late.**
 - [ ] Render cold-start awareness: free tier sleeps after inactivity → first request after idle is slow. Decide if a paid/always-on instance is needed for launch, or accept the cold start
 - [ ] Set the client `EXPO_PUBLIC_SENTRY_DSN` (currently empty) so you get crash reports post-launch
 - [ ] Load-sanity: nothing here needs to scale huge, but confirm the DB and API respond under a few concurrent users
@@ -54,7 +53,7 @@ Everything native only becomes real here: SSO, the "MovieSpaces" name, Bebas Neu
 Run each end-to-end, signed-in as a real user:
 - [ ] Sign up → onboarding → land in app
 - [ ] Create a MovieSpace (movie search, theater picker, date/time, poster shows)
-- [ ] Showtime autofill: pick movie + theater → "Find Showtimes Near Me" → tap a time chip → time (and booking URL) populate the form; verify empty state ("Enter manually below") when a title has no listings; confirm a repeat lookup is fast (served from cache)
+- [ ] Showtime autofill (International Showtimes API): pick a *searched* movie (has IMDb id) + theater → "Find Showtimes" → tap a time chip → date/time (+ ticketing link) populate the form; empty state when no listings. ⚠️ Requires `InternationalShowtimes__ApiKey` on Render (double underscore); rotate the temp key that's in `appsettings.json`
 - [ ] Create a Watch Party / private rental (cost, capacity, venue link)
 - [ ] Join a Space (as a different account) → RSVP confirm/cancel
 - [ ] Group chat: send/receive, keyboard doesn't cover Send, no flicker

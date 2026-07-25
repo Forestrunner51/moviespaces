@@ -13,7 +13,7 @@ import { router } from "expo-router";
 import { Ionicons } from "@expo/vector-icons";
 import { Starfield } from "@/frontend/components/starfield";
 import { SpaceTheme, SpaceStyles } from "@/frontend/constants/theme";
-import { getNowPlaying, TmdbMovie } from "@/frontend/services/tmdb";
+import { getNowPlaying, Movie } from "@/frontend/services/movies";
 import { MoviePoster } from "@/frontend/components/movie-poster";
 
 interface NearbySpace {
@@ -40,7 +40,7 @@ function pickRandom<T>(arr: T[], count: number): T[] {
 export default function HomeScreen() {
   const [nearbySpaces, setNearbySpaces] = useState<NearbySpace[]>([]);
   const [spacesLoading, setSpacesLoading] = useState(true);
-  const [nowPlaying, setNowPlaying] = useState<TmdbMovie[]>([]);
+  const [nowPlaying, setNowPlaying] = useState<Movie[]>([]);
   const [moviesLoading, setMoviesLoading] = useState(true);
 
   useEffect(() => {
@@ -164,7 +164,7 @@ export default function HomeScreen() {
             horizontal
             showsHorizontalScrollIndicator={false}
             data={nowPlaying}
-            keyExtractor={(item) => item.id.toString()}
+            keyExtractor={(item) => item.imdbId}
             contentContainerStyle={styles.carouselContent}
             renderItem={({ item }) => (
               <TouchableOpacity
@@ -176,7 +176,6 @@ export default function HomeScreen() {
                     params: {
                       spaceType: "public_gathering",
                       movieName: item.title,
-                      tmdbMovieId: item.id.toString(),
                       posterPath: item.posterPath ?? "",
                     },
                   })
