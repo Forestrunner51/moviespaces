@@ -22,13 +22,13 @@ The product is **feature-complete for a v1** and the code is in good shape (type
 | System | Owns | Access | Notes |
 |---|---|---|---|
 | **Supabase** (`hzkpqfitsxnxcdefkqwt`) | Auth (email + Google/Apple), `profiles`, `friendships`, `messages` (DMs), `group_messages` (chat), `group_message_reads`, `reports`, `blocks`, avatar storage | Client → supabase-js directly, gated by **RLS** | PKCE flow; JWT is the shared identity |
-| **.NET 10 API on Render** (`moviespaces.onrender.com`, separate Postgres via EF Core) | `Groups` (= "Spaces", the core entity), `GroupMembers`, `PushTokens`, `MovieSpace` (legacy/unused) | Client → REST, JWT-auth validated against Supabase JWKS | Also proxies MoviesDatabase (RapidAPI) + Google Places (hides keys), sends Expo Push, runs a reminder background service |
+| **.NET 10 API on Render** (`moviespaces.onrender.com`, separate Postgres via EF Core) | `Groups` (= "Spaces", the core entity), `GroupMembers`, `PushTokens`, `MovieSpace` (legacy/unused) | Client → REST, JWT-auth validated against Supabase JWKS | Also proxies OMDb (movies) + Google Places (hides keys), sends Expo Push, runs a reminder background service |
 
 **Key coupling to be aware of:** a Space lives in the **.NET** DB, but its **chat lives in Supabase**. They're linked by the Supabase user id (stored as `text` on the EF side). Group-chat membership is enforced by a Supabase RLS function (`is_group_message_member`) that reads the **EF-owned** `"Groups"`/`"GroupMembers"` tables directly. → Both databases must point at the same logical data, and that RLS function is a cross-system dependency. Not a blocker, but the part most likely to bite if the two DBs ever drift.
 
-**Third-party:** MoviesDatabase on RapidAPI (movie/TV search + posters + recent-releases list; replaced TMDb — TMDb's free tier bars commercial use; returns standard IMDb ids), Google Places (theaters/venues), Expo Push (notifications), Sentry (wired but **disabled**). Showtimes are **not** an API — "Find Showtimes" deep-links to a Google showtimes search (Google renders local theaters/times/ticket links for free).
+**Third-party:** OMDb API (movie/TV search + posters by IMDb id; replaced TMDb→MoviesDatabase — official, stable, cheap commercial tier). Google Places (theaters/venues), Expo Push (notifications), Sentry (wired but **disabled**). Showtimes are **not** an API — "Find Showtimes" deep-links to a Google showtimes search (Google renders local theaters/times/ticket links for free). Note: OMDb has no popularity/list endpoint, so the "Popular Movies" carousel is a curated set of IMDb ids in `MoviesController`.
 
-**Backend endpoints (proven):** GroupController (create/get/search/open/mine, join, join-web, confirm/unconfirm, book/unbook, cancel, delete, transfer, leave, booking-url, report-showtime, notify-message, AASA), AccountController (delete account + cascade), LocationsController (nearby-theaters), MoviesController (search/search-tv/now-playing via MoviesDatabase), PushTokensController (register).
+**Backend endpoints (proven):** GroupController (create/get/search/open/mine, join, join-web, confirm/unconfirm, book/unbook, cancel, delete, transfer, leave, booking-url, report-showtime, notify-message, AASA), AccountController (delete account + cascade), LocationsController (nearby-theaters), MoviesController (search/search-tv/now-playing via OMDb), PushTokensController (register).
 
 ---
 
@@ -46,7 +46,7 @@ Status: ✅ built & working · ⚠️ built but unverified/needs config · 🔨 
 - ✅ Email confirmation — signup now handles ON *and* OFF in code ("check your email" state). Only the Supabase ON/OFF setting decision remains (recommend ON).
 
 **Core "Spaces" product**
-- ✅ Create MovieSpace (MoviesDatabase movie/TV search, Google Places theater picker, date/time, poster)
+- ✅ Create MovieSpace (OMDb movie/TV search, Google Places theater picker, date/time, poster)
 - ✅ Find Showtimes — "Find Showtimes Near Me" opens a Google showtimes search (in-app browser) for the film + theater; Google localizes and shows real theaters/times/ticket links. Host reads the time and sets it in the picker. No paid showtimes API (tried SerpApi, MovieGlu, International Showtimes — all dead ends; Google redirect is the MVP call).
 - ✅ Create Watch Party / private rental (cost split, capacity, venue link, activity types)
 - ✅ Join a Space (app + web-name paths), capacity/status enforced server-side
@@ -55,7 +55,7 @@ Status: ✅ built & working · ⚠️ built but unverified/needs config · 🔨 
 - ✅ Past-event lockdown (locks to chat-only after the event)
 - ✅ Explore feed w/ filters (type, price, distance, chain, activity, availability) + collapsible filter UI
 - ✅ Movie posters throughout (hero on detail, thumbnails on cards) — new `poster_path` column
-- ✅ Home carousels (Upcoming Spaces + MoviesDatabase Popular Movies)
+- ✅ Home carousels (Upcoming Spaces + Popular Movies — curated OMDb IMDb-id set)
 
 **Social**
 - ✅ Friends (search by name/@username, request/accept/decline, sorted, live filter)
@@ -90,7 +90,7 @@ Status: ✅ built & working · ⚠️ built but unverified/needs config · 🔨 
 - [ ] Apple "Sign in with Apple" capability on App ID → Supabase Apple provider (bundle ID allow-list)
 - [ ] Supabase Reset Password email template → `{{ .Token }}`
 - [ ] Email confirmation ON/OFF decision — recommend **ON**. Code already handles both (done), so this is now just a dashboard toggle.
-- [ ] Render prod env vars verified: `MoviesDatabase__ApiKey` (RapidAPI — replaced `Tmdb:ApiKey`), `GooglePlaces:ApiKey`, `Supabase:ServiceRoleKey`, `Supabase:Url`, `PostgresConnection`
+- [ ] Render prod env vars verified: `Omdb__ApiKey` (OMDb — replaced TMDb/MoviesDatabase), `GooglePlaces:ApiKey`, `Supabase:ServiceRoleKey`, `Supabase:Url`, `PostgresConnection`
 - [ ] All Supabase migrations applied to prod DB (through `20260722_dm_friends_only`)
 
 ### C. Observability / production hardening
