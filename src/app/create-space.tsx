@@ -29,6 +29,7 @@ import { SelectedShowtime } from "@/frontend/services/showtimes";
 import {
   getDeviceLocation,
   fetchNearbyTheaters,
+  reverseGeocodeCity,
   NearbyTheater,
 } from "@/frontend/services/nearby-theaters";
 
@@ -95,6 +96,9 @@ export default function CreateSpaceScreen() {
   const [posterPath, setPosterPath] = useState<string | null>(prefillPosterPath ?? null);
   const [showDate, setShowDate] = useState("");
   const [showTime, setShowTime] = useState("");
+  // The theater's city ("Frisco, Texas"), resolved from its coordinates and
+  // used as SerpApi's `location` (a geographic place — not the venue name).
+  const [showtimeCity, setShowtimeCity] = useState<string | null>(null);
 
   // Private rental only — a rental doesn't have to be a movie screening at
   // all: "tv" swaps the movie search for a TMDb TV-show search (plus
@@ -249,6 +253,26 @@ export default function CreateSpaceScreen() {
     }, 400);
     return () => clearTimeout(handle);
   }, [movieSearch, nowPlaying, searchingTv]);
+
+  // Resolve the picked theater's city from its coordinates for the showtime
+  // lookup. Runs only when coords change; if there are none (theater typed by
+  // hand) or geocoding fails, showtimeCity stays null and ShowtimeSelector
+  // falls back to the theater name.
+  useEffect(() => {
+    let cancelled = false;
+    const resolveCity = async () => {
+      if (theaterLat == null || theaterLng == null) {
+        if (!cancelled) setShowtimeCity(null);
+        return;
+      }
+      const city = await reverseGeocodeCity({ latitude: theaterLat, longitude: theaterLng });
+      if (!cancelled) setShowtimeCity(city);
+    };
+    resolveCity();
+    return () => {
+      cancelled = true;
+    };
+  }, [theaterLat, theaterLng]);
 
   const filteredTheaters = theaters.filter((t) =>
     t.name.toLowerCase().includes(theaterSearch.toLowerCase()),
@@ -652,7 +676,7 @@ export default function CreateSpaceScreen() {
             <View style={styles.showtimeBlock}>
               <ShowtimeSelector
                 movieTitle={movieName}
-                location={theaterName}
+                location={showtimeCity ?? theaterName}
                 onSelectShowtime={handleSelectShowtime}
               />
             </View>

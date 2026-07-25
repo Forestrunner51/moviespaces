@@ -38,7 +38,8 @@ public class ShowtimesController : ControllerBase
     [AllowAnonymous]
     public async Task<IActionResult> GetShowtimes(
         [FromQuery] string movieTitle,
-        [FromQuery] string location)
+        [FromQuery] string location,
+        [FromQuery] bool debug = false)
     {
         if (string.IsNullOrWhiteSpace(movieTitle) || string.IsNullOrWhiteSpace(location))
         {
@@ -66,13 +67,16 @@ public class ShowtimesController : ControllerBase
         if (string.IsNullOrWhiteSpace(apiKey))
         {
             Console.WriteLine("SerpApi:ApiKey is not configured on the server.");
-            return Ok(new ShowtimeResponseDto("none", new List<TheaterDto>()));
+            return NoneResult(debug, "SerpApi:ApiKey is not configured (env var not read).");
         }
 
         List<TheaterDto> theaters;
         try
         {
-            var q = Uri.EscapeDataString($"{movieTitle} {location} showtimes");
+            // Canonical showtimes query: just "<movie> showtimes" — the geo comes
+            // from the `location` param. Putting the city into `q` too can stop
+            // Google from rendering the multi-theater showtimes box we parse.
+            var q = Uri.EscapeDataString($"{movieTitle} showtimes");
             var loc = Uri.EscapeDataString(location);
             var url = $"https://serpapi.com/search.json?engine=google&q={q}&location={loc}&api_key={apiKey}";
 
@@ -83,26 +87,61 @@ public class ShowtimesController : ControllerBase
             if (!response.IsSuccessStatusCode)
             {
                 Console.WriteLine($"SerpApi error {(int)response.StatusCode}: {body}");
-                return Ok(new ShowtimeResponseDto("none", new List<TheaterDto>()));
+                // SerpApi puts a human-readable reason in an `error` field
+                // (bad key, unsupported location, out of searches, etc.).
+                var reason = TryExtractError(body) ?? $"HTTP {(int)response.StatusCode}";
+                return NoneResult(debug, $"SerpApi returned an error: {reason}");
             }
 
             theaters = ParseShowtimes(body);
+
+            if (theaters.Count == 0)
+            {
+                // 200 OK but no showtimes box — either the film isn't currently
+                // in theaters, the location didn't resolve, or SerpApi surfaced
+                // an `error`. Bubble whichever we can see.
+                var reason = TryExtractError(body)
+                    ?? "SerpApi returned 200 but no `showtimes` block (film may not be in theaters, or location didn't resolve).";
+                return NoneResult(debug, reason);
+            }
         }
         catch (Exception ex)
         {
             Console.WriteLine($"SerpApi request failed: {ex.Message}");
-            return Ok(new ShowtimeResponseDto("none", new List<TheaterDto>()));
-        }
-
-        if (theaters.Count == 0)
-        {
-            // Nothing to cache — a "none" now shouldn't poison the cache and
-            // suppress a real result an hour later when listings appear.
-            return Ok(new ShowtimeResponseDto("none", new List<TheaterDto>()));
+            return NoneResult(debug, $"Request threw: {ex.Message}");
         }
 
         await UpsertCache(cacheKey, theaters);
         return Ok(new ShowtimeResponseDto("live", theaters));
+    }
+
+    // Empty "none" response. With ?debug=true it also carries a `diagnostic`
+    // explaining WHY it's empty — safe to expose (never includes the API key).
+    // Drop the debug param once showtimes are confirmed working in prod.
+    private IActionResult NoneResult(bool debug, string diagnostic)
+    {
+        if (debug)
+        {
+            return Ok(new { source = "none", theaters = new List<TheaterDto>(), diagnostic });
+        }
+        return Ok(new ShowtimeResponseDto("none", new List<TheaterDto>()));
+    }
+
+    // SerpApi surfaces failures in a top-level `error` string. Returns null if
+    // there isn't one so callers can fall back to a generic reason.
+    private static string? TryExtractError(string body)
+    {
+        try
+        {
+            using var doc = JsonDocument.Parse(body);
+            if (doc.RootElement.TryGetProperty("error", out var err)
+                && err.ValueKind == JsonValueKind.String)
+            {
+                return err.GetString();
+            }
+        }
+        catch { /* not JSON / unparseable — fall through */ }
+        return null;
     }
 
     // SerpApi's `showtimes` is an array of *day* objects (Today / Tomorrow /
