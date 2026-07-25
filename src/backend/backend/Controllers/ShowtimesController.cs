@@ -1,215 +1,242 @@
 using System.Text.Json;
 using Microsoft.AspNetCore.Authorization;
 using Microsoft.AspNetCore.Mvc;
-using Microsoft.EntityFrameworkCore;
-using Backend.Data;
+using Microsoft.Extensions.Caching.Memory;
 using Backend.Models;
 
 namespace Backend.Controllers;
 
-// Proxies SerpApi's Google showtimes engine so the SerpApi key never ships in
-// the app, and caches results in Postgres (ShowtimeCache) so repeated lookups
-// of the same movie+location don't each cost a paid SerpApi search. Route is
-// pinned to api/v1/showtimes (not the repo-default api/[controller]) per spec.
+// Showtimes via the International Showtimes API (RapidAPI), proxied so the key
+// never ships in the app. Flow: find cinemas near the picked theater's
+// coordinates (/cinemas), then pull showtimes for the movie's IMDb id at those
+// cinemas (/showtimes) — the IMDb id comes from our MoviesDatabase search, so
+// the two integrations line up on the standard tt-id. Results are cached
+// in-memory per imdbId+location+date so we don't spend a RapidAPI call per
+// retry (RapidAPI bills per request).
+//
+// Caching note: the spec called for a PostgreSQL/Redis table with a 6h TTL;
+// this repo has neither, and a DB-backed showtime cache was just removed to
+// avoid migration churn. IMemoryCache (used by MoviesController too) achieves
+// the same "keep RapidAPI volume low" goal with no schema — revisit only if
+// the API ever runs on multiple instances.
 [ApiController]
-[Route("api/v1/showtimes")]
+[Route("api/[controller]")]
 public class ShowtimesController : ControllerBase
 {
     private readonly IHttpClientFactory _httpClientFactory;
     private readonly IConfiguration _configuration;
-    private readonly AppDbContext _db;
+    private readonly IMemoryCache _cache;
 
-    // How long a cached lookup stays fresh. Showtimes for a given day are
-    // effectively static, so 6h keeps SerpApi spend low without ever serving
-    // yesterday's listings.
+    private const string Host = "international-showtimes.p.rapidapi.com";
+    private const string BaseUrl = "https://international-showtimes.p.rapidapi.com";
     private static readonly TimeSpan CacheTtl = TimeSpan.FromHours(6);
 
     public ShowtimesController(
         IHttpClientFactory httpClientFactory,
         IConfiguration configuration,
-        AppDbContext db)
+        IMemoryCache cache)
     {
         _httpClientFactory = httpClientFactory;
         _configuration = configuration;
-        _db = db;
+        _cache = cache;
     }
 
     [HttpGet]
     [AllowAnonymous]
     public async Task<IActionResult> GetShowtimes(
-        [FromQuery] string movieTitle,
-        [FromQuery] string location,
-        [FromQuery] bool debug = false)
+        [FromQuery] string imdbId,
+        [FromQuery] string lat,
+        [FromQuery] string lng,
+        [FromQuery] string? date = null)
     {
-        if (string.IsNullOrWhiteSpace(movieTitle) || string.IsNullOrWhiteSpace(location))
+        if (string.IsNullOrWhiteSpace(imdbId) || string.IsNullOrWhiteSpace(lat) || string.IsNullOrWhiteSpace(lng))
         {
-            return BadRequest("movieTitle and location are required.");
+            return BadRequest("imdbId, lat and lng are required.");
         }
 
-        var cacheKey = $"{movieTitle.Trim().ToLowerInvariant()}_{location.Trim().ToLowerInvariant()}";
-
-        // Cache hit: fresh row within the TTL. Deserialize the stored theater
-        // list straight back out — no SerpApi call, no re-parsing.
-        var freshCutoff = DateTime.UtcNow - CacheTtl;
-        var cached = await _db.ShowtimeCaches
-            .AsNoTracking()
-            .FirstOrDefaultAsync(s => s.CacheKey == cacheKey && s.UpdatedAtUtc >= freshCutoff);
-
-        if (cached != null)
+        // Time window: the target day 00:00Z through +48h (covers today +
+        // tomorrow's listings), defaulting to "now" when no date is given.
+        DateTime windowStart = DateTime.UtcNow;
+        if (!string.IsNullOrWhiteSpace(date)
+            && DateTime.TryParse(date, null, System.Globalization.DateTimeStyles.AssumeUniversal, out var parsed))
         {
-            var cachedTheaters = JsonSerializer.Deserialize<List<TheaterDto>>(cached.DataJson)
-                                 ?? new List<TheaterDto>();
-            return Ok(new ShowtimeResponseDto("cache", cachedTheaters));
+            windowStart = DateTime.SpecifyKind(parsed.Date, DateTimeKind.Utc);
+        }
+        var timeFrom = windowStart.ToString("yyyy-MM-ddTHH:mm:ssZ");
+        var timeTo = windowStart.AddHours(48).ToString("yyyy-MM-ddTHH:mm:ssZ");
+
+        var cacheKey = $"showtime:{imdbId.Trim()}:{lat.Trim()},{lng.Trim()}:{windowStart:yyyy-MM-dd}";
+        if (_cache.TryGetValue(cacheKey, out ShowtimeResponseDto? cached) && cached != null)
+        {
+            return Ok(cached with { Source = "cache" });
         }
 
-        // Cache miss: hit SerpApi.
-        var apiKey = _configuration["SerpApi:ApiKey"];
+        var apiKey = _configuration["InternationalShowtimes:ApiKey"];
         if (string.IsNullOrWhiteSpace(apiKey))
         {
-            Console.WriteLine("SerpApi:ApiKey is not configured on the server.");
-            return NoneResult(debug, "SerpApi:ApiKey is not configured (env var not read).");
+            Console.WriteLine("InternationalShowtimes:ApiKey is not configured on the server.");
+            return Ok(new ShowtimeResponseDto("none", new List<ShowtimeTheaterDto>()));
         }
 
-        List<TheaterDto> theaters;
         try
         {
-            // Canonical showtimes query: just "<movie> showtimes" — the geo comes
-            // from the `location` param. Putting the city into `q` too can stop
-            // Google from rendering the multi-theater showtimes box we parse.
-            var q = Uri.EscapeDataString($"{movieTitle} showtimes");
-            var loc = Uri.EscapeDataString(location);
-            var url = $"https://serpapi.com/search.json?engine=google&q={q}&location={loc}&api_key={apiKey}";
-
-            var client = _httpClientFactory.CreateClient();
-            var response = await client.GetAsync(url);
-            var body = await response.Content.ReadAsStringAsync();
-
-            if (!response.IsSuccessStatusCode)
+            var cinemas = await FetchNearbyCinemas(apiKey, lat.Trim(), lng.Trim());
+            if (cinemas.Count == 0)
             {
-                Console.WriteLine($"SerpApi error {(int)response.StatusCode}: {body}");
-                // SerpApi puts a human-readable reason in an `error` field
-                // (bad key, unsupported location, out of searches, etc.).
-                var reason = TryExtractError(body) ?? $"HTTP {(int)response.StatusCode}";
-                return NoneResult(debug, $"SerpApi returned an error: {reason}");
+                return Ok(new ShowtimeResponseDto("none", new List<ShowtimeTheaterDto>()));
             }
 
-            theaters = ParseShowtimes(body);
-
+            var theaters = await FetchShowtimes(apiKey, imdbId.Trim(), cinemas, timeFrom, timeTo);
             if (theaters.Count == 0)
             {
-                // 200 OK but no showtimes box — either the film isn't currently
-                // in theaters, the location didn't resolve, or SerpApi surfaced
-                // an `error`. Bubble whichever we can see.
-                var reason = TryExtractError(body)
-                    ?? "SerpApi returned 200 but no `showtimes` block (film may not be in theaters, or location didn't resolve).";
-                return NoneResult(debug, reason);
+                return Ok(new ShowtimeResponseDto("none", new List<ShowtimeTheaterDto>()));
             }
+
+            var result = new ShowtimeResponseDto("live", theaters);
+            _cache.Set(cacheKey, result, CacheTtl);
+            return Ok(result);
         }
         catch (Exception ex)
         {
-            Console.WriteLine($"SerpApi request failed: {ex.Message}");
-            return NoneResult(debug, $"Request threw: {ex.Message}");
+            Console.WriteLine($"International Showtimes request failed: {ex.Message}");
+            return Ok(new ShowtimeResponseDto("none", new List<ShowtimeTheaterDto>()));
         }
-
-        await UpsertCache(cacheKey, theaters);
-        return Ok(new ShowtimeResponseDto("live", theaters));
     }
 
-    // Empty "none" response. With ?debug=true it also carries a `diagnostic`
-    // explaining WHY it's empty — safe to expose (never includes the API key).
-    // Drop the debug param once showtimes are confirmed working in prod.
-    private IActionResult NoneResult(bool debug, string diagnostic)
-    {
-        if (debug)
-        {
-            return Ok(new { source = "none", theaters = new List<TheaterDto>(), diagnostic });
-        }
-        return Ok(new ShowtimeResponseDto("none", new List<TheaterDto>()));
-    }
+    private sealed record CinemaInfo(string Id, string Name, string Address);
 
-    // SerpApi surfaces failures in a top-level `error` string. Returns null if
-    // there isn't one so callers can fall back to a generic reason.
-    private static string? TryExtractError(string body)
+    // /cinemas → id/name/address for theaters within 20km of the coordinates.
+    private async Task<Dictionary<string, CinemaInfo>> FetchNearbyCinemas(string apiKey, string lat, string lng)
     {
-        try
+        var map = new Dictionary<string, CinemaInfo>();
+        var url = $"{BaseUrl}/cinemas?location={Uri.EscapeDataString($"{lat},{lng}")}&distance=20&countries=US";
+        using var doc = await SendRapidApi(apiKey, url);
+        if (doc == null) return map;
+
+        if (!doc.RootElement.TryGetProperty("results", out var results)
+            || results.ValueKind != JsonValueKind.Array)
         {
-            using var doc = JsonDocument.Parse(body);
-            if (doc.RootElement.TryGetProperty("error", out var err)
-                && err.ValueKind == JsonValueKind.String)
+            return map;
+        }
+
+        foreach (var c in results.EnumerateArray())
+        {
+            var id = GetString(c, "id");
+            var name = GetString(c, "name");
+            if (string.IsNullOrWhiteSpace(id) || string.IsNullOrWhiteSpace(name)) continue;
+
+            var address = "";
+            if (c.TryGetProperty("location", out var loc) && loc.ValueKind == JsonValueKind.Object
+                && loc.TryGetProperty("address", out var addr) && addr.ValueKind == JsonValueKind.Object)
             {
-                return err.GetString();
+                address = GetString(addr, "display_text");
             }
+
+            map[id] = new CinemaInfo(id, name, address);
         }
-        catch { /* not JSON / unparseable — fall through */ }
-        return null;
+
+        return map;
     }
 
-    // SerpApi's `showtimes` is an array of *day* objects (Today / Tomorrow /
-    // dated), each holding a `theaters` array; each theater has a `showing`
-    // array of { name/type, time[] }. We surface the first day (today's
-    // listings) and parse defensively — SerpApi omits fields freely, so every
-    // access is guarded and a malformed block yields an empty list, never a 500.
-    private static List<TheaterDto> ParseShowtimes(string json)
+    // /showtimes → screening slots (start_at, format flags, ticketing links)
+    // for the IMDb id at the given cinemas. Grouped back onto each cinema and
+    // by screen format. Parsed defensively — a missing field skips that slot,
+    // never a 500.
+    private async Task<List<ShowtimeTheaterDto>> FetchShowtimes(
+        string apiKey, string imdbId, Dictionary<string, CinemaInfo> cinemas, string timeFrom, string timeTo)
     {
-        var result = new List<TheaterDto>();
+        var cinemaIds = string.Join(",", cinemas.Keys);
+        var url = $"{BaseUrl}/showtimes?cinema_id={Uri.EscapeDataString(cinemaIds)}"
+                + $"&imdb_id={Uri.EscapeDataString(imdbId)}"
+                + $"&time_from={Uri.EscapeDataString(timeFrom)}&time_to={Uri.EscapeDataString(timeTo)}";
+        using var doc = await SendRapidApi(apiKey, url);
+        if (doc == null) return new List<ShowtimeTheaterDto>();
 
-        using var doc = JsonDocument.Parse(json);
-        if (!doc.RootElement.TryGetProperty("showtimes", out var showtimes)
-            || showtimes.ValueKind != JsonValueKind.Array
-            || showtimes.GetArrayLength() == 0)
+        if (!doc.RootElement.TryGetProperty("results", out var results)
+            || results.ValueKind != JsonValueKind.Array)
         {
-            return result;
+            return new List<ShowtimeTheaterDto>();
         }
 
-        var firstDay = showtimes[0];
-        if (!firstDay.TryGetProperty("theaters", out var theatersEl)
-            || theatersEl.ValueKind != JsonValueKind.Array)
+        // cinema_id -> (format -> times)
+        var byCinema = new Dictionary<string, Dictionary<string, List<ShowingTimeDto>>>();
+
+        foreach (var s in results.EnumerateArray())
         {
-            return result;
-        }
+            var cinemaId = GetString(s, "cinema_id");
+            if (!cinemas.ContainsKey(cinemaId)) continue;
 
-        foreach (var theater in theatersEl.EnumerateArray())
-        {
-            var name = GetString(theater, "name");
-            if (string.IsNullOrWhiteSpace(name)) continue;
+            var startAt = GetString(s, "start_at");
+            if (string.IsNullOrWhiteSpace(startAt)) continue;
 
-            var address = GetString(theater, "address");
-            var ticketUrl = GetString(theater, "link");
+            var format = GetBool(s, "is_imax") ? "IMAX" : GetBool(s, "is_3d") ? "3D" : "Standard";
 
-            var showings = new List<ShowingDto>();
-            if (theater.TryGetProperty("showing", out var showingEl)
-                && showingEl.ValueKind == JsonValueKind.Array)
+            // First ticketing link when present; null otherwise (the client
+            // falls back to a generic theater/Fandango search for booking).
+            string? bookingUrl = null;
+            if (s.TryGetProperty("ticketing", out var ticketing) && ticketing.ValueKind == JsonValueKind.Array)
             {
-                foreach (var showing in showingEl.EnumerateArray())
+                foreach (var t in ticketing.EnumerateArray())
                 {
-                    // SerpApi labels the format under `type`; older payloads
-                    // used `name`. Default to "Standard" when unlabeled.
-                    var type = GetString(showing, "type");
-                    if (string.IsNullOrWhiteSpace(type)) type = GetString(showing, "name");
-                    if (string.IsNullOrWhiteSpace(type)) type = "Standard";
-
-                    var times = new List<string>();
-                    if (showing.TryGetProperty("time", out var timeEl)
-                        && timeEl.ValueKind == JsonValueKind.Array)
-                    {
-                        foreach (var t in timeEl.EnumerateArray())
-                        {
-                            var s = t.ValueKind == JsonValueKind.String ? t.GetString() : null;
-                            if (!string.IsNullOrWhiteSpace(s)) times.Add(s!);
-                        }
-                    }
-
-                    if (times.Count > 0) showings.Add(new ShowingDto(type, times));
+                    var link = GetString(t, "link");
+                    if (!string.IsNullOrWhiteSpace(link)) { bookingUrl = link; break; }
                 }
             }
 
+            if (!byCinema.TryGetValue(cinemaId, out var formats))
+            {
+                formats = new Dictionary<string, List<ShowingTimeDto>>();
+                byCinema[cinemaId] = formats;
+            }
+            if (!formats.TryGetValue(format, out var times))
+            {
+                times = new List<ShowingTimeDto>();
+                formats[format] = times;
+            }
+            times.Add(new ShowingTimeDto(startAt, bookingUrl));
+        }
+
+        var theaters = new List<ShowtimeTheaterDto>();
+        foreach (var (cinemaId, formats) in byCinema)
+        {
+            var info = cinemas[cinemaId];
+            var showings = formats
+                .Where(f => f.Value.Count > 0)
+                .Select(f => new ShowingDto(f.Key, f.Value))
+                .ToList();
             if (showings.Count > 0)
             {
-                result.Add(new TheaterDto(name, address, showings, ticketUrl));
+                theaters.Add(new ShowtimeTheaterDto(info.Name, info.Address, showings));
             }
         }
 
-        return result;
+        return theaters;
+    }
+
+    private async Task<JsonDocument?> SendRapidApi(string apiKey, string url)
+    {
+        var request = new HttpRequestMessage(HttpMethod.Get, url);
+        request.Headers.Add("x-rapidapi-key", apiKey);
+        request.Headers.Add("x-rapidapi-host", Host);
+
+        var client = _httpClientFactory.CreateClient();
+        var response = await client.SendAsync(request);
+        var body = await response.Content.ReadAsStringAsync();
+
+        if (!response.IsSuccessStatusCode)
+        {
+            Console.WriteLine($"International Showtimes error {(int)response.StatusCode}: {body}");
+            return null;
+        }
+
+        try
+        {
+            return JsonDocument.Parse(body);
+        }
+        catch (JsonException)
+        {
+            return null;
+        }
     }
 
     private static string GetString(JsonElement el, string prop) =>
@@ -217,28 +244,7 @@ public class ShowtimesController : ControllerBase
             ? v.GetString() ?? string.Empty
             : string.Empty;
 
-    // Insert-or-update keyed on the unique CacheKey. Stores the parsed list so
-    // a later cache hit skips both SerpApi and the parser above.
-    private async Task UpsertCache(string cacheKey, List<TheaterDto> theaters)
-    {
-        var dataJson = JsonSerializer.Serialize(theaters);
-        var existing = await _db.ShowtimeCaches.FirstOrDefaultAsync(s => s.CacheKey == cacheKey);
-
-        if (existing != null)
-        {
-            existing.DataJson = dataJson;
-            existing.UpdatedAtUtc = DateTime.UtcNow;
-        }
-        else
-        {
-            _db.ShowtimeCaches.Add(new ShowtimeCache
-            {
-                CacheKey = cacheKey,
-                DataJson = dataJson,
-                UpdatedAtUtc = DateTime.UtcNow,
-            });
-        }
-
-        await _db.SaveChangesAsync();
-    }
+    private static bool GetBool(JsonElement el, string prop) =>
+        el.TryGetProperty(prop, out var v)
+        && (v.ValueKind == JsonValueKind.True || (v.ValueKind == JsonValueKind.String && v.GetString() == "true"));
 }
