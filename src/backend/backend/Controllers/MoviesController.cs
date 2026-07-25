@@ -61,13 +61,15 @@ namespace Backend.Controllers
             return await ProxyMapCache(cacheKey, url);
         }
 
-        // Closest MoviesDatabase equivalent to TMDb's "now playing" — the most
-        // popular current movies. Used to seed the home carousel + movie picker.
+        // Closest MoviesDatabase equivalent to TMDb's "now playing" — last
+        // weekend's box-office titles (most "currently in theaters" of the
+        // available lists; `most_pop_movies` returns empty on this plan).
+        // Seeds the home carousel + the movie picker's default list.
         [HttpGet("now-playing")]
         public async Task<IActionResult> NowPlaying()
         {
             const string cacheKey = "movies:now-playing";
-            var url = $"{BaseUrl}/titles?list=most_pop_movies&titleType=movie&info=base_info&limit=15";
+            var url = $"{BaseUrl}/titles?list=top_boxoffice_last_weekend_10&info=base_info&limit=10";
             return await ProxyMapCache(cacheKey, url);
         }
 
