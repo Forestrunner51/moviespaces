@@ -8,7 +8,7 @@ namespace Backend.Controllers
     // RapidAPI key never ships in the app. Replaces the old TMDb proxy —
     // MoviesDatabase offers a clear paid commercial-use tier (TMDb's free tier
     // prohibits commercial use) and returns standard IMDb ids (tt...) that
-    // interoperate with MovieGlu / ticketing deep-links.
+    // interoperate with ticketing deep-links / Google showtimes.
     //
     // The backend maps MoviesDatabase's schema into a small internal shape
     // ({ results: [{ imdbId, title, posterUrl, releaseYear }] }) so the client
@@ -42,8 +42,11 @@ namespace Backend.Controllers
             }
 
             var cacheKey = $"movies:search:{query.Trim().ToLowerInvariant()}";
+            // sort=year.decr surfaces the most recent match first (e.g. the 2024
+            // "Dune" over the 1984 one). No startYear filter — that would hide
+            // older titles the host may legitimately search for.
             var url = $"{BaseUrl}/titles/search/title/{Uri.EscapeDataString(query.Trim())}"
-                    + "?exact=false&titleType=movie&info=base_info&limit=10";
+                    + "?exact=false&titleType=movie&sort=year.decr&info=base_info&limit=10";
             return await ProxyMapCache(cacheKey, url);
         }
 
@@ -61,15 +64,21 @@ namespace Backend.Controllers
             return await ProxyMapCache(cacheKey, url);
         }
 
-        // Closest MoviesDatabase equivalent to TMDb's "now playing" — last
-        // weekend's box-office titles (most "currently in theaters" of the
-        // available lists; `most_pop_movies` returns empty on this plan).
-        // Seeds the home carousel + the movie picker's default list.
+        // "Now playing"-style discovery for the home carousel + movie picker's
+        // default list. MoviesDatabase has no true "in theaters" list (the
+        // box-office lists return stale titles), so use the most recent movies:
+        // titleType=movie, newest-first, from the current release window.
         [HttpGet("now-playing")]
         public async Task<IActionResult> NowPlaying()
         {
             const string cacheKey = "movies:now-playing";
-            var url = $"{BaseUrl}/titles?list=top_boxoffice_last_weekend_10&info=base_info&limit=10";
+            var year = DateTime.UtcNow.Year;
+            // Bound to [prior year, current year] so it shows recent releases,
+            // not far-future announcements (sort=year.decr alone surfaces 2031
+            // titles). Note: this dataset has no "popular/box-office" signal
+            // on our plan, so these are recent-but-not-necessarily-blockbuster.
+            var url = $"{BaseUrl}/titles?titleType=movie&sort=year.decr"
+                    + $"&startYear={year - 1}&endYear={year}&info=base_info&limit=20";
             return await ProxyMapCache(cacheKey, url);
         }
 

@@ -24,8 +24,8 @@ import { SpaceTheme, SpaceStyles } from "@/frontend/constants/theme";
 import { POST_ACTIVITIES } from "@/frontend/constants/activities";
 import { useFriends } from "@/frontend/hooks/use-friends";
 import { searchMovies, searchTvShows, getNowPlaying, Movie } from "@/frontend/services/movies";
-import { ShowtimeSelector } from "@/frontend/components/showtime-selector";
-import { SelectedShowtime } from "@/frontend/services/showtimes";
+import * as WebBrowser from "expo-web-browser";
+import { buildGoogleShowtimesUrl } from "@/frontend/services/ticket-links";
 import {
   getDeviceLocation,
   fetchNearbyTheaters,
@@ -85,10 +85,6 @@ export default function CreateSpaceScreen() {
     prefillLng ? parseFloat(prefillLng) : null,
   );
   const [movieName, setMovieName] = useState(prefillMovieName ?? "");
-  // The picked movie's IMDb id (from MoviesDatabase search) — needed to look
-  // up showtimes. Null when the title was typed by hand, which disables the
-  // showtime lookup (no id to query).
-  const [movieImdbId, setMovieImdbId] = useState<string | null>(null);
   // The picked movie's poster URL — stored on the Space at creation so cards
   // can show poster art without a per-card metadata lookup.
   const [posterPath, setPosterPath] = useState<string | null>(prefillPosterPath ?? null);
@@ -284,24 +280,12 @@ export default function CreateSpaceScreen() {
     setShowTime(formatTime(selected));
   };
 
-  // Host tapped a real showtime chip: fill the theater (unless locked to a
-  // pre-chosen rental venue), the date + time from the ISO start_at, and —
-  // when the API gave a booking link — the bookingUrl, so the existing
-  // "Get Tickets" hand-off uses it. The ISO carries both the day and the time,
-  // so it feeds the same dateValue/timeValue → screeningTime path as the
-  // manual picker.
-  const handleSelectShowtime = (s: SelectedShowtime) => {
-    if (!theaterLocked && s.theaterName) setTheaterName(s.theaterName);
-    const parsed = new Date(s.time);
-    if (!isNaN(parsed.getTime())) {
-      setDateValue(parsed);
-      setShowDate(formatDate(parsed));
-      setTimeValue(parsed);
-      setShowTime(formatTime(parsed));
-    } else {
-      setShowTime(s.time);
-    }
-    if (s.bookingUrl) setBookingUrl(s.bookingUrl);
+  // Opens Google's showtimes results for the picked film near the chosen
+  // theater in an in-app browser. Google localizes and shows real theaters,
+  // times, and ticket links — the host reads off the real showtime, then sets
+  // the time in the picker below. (No paid showtimes API.)
+  const handleFindShowtimes = () => {
+    WebBrowser.openBrowserAsync(buildGoogleShowtimesUrl(movieName, theaterName));
   };
 
   const handleSubmit = async () => {
@@ -464,7 +448,6 @@ export default function CreateSpaceScreen() {
                 onPress={() => {
                   setRentalActivityType("movie");
                   setMovieName("");
-                  setMovieImdbId(null);
                   setPosterPath(null);
                 }}
               >
@@ -484,7 +467,6 @@ export default function CreateSpaceScreen() {
                 onPress={() => {
                   setRentalActivityType("tv");
                   setMovieName("");
-                  setMovieImdbId(null);
                   setPosterPath(null);
                 }}
               >
@@ -504,7 +486,6 @@ export default function CreateSpaceScreen() {
                 onPress={() => {
                   setRentalActivityType("other");
                   setMovieName("");
-                  setMovieImdbId(null);
                   setPosterPath(null);
                 }}
               >
@@ -638,24 +619,19 @@ export default function CreateSpaceScreen() {
             </TouchableOpacity>
           )}
 
-          {/* Real showtimes (International Showtimes API) for the chosen film
-              near the picked theater — tap one to auto-fill the date/time
-              above. Requires a searched movie (has an IMDb id) + a theater with
-              coordinates; movie screenings only. */}
-          {spaceType === "public_gathering" &&
-            !!movieImdbId &&
-            theaterLat != null &&
-            theaterLng != null && (
-              <View style={styles.showtimeBlock}>
-                <ShowtimeSelector
-                  imdbId={movieImdbId}
-                  lat={theaterLat}
-                  lng={theaterLng}
-                  date={showDate || undefined}
-                  onSelectShowtime={handleSelectShowtime}
-                />
-              </View>
-            )}
+          {/* Look up real showtimes on Google (opens in-app browser) for the
+              chosen film + theater — the host reads the time and sets it in the
+              picker above. Movie screenings only. */}
+          {spaceType === "public_gathering" && !!movieName.trim() && (
+            <TouchableOpacity
+              activeOpacity={0.85}
+              style={styles.showtimeButton}
+              onPress={handleFindShowtimes}
+            >
+              <Ionicons name="search-outline" size={18} color={SpaceTheme.backgroundVoid} />
+              <Text style={styles.showtimeButtonText}>Find Showtimes Near Me</Text>
+            </TouchableOpacity>
+          )}
 
           {spaceType === "private_rental" && (
             <View style={styles.rentalSection}>
@@ -946,7 +922,6 @@ export default function CreateSpaceScreen() {
                     style={styles.modalRow}
                     onPress={() => {
                       setMovieName(item.title);
-                      setMovieImdbId(item.imdbId);
                       setPosterPath(item.posterPath);
                       setMovieModalVisible(false);
                       setMovieSearch("");
@@ -974,7 +949,6 @@ export default function CreateSpaceScreen() {
               value={movieName}
               onChangeText={(text) => {
                 setMovieName(text);
-                setMovieImdbId(null);
                 setPosterPath(null);
               }}
             />
@@ -1140,7 +1114,17 @@ const styles = StyleSheet.create({
     elevation: 6,
   },
   submitButtonText: { color: SpaceTheme.backgroundVoid, fontWeight: "800", fontSize: 17 },
-  showtimeBlock: { marginTop: 4 },
+  showtimeButton: {
+    flexDirection: "row",
+    alignItems: "center",
+    justifyContent: "center",
+    gap: 8,
+    backgroundColor: SpaceTheme.accentGold,
+    borderRadius: 12,
+    paddingVertical: 12,
+    marginTop: 4,
+  },
+  showtimeButtonText: { color: SpaceTheme.backgroundVoid, fontSize: 15, fontWeight: "700" },
   pickerField: {
     ...SpaceStyles.glassCard,
     flexDirection: "row",

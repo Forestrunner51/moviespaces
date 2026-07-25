@@ -53,7 +53,7 @@ Everything native only becomes real here: SSO, the "MovieSpaces" name, Bebas Neu
 Run each end-to-end, signed-in as a real user:
 - [ ] Sign up → onboarding → land in app
 - [ ] Create a MovieSpace (movie search, theater picker, date/time, poster shows)
-- [ ] Showtime autofill (International Showtimes API): pick a *searched* movie (has IMDb id) + theater → "Find Showtimes" → tap a time chip → date/time (+ ticketing link) populate the form; empty state when no listings. ⚠️ Requires `InternationalShowtimes__ApiKey` on Render (double underscore); rotate the temp key that's in `appsettings.json`
+- [ ] Find Showtimes: pick a movie → "Find Showtimes Near Me" opens a Google showtimes search in the in-app browser (real local theaters/times/ticket links); host reads the time and sets it in the picker. No API to configure.
 - [ ] Create a Watch Party / private rental (cost, capacity, venue link)
 - [ ] Join a Space (as a different account) → RSVP confirm/cancel
 - [ ] Group chat: send/receive, keyboard doesn't cover Send, no flicker

@@ -12,6 +12,19 @@ function withAffiliateTag(url: string): string {
   return `${url}${separator}cjevent=${encodeURIComponent(AFFILIATE_TAG)}`;
 }
 
+// Opens Google's movie-showtimes results for a film. Google auto-detects the
+// user's location and renders local theaters, exact showtimes, screen formats
+// (IMAX/3D), and ticket-purchase links (Fandango/AMC/Cinemark/…) — a zero-cost
+// alternative to a paid showtimes API. `location` (e.g. the picked theater's
+// name) narrows the query when known, otherwise "near me" lets Google localize.
+export function buildGoogleShowtimesUrl(movieTitle: string, location?: string | null): string {
+  const query =
+    location && location.trim()
+      ? `${movieTitle} showtimes ${location.trim()}`
+      : `${movieTitle} showtimes near me`;
+  return `https://www.google.com/search?q=${encodeURIComponent(query)}`;
+}
+
 // Prefers a real booking URL (e.g. a specific showtime page) when the group
 // has one; otherwise falls back to a generic Fandango search for the film so
 // there's always something useful to hand off to.
