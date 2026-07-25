@@ -72,13 +72,10 @@ namespace Backend.Controllers
         public async Task<IActionResult> NowPlaying()
         {
             const string cacheKey = "movies:now-playing";
-            var year = DateTime.UtcNow.Year;
-            // Bound to [prior year, current year] so it shows recent releases,
-            // not far-future announcements (sort=year.decr alone surfaces 2031
-            // titles). Note: this dataset has no "popular/box-office" signal
-            // on our plan, so these are recent-but-not-necessarily-blockbuster.
-            var url = $"{BaseUrl}/titles?titleType=movie&sort=year.decr"
-                    + $"&startYear={year - 1}&endYear={year}&info=base_info&limit=20";
+            // Last weekend's box office — recognizable, popular titles (the
+            // recency lists returned obscure films). MoviesDatabase caps this
+            // list at 10.
+            var url = $"{BaseUrl}/titles?list=top_boxoffice_last_weekend_10&info=base_info&limit=10";
             return await ProxyMapCache(cacheKey, url);
         }
 

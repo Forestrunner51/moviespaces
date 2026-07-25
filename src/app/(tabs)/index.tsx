@@ -154,7 +154,7 @@ export default function HomeScreen() {
           />
         )}
 
-        <Text style={styles.sectionTitle}>Popular in Theaters</Text>
+        <Text style={styles.sectionTitle}>Popular Movies</Text>
         {moviesLoading ? (
           <ActivityIndicator color={SpaceTheme.glowCyan} style={styles.sectionLoading} />
         ) : nowPlaying.length === 0 ? (
