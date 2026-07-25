@@ -3,10 +3,12 @@ import {
   StyleSheet,
   Text,
   TextInput,
-  View,
   TouchableOpacity,
   ActivityIndicator,
   Alert,
+  KeyboardAvoidingView,
+  ScrollView,
+  Platform,
 } from "react-native";
 import { useRouter } from "expo-router";
 import { supabase } from "@/frontend/config/supabase";
@@ -81,7 +83,14 @@ export default function ResetPasswordScreen() {
 
   return (
     <Starfield twinkle>
-      <View style={styles.container}>
+      <KeyboardAvoidingView
+        style={styles.flex}
+        behavior={Platform.OS === "ios" ? "padding" : undefined}
+      >
+      <ScrollView
+        contentContainerStyle={styles.container}
+        keyboardShouldPersistTaps="handled"
+      >
         <Text style={[styles.header, SpaceStyles.glowText, SpaceStyles.wordmark]}>Reset Password</Text>
 
         {stage === "request" ? (
@@ -159,14 +168,16 @@ export default function ResetPasswordScreen() {
         <TouchableOpacity onPress={() => router.back()} style={styles.switchLink}>
           <Text style={styles.switchText}>Back to sign in</Text>
         </TouchableOpacity>
-      </View>
+      </ScrollView>
+      </KeyboardAvoidingView>
     </Starfield>
   );
 }
 
 const styles = StyleSheet.create({
+  flex: { flex: 1 },
   container: {
-    flex: 1,
+    flexGrow: 1,
     justifyContent: "center",
     padding: 24,
   },

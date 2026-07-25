@@ -13,6 +13,7 @@ import {
   Alert,
 } from "react-native";
 import { useLocalSearchParams, Stack } from "expo-router";
+import { useSafeAreaInsets } from "react-native-safe-area-context";
 import { Starfield } from "@/frontend/components/starfield";
 import { SpaceTheme, SpaceStyles } from "@/frontend/constants/theme";
 import { useGroupChat, GroupMessage, GroupChatType } from "@/frontend/hooks/use-group-chat";
@@ -29,6 +30,16 @@ export default function GroupChatScreen() {
     seasonEpisodeInfo?: string;
   }>();
   const { currentUserId, messages, loading, sendMessage } = useGroupChat(type, id);
+  // Header height, derived from the safe-area top inset + the standard iOS
+  // nav-bar content height (44). A hardcoded offset doesn't account for the
+  // top inset (which varies with notch/Dynamic Island/no-notch), so the
+  // KeyboardAvoidingView's padding math was off just enough that the Send
+  // button's real hit-testable bounds landed under the keyboard's overlay:
+  // it looked positioned correctly but taps didn't register. (expo-router
+  // SDK 56 forbids importing @react-navigation's useHeaderHeight directly,
+  // so this is computed from safe-area-context instead.)
+  const insets = useSafeAreaInsets();
+  const headerHeight = insets.top + 44;
   const { friends, sendFriendRequest } = useFriends();
   const [text, setText] = useState("");
   const listRef = useRef<FlatList>(null);
@@ -54,7 +65,20 @@ export default function GroupChatScreen() {
     const content = text.trim();
     if (!content) return;
     setText("");
-    await sendMessage(content);
+    const result = await sendMessage(content);
+    if (!result.success) {
+      // Every sendMessage failure path (RLS rejection, network error, or
+      // currentUserId not loaded yet) was previously swallowed here — the
+      // input cleared as if it sent, nothing appeared in the chat, and there
+      // was no indication anything went wrong. Restore the draft so nothing
+      // typed is lost, and say why.
+      setText(content);
+      Alert.alert(
+        "Message not sent",
+        result.error || "Still connecting — wait a moment and try again.",
+      );
+      return;
+    }
     listRef.current?.scrollToEnd({ animated: true });
   };
 
@@ -143,7 +167,7 @@ export default function GroupChatScreen() {
       <KeyboardAvoidingView
         style={styles.container}
         behavior={Platform.OS === "ios" ? "padding" : undefined}
-        keyboardVerticalOffset={Platform.OS === "ios" ? 100 : 0}
+        keyboardVerticalOffset={Platform.OS === "ios" ? headerHeight : 0}
       >
         <Stack.Screen options={{ title: title || "Group Chat" }} />
         {(showTime || showDate || seasonEpisodeInfo) && (

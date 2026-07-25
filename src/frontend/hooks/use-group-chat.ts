@@ -30,6 +30,9 @@ export function useGroupChat(groupType: GroupChatType, groupId: string) {
   const profileCacheRef = useRef<
     Record<string, { display_name: string; username: string | null; avatar_url: string | null }>
   >({});
+  // Tracks whether fetchHistory has completed at least once — see the
+  // comment inside fetchHistory for why this gates the loading spinner.
+  const hasLoadedOnceRef = useRef(false);
 
   useEffect(() => {
     supabase.auth.getUser().then(({ data: { user } }) => {
@@ -71,7 +74,13 @@ export function useGroupChat(groupType: GroupChatType, groupId: string) {
 
   const fetchHistory = async () => {
     if (!groupId) return;
-    setLoading(true);
+    // Only the very first load shows a spinner. Without this guard, `loading`
+    // flips true on every 4s background poll too — which unmounts the
+    // FlatList and remounts it a moment later (the screen swaps to the
+    // ActivityIndicator and back), showing up as the message list — and for
+    // an empty chat, the "No messages yet" text — flickering every few
+    // seconds.
+    if (!hasLoadedOnceRef.current) setLoading(true);
     try {
       const { data, error } = await supabase
         .from("group_messages")
@@ -81,10 +90,21 @@ export function useGroupChat(groupType: GroupChatType, groupId: string) {
         .order("created_at", { ascending: true });
 
       if (error) throw error;
-      setMessages(await withSenderInfo(data || []));
+      const fetched = await withSenderInfo(data || []);
+      // Preserve any optimistic message still in flight (sendMessage hasn't
+      // replaced its temp_ id with the confirmed row yet) — otherwise a poll
+      // landing mid-send wipes it from view until the *next* poll picks the
+      // now-persisted row back up, which reads as "the message didn't send".
+      setMessages((prev) => {
+        const pending = prev.filter(
+          (m) => m.id.startsWith("temp_") && !fetched.some((f) => f.content === m.content && f.sender_id === m.sender_id),
+        );
+        return [...fetched, ...pending];
+      });
     } catch (err) {
       console.error("Error fetching group chat history:", err);
     } finally {
+      hasLoadedOnceRef.current = true;
       setLoading(false);
     }
   };

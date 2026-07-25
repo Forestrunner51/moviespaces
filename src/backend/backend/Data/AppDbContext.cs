@@ -22,10 +22,17 @@ public class AppDbContext : DbContext
     public DbSet<Group> Groups { get; set; }
     public DbSet<GroupMember> GroupMembers { get; set; }
     public DbSet<PushToken> PushTokens { get; set; }
+    public DbSet<ShowtimeCache> ShowtimeCaches => Set<ShowtimeCache>();
 
     protected override void OnModelCreating(ModelBuilder builder)
     {
         base.OnModelCreating(builder);
+
+        // Unique so the cache-miss upsert keys off one row per movie+location;
+        // also serves as the lookup index the controller queries on.
+        builder.Entity<ShowtimeCache>()
+            .HasIndex(s => s.CacheKey)
+            .IsUnique();
 
         // Partial unique index — Slug is nullable (legacy rows predate it),
         // and a unique index over a nullable column in Postgres already

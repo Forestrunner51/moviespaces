@@ -12,6 +12,7 @@ import {
   Alert,
 } from "react-native";
 import { useLocalSearchParams, Stack } from "expo-router";
+import { useSafeAreaInsets } from "react-native-safe-area-context";
 import { Starfield } from "@/frontend/components/starfield";
 import { SpaceTheme, SpaceStyles } from "@/frontend/constants/theme";
 import { useChat, Message } from "@/frontend/hooks/use-chat";
@@ -24,6 +25,11 @@ export default function ChatScreen() {
   const { currentUserId, messages, loading, sendMessage } = useChat(userId);
   const [text, setText] = useState("");
   const listRef = useRef<FlatList>(null);
+  // See group-chat/[id].tsx for why a hardcoded offset caused the Send button
+  // to silently stop registering taps with the keyboard up. Header height =
+  // safe-area top inset + standard iOS nav-bar height (44).
+  const insets = useSafeAreaInsets();
+  const headerHeight = insets.top + 44;
 
   const handleSend = async () => {
     const content = text.trim();
@@ -77,7 +83,7 @@ export default function ChatScreen() {
         )}
         <KeyboardAvoidingView
           behavior={Platform.OS === "ios" ? "padding" : undefined}
-          keyboardVerticalOffset={90}
+          keyboardVerticalOffset={Platform.OS === "ios" ? headerHeight : 0}
         >
           <View style={styles.inputRow}>
             <TextInput

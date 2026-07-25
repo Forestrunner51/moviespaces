@@ -1,10 +1,6 @@
-// Must load before supabase-js so a secure crypto.getRandomValues exists when
-// it generates the PKCE code verifier for OAuth (Google SSO). Without it, RN
-// has no WebCrypto and supabase falls back to a weaker source. Native module —
-// only takes effect after a fresh EAS build. (The code CHALLENGE still uses the
-// `plain` method since RN lacks crypto.subtle for SHA-256; that's expected and
-// supported — this fixes the verifier's randomness, the part that matters.)
-import "react-native-get-random-values";
+// Must load before supabase-js constructs its client. See the module itself
+// for why this is guarded rather than an unconditional polyfill import.
+import "@/frontend/services/random-values-polyfill";
 import { DarkTheme, ThemeProvider, Stack, router, usePathname } from "expo-router";
 import { useEffect, useRef, useState } from "react";
 import * as Sentry from "@sentry/react-native";

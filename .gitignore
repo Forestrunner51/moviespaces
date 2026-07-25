@@ -47,3 +47,8 @@ example
 # .NET build output
 bin/
 obj/
+
+# Build artifacts (EAS local builds drop these in the repo root)
+*.ipa
+*.apk
+*.aab

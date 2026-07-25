@@ -7,6 +7,7 @@ import {
   FlatList,
   Image,
   ActivityIndicator,
+  ScrollView,
 } from "react-native";
 import { router } from "expo-router";
 import { Ionicons } from "@expo/vector-icons";
@@ -70,7 +71,7 @@ export default function HomeScreen() {
 
   return (
     <Starfield>
-      <View style={styles.container}>
+      <ScrollView style={styles.flex} contentContainerStyle={styles.container}>
         <Text style={[styles.title, SpaceStyles.glowText, SpaceStyles.wordmark, styles.titleSpacing]}>MovieSpaces</Text>
         <Text style={styles.chooseSubtitle}>What do you want to do?</Text>
 
@@ -195,16 +196,17 @@ export default function HomeScreen() {
             )}
           />
         )}
-      </View>
+      </ScrollView>
     </Starfield>
   );
 }
 
 const styles = StyleSheet.create({
+  flex: { flex: 1 },
   container: {
-    flex: 1,
     paddingTop: 60,
     paddingHorizontal: 16,
+    paddingBottom: 40,
   },
   title: {
     fontSize: 28,
