@@ -26,7 +26,7 @@ The product is **feature-complete for a v1** and the code is in good shape (type
 
 **Key coupling to be aware of:** a Space lives in the **.NET** DB, but its **chat lives in Supabase**. They're linked by the Supabase user id (stored as `text` on the EF side). Group-chat membership is enforced by a Supabase RLS function (`is_group_message_member`) that reads the **EF-owned** `"Groups"`/`"GroupMembers"` tables directly. → Both databases must point at the same logical data, and that RLS function is a cross-system dependency. Not a blocker, but the part most likely to bite if the two DBs ever drift.
 
-**Third-party:** MoviesDatabase on RapidAPI (movie/TV search + posters + popular list; replaced TMDb — TMDb's free tier bars commercial use; returns standard IMDb ids), Google Places (theaters/venues), **International Showtimes** on RapidAPI (showtimes + ticketing deep-links — server-proxied, host-triggered, keyed by the movie's IMDb id + theater coordinates), Expo Push (notifications), Sentry (wired but **disabled**).
+**Third-party:** MoviesDatabase on RapidAPI (movie/TV search + posters + recent-releases list; replaced TMDb — TMDb's free tier bars commercial use; returns standard IMDb ids), Google Places (theaters/venues), Expo Push (notifications), Sentry (wired but **disabled**). Showtimes are **not** an API — "Find Showtimes" deep-links to a Google showtimes search (Google renders local theaters/times/ticket links for free).
 
 **Backend endpoints (proven):** GroupController (create/get/search/open/mine, join, join-web, confirm/unconfirm, book/unbook, cancel, delete, transfer, leave, booking-url, report-showtime, notify-message, AASA), AccountController (delete account + cascade), LocationsController (nearby-theaters), MoviesController (search/search-tv/now-playing via MoviesDatabase), PushTokensController (register).
 
@@ -47,7 +47,7 @@ Status: ✅ built & working · ⚠️ built but unverified/needs config · 🔨 
 
 **Core "Spaces" product**
 - ✅ Create MovieSpace (MoviesDatabase movie/TV search, Google Places theater picker, date/time, poster)
-- ⚠️ Showtime autofill — host taps "Find Showtimes" → real showtimes (International Showtimes API, by IMDb id) at cinemas near the picked theater → tap a slot to fill the date/time (+ ticketing deep-link). **Wired & building; needs `InternationalShowtimes__ApiKey` on Render + on-device verification of the response shape.**
+- ✅ Find Showtimes — "Find Showtimes Near Me" opens a Google showtimes search (in-app browser) for the film + theater; Google localizes and shows real theaters/times/ticket links. Host reads the time and sets it in the picker. No paid showtimes API (tried SerpApi, MovieGlu, International Showtimes — all dead ends; Google redirect is the MVP call).
 - ✅ Create Watch Party / private rental (cost split, capacity, venue link, activity types)
 - ✅ Join a Space (app + web-name paths), capacity/status enforced server-side
 - ✅ RSVP confirm/cancel (self-service; host implicit)
@@ -91,7 +91,6 @@ Status: ✅ built & working · ⚠️ built but unverified/needs config · 🔨 
 - [ ] Supabase Reset Password email template → `{{ .Token }}`
 - [ ] Email confirmation ON/OFF decision — recommend **ON**. Code already handles both (done), so this is now just a dashboard toggle.
 - [ ] Render prod env vars verified: `MoviesDatabase__ApiKey` (RapidAPI — replaced `Tmdb:ApiKey`), `GooglePlaces:ApiKey`, `Supabase:ServiceRoleKey`, `Supabase:Url`, `PostgresConnection`
-- [ ] **`InternationalShowtimes__ApiKey`** (RapidAPI) on Render + **rotate** the temporary key currently in `appsettings.json` (it's committed to git)
 - [ ] All Supabase migrations applied to prod DB (through `20260722_dm_friends_only`)
 
 ### C. Observability / production hardening
