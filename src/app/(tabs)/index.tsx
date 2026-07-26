@@ -63,7 +63,7 @@ export default function HomeScreen() {
     getNowPlaying()
       .then(setNowPlaying)
       .catch((err) => {
-        console.warn("Failed to load now-playing movies:", err);
+        console.warn("Failed to load surprise-me movies:", err);
         setNowPlaying([]);
       })
       .finally(() => setMoviesLoading(false));
@@ -154,7 +154,7 @@ export default function HomeScreen() {
           />
         )}
 
-        <Text style={styles.sectionTitle}>Popular Movies</Text>
+        <Text style={styles.sectionTitle}>Surprise Me</Text>
         {moviesLoading ? (
           <ActivityIndicator color={SpaceTheme.glowCyan} style={styles.sectionLoading} />
         ) : nowPlaying.length === 0 ? (
