@@ -12,6 +12,27 @@ export type SsoResult = { success: boolean; error?: string; cancelled?: boolean 
 // via app navigation.
 const OAUTH_REDIRECT_URL = "moviespaces://auth/callback";
 
+// Pulls params out of BOTH the query string and the fragment of a callback
+// URL. OAuth errors can come back in either depending on how far the request
+// got (Supabase-level rejections land in the query, provider-level ones can
+// land in the fragment), and React Native's URL implementation only exposes
+// the query — so parse the raw string rather than relying on URL.searchParams.
+function parseCallbackParams(url: string): Record<string, string> {
+  const params: Record<string, string> = {};
+  for (const marker of ["?", "#"]) {
+    const start = url.indexOf(marker);
+    if (start === -1) continue;
+    // A fragment can follow a query string; stop the query at the '#'.
+    const raw = marker === "?" ? url.slice(start + 1).split("#")[0] : url.slice(start + 1);
+    for (const pair of raw.split("&")) {
+      if (!pair) continue;
+      const [key, value = ""] = pair.split("=");
+      if (key) params[decodeURIComponent(key)] = decodeURIComponent(value.replace(/\+/g, " "));
+    }
+  }
+  return params;
+}
+
 // Google has no equivalent to Apple's native "must use their SDK" App Store
 // requirement, so this uses Supabase's generic OAuth (web) flow rather than
 // a native Google Sign-In SDK — no extra native module/config needed beyond
@@ -33,8 +54,30 @@ export async function signInWithGoogle(): Promise<SsoResult> {
       return { success: false, cancelled: true };
     }
 
-    const code = new URL(result.url).searchParams.get("code");
-    if (!code) return { success: false, error: "Google sign-in didn't return a valid code." };
+    const params = parseCallbackParams(result.url);
+
+    // Surface what actually came back rather than a generic "no code" message.
+    // The usual cause is dashboard config, not the app: the Google provider
+    // isn't enabled/keyed in Supabase, or this redirect URL isn't allow-listed
+    // — both make Supabase redirect back with an error instead of a code.
+    if (params.error || params.error_description) {
+      console.error("Google OAuth callback error:", result.url);
+      return {
+        success: false,
+        error: params.error_description || params.error,
+      };
+    }
+
+    const code = params.code;
+    if (!code) {
+      console.error("Google OAuth callback had no code:", result.url);
+      return {
+        success: false,
+        error:
+          "Google sign-in didn't return a code. Check that the Google provider is enabled in Supabase and that " +
+          `"${OAUTH_REDIRECT_URL}" is listed under Authentication → URL Configuration → Redirect URLs.`,
+      };
+    }
 
     const { error: exchangeError } = await supabase.auth.exchangeCodeForSession(code);
     if (exchangeError) return { success: false, error: exchangeError.message };

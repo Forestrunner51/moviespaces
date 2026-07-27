@@ -1,5 +1,6 @@
 import { useState, useEffect } from "react";
 import { supabase } from "@/frontend/config/supabase";
+import { authFetch } from "@/frontend/services/api";
 
 export interface Message {
   id: string;
@@ -54,6 +55,24 @@ export function useChat(chatTargetId: string) {
     }
   }, [currentUserId, chatTargetId]);
 
+  const notifyRecipient = async (preview: string) => {
+    if (!currentUserId || !chatTargetId) return;
+    const { data: profile } = await supabase
+      .from("profiles")
+      .select("display_name")
+      .eq("id", currentUserId)
+      .maybeSingle();
+
+    await authFetch(`${process.env.EXPO_PUBLIC_API_URL}/api/pushtokens/notify-dm`, {
+      method: "POST",
+      body: JSON.stringify({
+        recipientUserId: chatTargetId,
+        senderName: profile?.display_name || "Someone",
+        preview,
+      }),
+    });
+  };
+
   const sendMessage = async (content: string) => {
     if (!currentUserId || !chatTargetId || !content.trim()) return { success: false };
     try {
@@ -88,6 +107,12 @@ export function useChat(chatTargetId: string) {
           prev.map((m) => (m.id === tempId ? (data[0] as Message) : m))
         );
       }
+
+      // Best-effort — DMs live in Supabase, not the EF backend, so there's no
+      // server-side trigger to hook a push notification off of. A failure
+      // here should never surface as a failed send.
+      notifyRecipient(content.trim()).catch(() => {});
+
       return { success: true };
     } catch (err) {
       console.error("Error sending message:", err);

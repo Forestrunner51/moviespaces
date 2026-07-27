@@ -13,10 +13,20 @@ export interface PendingRequest {
   requester: Profile;
 }
 
+export interface SentRequest {
+  id: string; // friendship ID
+  receiver: Profile;
+}
+
+export interface Friend extends Profile {
+  friendshipId: string;
+}
+
 export function useFriends() {
   const [currentUserId, setCurrentUserId] = useState<string | null>(null);
-  const [friends, setFriends] = useState<Profile[]>([]);
+  const [friends, setFriends] = useState<Friend[]>([]);
   const [pendingRequests, setPendingRequests] = useState<PendingRequest[]>([]);
+  const [sentRequests, setSentRequests] = useState<SentRequest[]>([]);
   const [loading, setLoading] = useState(true);
 
   // Get current user id
@@ -41,12 +51,16 @@ export function useFriends() {
 
       if (fError) throw fError;
 
-      const friendIds = (friendshipsData || []).map((f) =>
-        f.requester_id === currentUserId ? f.receiver_id : f.requester_id
+      const friendshipIdByUserId = new Map(
+        (friendshipsData || []).map((f) => [
+          f.requester_id === currentUserId ? f.receiver_id : f.requester_id,
+          f.id,
+        ]),
       );
+      const friendIds = Array.from(friendshipIdByUserId.keys());
 
       // Fetch profiles of friends
-      let friendsProfiles: Profile[] = [];
+      let friendsProfiles: Friend[] = [];
       if (friendIds.length > 0) {
         const { data: profiles, error: pError } = await supabase
           .from("profiles")
@@ -54,7 +68,10 @@ export function useFriends() {
           .in("id", friendIds)
           .order("display_name");
         if (pError) throw pError;
-        friendsProfiles = profiles || [];
+        friendsProfiles = (profiles || []).map((p) => ({
+          ...p,
+          friendshipId: friendshipIdByUserId.get(p.id)!,
+        }));
       }
       setFriends(friendsProfiles);
 
@@ -86,6 +103,36 @@ export function useFriends() {
         });
       }
       setPendingRequests(pendingList);
+
+      // 3. Fetch requests the current user sent that are still pending, so
+      // "Requested" in the UI can be un-sent instead of being a dead end.
+      const { data: sentData, error: sError } = await supabase
+        .from("friendships")
+        .select("id, receiver_id")
+        .eq("requester_id", currentUserId)
+        .eq("status", "pending");
+
+      if (sError) throw sError;
+
+      const receiverIds = (sentData || []).map((s) => s.receiver_id);
+      let sentList: SentRequest[] = [];
+
+      if (receiverIds.length > 0) {
+        const { data: recProfiles, error: recError } = await supabase
+          .from("profiles")
+          .select("id, display_name, username, avatar_url")
+          .in("id", receiverIds);
+        if (recError) throw recError;
+
+        sentList = (sentData || []).map((item) => {
+          const profile = (recProfiles || []).find((p) => p.id === item.receiver_id);
+          return {
+            id: item.id,
+            receiver: profile || { id: item.receiver_id, display_name: "Unknown User" },
+          };
+        });
+      }
+      setSentRequests(sentList);
     } catch (err) {
       console.error("Error fetching friends/requests:", err);
     } finally {
@@ -115,6 +162,9 @@ export function useFriends() {
         .maybeSingle();
       if (lookupError) throw lookupError;
       if (existing) {
+        // The local list is out of date if we got here — refresh so the row
+        // flips to "Requested"/"Friends" instead of staying a dead "Add".
+        await fetchFriendsAndRequests();
         return { success: false, error: "A friend request already exists with this user." };
       }
 
@@ -132,6 +182,7 @@ export function useFriends() {
         }
         throw error;
       }
+      await fetchFriendsAndRequests();
       return { success: true };
     } catch (err: any) {
       console.error("Error sending friend request:", err);
@@ -154,7 +205,11 @@ export function useFriends() {
     }
   };
 
-  const declineFriendRequest = async (friendshipId: string) => {
+  // Deletes a friendships row by id regardless of its status — this is the
+  // right operation whether you're declining an incoming request, un-sending
+  // one you sent, or removing an already-accepted friend. Exposed under
+  // three names below so call sites read clearly at each use.
+  const deleteFriendship = async (friendshipId: string) => {
     try {
       const { error } = await supabase
         .from("friendships")
@@ -164,7 +219,7 @@ export function useFriends() {
       await fetchFriendsAndRequests();
       return { success: true };
     } catch (err: any) {
-      console.error("Error declining friend request:", err);
+      console.error("Error deleting friendship:", err);
       return { success: false, error: err.message };
     }
   };
@@ -191,11 +246,14 @@ export function useFriends() {
     currentUserId,
     friends,
     pendingRequests,
+    sentRequests,
     loading,
     refresh: fetchFriendsAndRequests,
     sendFriendRequest,
     acceptFriendRequest,
-    declineFriendRequest,
+    declineFriendRequest: deleteFriendship,
+    cancelFriendRequest: deleteFriendship,
+    removeFriend: deleteFriendship,
     searchUsers,
   };
 }

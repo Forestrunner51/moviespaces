@@ -115,6 +115,7 @@ function Layout() {
         <Stack.Screen name="rent-a-theater" options={{ title: "Rent a Theater" }} />
         <Stack.Screen name="legal/terms" options={{ title: "Terms of Service" }} />
         <Stack.Screen name="legal/privacy" options={{ title: "Privacy Policy" }} />
+        <Stack.Screen name="settings" options={{ title: "Settings" }} />
       </Stack>
     </ThemeProvider>
   );

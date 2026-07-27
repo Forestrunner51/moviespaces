@@ -189,6 +189,7 @@ export default function CreateSpaceScreen() {
   const [movieSearching, setMovieSearching] = useState(false);
   const [movieSearchError, setMovieSearchError] = useState<string | null>(null);
   const [movieSearchNotice, setMovieSearchNotice] = useState<string | null>(null);
+  const [showtimeConfirmed, setShowtimeConfirmed] = useState(false);
   const [nowPlaying, setNowPlaying] = useState<Movie[]>([]);
 
   const [datePickerVisible, setDatePickerVisible] = useState(false);
@@ -316,6 +317,18 @@ export default function CreateSpaceScreen() {
       Alert.alert(
         "Check your showtime",
         "Theaters don't typically run showings between 2:00 AM and 10:30 AM — double-check the time you picked.",
+      );
+      return;
+    }
+
+    // We don't have a real showtimes API (see "Find Showtimes Near Me") —
+    // there's no way to verify server-side that this movie is actually
+    // playing at this theater at this time, so we require the host to
+    // attest to it instead of silently allowing bogus/expired listings.
+    if (spaceType === "public_gathering" && !showtimeConfirmed) {
+      Alert.alert(
+        "Confirm the showtime",
+        "Please check the box confirming this movie is actually playing at this theater at the date/time you picked.",
       );
       return;
     }
@@ -646,6 +659,26 @@ export default function CreateSpaceScreen() {
             >
               <Ionicons name="search-outline" size={18} color={SpaceTheme.backgroundVoid} />
               <Text style={styles.showtimeButtonText}>Find Showtimes Near Me</Text>
+            </TouchableOpacity>
+          )}
+
+          {/* We have no real showtimes API to verify this against — the host
+              has to attest that the movie is actually playing at this
+              theater at this time. Required at submit. */}
+          {spaceType === "public_gathering" && (
+            <TouchableOpacity
+              activeOpacity={0.8}
+              style={styles.confirmRow}
+              onPress={() => setShowtimeConfirmed((prev) => !prev)}
+            >
+              <Ionicons
+                name={showtimeConfirmed ? "checkbox" : "square-outline"}
+                size={20}
+                color={showtimeConfirmed ? SpaceTheme.glowCyan : SpaceTheme.mutedOrbit}
+              />
+              <Text style={styles.confirmRowText}>
+                I&apos;ve confirmed this movie is actually playing at this theater at this date/time.
+              </Text>
             </TouchableOpacity>
           )}
 
@@ -1150,6 +1183,19 @@ const styles = StyleSheet.create({
     marginTop: 4,
   },
   showtimeButtonText: { color: SpaceTheme.backgroundVoid, fontSize: 15, fontWeight: "700" },
+  confirmRow: {
+    flexDirection: "row",
+    alignItems: "center",
+    gap: 10,
+    marginTop: 10,
+    marginBottom: 4,
+  },
+  confirmRowText: {
+    flex: 1,
+    color: SpaceTheme.mutedOrbit,
+    fontSize: 13,
+    lineHeight: 18,
+  },
   pickerField: {
     ...SpaceStyles.glassCard,
     flexDirection: "row",
