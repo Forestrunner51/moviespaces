@@ -75,9 +75,10 @@ namespace Backend.Controllers
         {
             if (string.IsNullOrWhiteSpace(query))
             {
-                return Ok(new { results = Array.Empty<object>() });
+                return Ok(new { results = Array.Empty<object>(), message = (string?)null });
             }
-            return Ok(new { results = await SearchOmdb(query.Trim(), "movie") });
+            var (results, message) = await SearchOmdb(query.Trim(), "movie");
+            return Ok(new { results, message });
         }
 
         [HttpGet("search-tv")]
@@ -85,9 +86,10 @@ namespace Backend.Controllers
         {
             if (string.IsNullOrWhiteSpace(query))
             {
-                return Ok(new { results = Array.Empty<object>() });
+                return Ok(new { results = Array.Empty<object>(), message = (string?)null });
             }
-            return Ok(new { results = await SearchOmdb(query.Trim(), "series") });
+            var (results, message) = await SearchOmdb(query.Trim(), "series");
+            return Ok(new { results, message });
         }
 
         // "Surprise Me" — 10 titles picked from the curated pool, fetched by
@@ -123,25 +125,30 @@ namespace Backend.Controllers
             return pool.Take(count).ToList();
         }
 
-        // OMDb title search (?s=) → our internal shape. Returns [] on any
-        // failure so the client just renders an empty state, never an error.
-        private async Task<List<object>> SearchOmdb(string query, string type)
+        // OMDb title search (?s=) → our internal shape. Returns ([], null) on
+        // any hard failure so the client just renders an empty state, never
+        // an error. When OMDb rejects the query itself (e.g. "Too many
+        // results" for something too short/generic), that reason comes back
+        // as `message` so the client can tell the user to be more specific
+        // instead of just looking broken.
+        private async Task<(List<object> results, string? message)> SearchOmdb(string query, string type)
         {
             var apiKey = _configuration["Omdb:ApiKey"];
             if (string.IsNullOrWhiteSpace(apiKey))
             {
                 Console.WriteLine("Omdb:ApiKey is not configured on the server.");
-                return new List<object>();
+                return (new List<object>(), null);
             }
 
             var cacheKey = $"omdb:search:{type}:{query.ToLowerInvariant()}";
-            if (_cache.TryGetValue(cacheKey, out List<object>? cached) && cached != null)
+            if (_cache.TryGetValue(cacheKey, out (List<object> results, string? message) cached) && cached.results != null)
             {
                 return cached;
             }
 
             var url = $"{BaseUrl}?apikey={apiKey}&s={Uri.EscapeDataString(query)}&type={type}";
             var results = new List<object>();
+            string? message = null;
             try
             {
                 var client = _httpClientFactory.CreateClient();
@@ -149,13 +156,14 @@ namespace Backend.Controllers
                 if (!response.IsSuccessStatusCode)
                 {
                     Console.WriteLine($"OMDb search error {(int)response.StatusCode}");
-                    return results;
+                    return (results, null);
                 }
 
                 var body = await response.Content.ReadAsStringAsync();
                 using var doc = JsonDocument.Parse(body);
                 // OMDb returns { "Search": [...] } on success, or
-                // { "Response": "False", "Error": "..." } when nothing matches.
+                // { "Response": "False", "Error": "..." } when nothing matches
+                // or the query was rejected as too broad/short.
                 if (doc.RootElement.TryGetProperty("Search", out var search)
                     && search.ValueKind == JsonValueKind.Array)
                 {
@@ -165,15 +173,24 @@ namespace Backend.Controllers
                         if (mapped != null) results.Add(mapped);
                     }
                 }
+                else if (doc.RootElement.TryGetProperty("Error", out var errorEl))
+                {
+                    var omdbError = errorEl.GetString() ?? "";
+                    Console.WriteLine($"OMDb search for \"{query}\" returned: {omdbError}");
+                    if (omdbError.Contains("Too many results", StringComparison.OrdinalIgnoreCase))
+                    {
+                        message = "Too many results — try a more specific search.";
+                    }
+                }
             }
             catch (Exception ex)
             {
                 Console.WriteLine($"OMDb search failed: {ex.Message}");
-                return new List<object>();
+                return (new List<object>(), null);
             }
 
-            _cache.Set(cacheKey, results, TimeSpan.FromHours(24));
-            return results;
+            _cache.Set(cacheKey, (results, message), TimeSpan.FromHours(24));
+            return (results, message);
         }
 
         // OMDb lookup by id (?i=) → our internal shape. Cached 24h; returns
