@@ -71,7 +71,37 @@ namespace Backend.Services
 
             var distance = Levenshtein(left, right);
             var longest = Math.Max(left.Length, right.Length);
-            return 1.0 - ((double)distance / longest);
+            var editScore = 1.0 - ((double)distance / longest);
+
+            var leftTokens = left.Split(' ', StringSplitOptions.RemoveEmptyEntries).ToHashSet();
+            var rightTokens = right.Split(' ', StringSplitOptions.RemoveEmptyEntries).ToHashSet();
+            var smaller = Math.Min(leftTokens.Count, rightTokens.Count);
+            var overlap = leftTokens.Intersect(rightTokens).Count();
+            var agreement = smaller == 0 ? 0 : (double)overlap / smaller;
+
+            // Character distance is dangerously permissive on short names when
+            // a single *word* differs by a couple of letters: "Regal North
+            // Star" vs "Regal South Star" scores 0.88 on edit distance alone,
+            // and directional pairs like that are real (AMC Northlake / AMC
+            // Southlake). If a distinguishing word is missing from one side,
+            // these are different venues no matter how close the strings look,
+            // so the word-level disagreement caps the score.
+            if (agreement < 0.75) return Math.Min(editScore, agreement);
+
+            // Conversely, edit distance is too harsh when the sources merely
+            // include a different number of branding words — the real case
+            // here being "Cinépolis Luxury Cinemas Victory Park" (Google) vs
+            // "Cinépolis Victory Park" (CinemaClock), which is only 0.76 on
+            // characters because a whole word is inserted mid-string. When
+            // every meaningful word of the shorter name is present in the
+            // longer, that's the stronger signal.
+            //
+            // Requires 2+ shared words: a single shared token is almost always
+            // just the chain ("amc", "regal") and says nothing about which
+            // specific venue this is. Capped below 1.0 so a true
+            // post-normalization exact match still outranks a subset match.
+            var tokenScore = (smaller >= 2 && overlap >= 2) ? Math.Min(0.9, agreement) : 0;
+            return Math.Max(editScore, tokenScore);
         }
 
         // Picks the best candidate above `threshold`, or null when nothing is
