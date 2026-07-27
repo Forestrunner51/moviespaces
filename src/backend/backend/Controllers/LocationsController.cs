@@ -1,4 +1,5 @@
 using Microsoft.AspNetCore.Mvc;
+using System.Linq;
 using System.Text;
 using System.Text.Json;
 
@@ -55,7 +56,7 @@ namespace Backend.Controllers
                 Content = new StringContent(JsonSerializer.Serialize(requestBody), Encoding.UTF8, "application/json"),
             };
             request.Headers.Add("X-Goog-Api-Key", apiKey);
-            request.Headers.Add("X-Goog-FieldMask", "places.id,places.displayName,places.formattedAddress,places.location");
+            request.Headers.Add("X-Goog-FieldMask", "places.id,places.displayName,places.formattedAddress,places.location,places.types");
 
             var response = await client.SendAsync(request);
             var content = await response.Content.ReadAsStringAsync();
@@ -71,6 +72,10 @@ namespace Backend.Controllers
             {
                 foreach (var place in places.EnumerateArray())
                 {
+                    var types = place.TryGetProperty("types", out var typesEl) && typesEl.ValueKind == JsonValueKind.Array
+                        ? typesEl.EnumerateArray().Select(t => t.GetString()).Where(t => t != null).ToArray()
+                        : Array.Empty<string>();
+
                     theaters.Add(new
                     {
                         placeId = place.GetProperty("id").GetString(),
@@ -78,6 +83,7 @@ namespace Backend.Controllers
                         address = place.TryGetProperty("formattedAddress", out var addr) ? addr.GetString() : "",
                         latitude = place.TryGetProperty("location", out var loc) ? loc.GetProperty("latitude").GetDouble() : (double?)null,
                         longitude = place.TryGetProperty("location", out var loc2) ? loc2.GetProperty("longitude").GetDouble() : (double?)null,
+                        types,
                     });
                 }
             }

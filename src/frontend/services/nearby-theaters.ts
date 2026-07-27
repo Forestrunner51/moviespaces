@@ -6,6 +6,12 @@ export interface NearbyTheater {
   address: string;
   latitude: number | null;
   longitude: number | null;
+  // Google Places types (e.g. "movie_theater", "bar", "community_center") —
+  // the backend searches a broad set of venue types (Watch Parties can be
+  // hosted at bars/community centers too), so the client filters this list
+  // down per space type rather than the server doing it, which lets
+  // switching space types re-filter instantly with no extra network call.
+  types: string[];
 }
 
 export interface Coordinates {

@@ -475,15 +475,6 @@ export default function ProfileScreen() {
             ))
           )}
         </View>
-
-        <TouchableOpacity
-          activeOpacity={0.8}
-          style={styles.settingsLinkButton}
-          onPress={() => router.push("/settings")}
-        >
-          <Ionicons name="settings-outline" size={16} color={SpaceTheme.mutedOrbit} />
-          <Text style={styles.settingsLinkButtonText}>Settings</Text>
-        </TouchableOpacity>
       </ScrollView>
     </Starfield>
   );
@@ -509,7 +500,13 @@ const styles = StyleSheet.create({
     alignItems: "center",
     marginBottom: 20,
   },
-  settingsButton: { padding: 4 },
+  settingsButton: {
+    ...SpaceStyles.glassCard,
+    width: 40,
+    height: 40,
+    alignItems: "center",
+    justifyContent: "center",
+  },
   card: {
     ...SpaceStyles.glassCard,
     padding: 24,
@@ -609,14 +606,6 @@ const styles = StyleSheet.create({
     paddingHorizontal: 16,
   },
   cancelEditButtonText: { color: SpaceTheme.mutedOrbit, fontSize: 15 },
-  settingsLinkButton: {
-    flexDirection: "row",
-    alignItems: "center",
-    justifyContent: "center",
-    gap: 6,
-    padding: 14,
-  },
-  settingsLinkButtonText: { color: SpaceTheme.mutedOrbit, fontSize: 14, fontWeight: "600" },
   spacesSection: { marginBottom: 24 },
   spacesSectionTitle: {
     fontSize: 16,

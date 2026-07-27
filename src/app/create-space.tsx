@@ -281,7 +281,16 @@ export default function CreateSpaceScreen() {
     return () => clearTimeout(handle);
   }, [movieSearch, nowPlaying, searchingTv]);
 
-  const filteredTheaters = theaters.filter((t) =>
+  // MovieSpaces (public_gathering) are screenings at an actual theater — bars
+  // and community centers only belong in the broader Watch Party venue list.
+  // A place with no returned types (rare) is kept rather than hidden, since
+  // that's more likely a data gap than a genuine non-theater.
+  const venueScopedTheaters =
+    spaceType === "public_gathering"
+      ? theaters.filter((t) => t.types.length === 0 || t.types.includes("movie_theater"))
+      : theaters;
+
+  const filteredTheaters = venueScopedTheaters.filter((t) =>
     t.name.toLowerCase().includes(theaterSearch.toLowerCase()),
   );
 
