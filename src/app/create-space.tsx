@@ -187,6 +187,8 @@ export default function CreateSpaceScreen() {
   const [movieSearch, setMovieSearch] = useState("");
   const [movieResults, setMovieResults] = useState<Movie[]>([]);
   const [movieSearching, setMovieSearching] = useState(false);
+  const [movieSearchError, setMovieSearchError] = useState<string | null>(null);
+  const [movieSearchNotice, setMovieSearchNotice] = useState<string | null>(null);
   const [nowPlaying, setNowPlaying] = useState<Movie[]>([]);
 
   const [datePickerVisible, setDatePickerVisible] = useState(false);
@@ -252,13 +254,27 @@ export default function CreateSpaceScreen() {
   useEffect(() => {
     if (!movieSearch.trim()) {
       setMovieResults(searchingTv ? [] : nowPlaying);
+      setMovieSearchError(null);
+      setMovieSearchNotice(null);
       return;
     }
 
     setMovieSearching(true);
+    setMovieSearchError(null);
+    setMovieSearchNotice(null);
     const handle = setTimeout(() => {
       (searchingTv ? searchTvShows(movieSearch) : searchMovies(movieSearch))
-        .then(setMovieResults)
+        .then(({ results, notice }) => {
+          setMovieResults(results);
+          setMovieSearchError(null);
+          setMovieSearchNotice(notice);
+        })
+        .catch((err) => {
+          console.warn("Movie search failed:", err);
+          setMovieResults([]);
+          setMovieSearchNotice(null);
+          setMovieSearchError(err?.message || "Search failed. Check your connection and try again.");
+        })
         .finally(() => setMovieSearching(false));
     }, 400);
     return () => clearTimeout(handle);
@@ -909,6 +925,15 @@ export default function CreateSpaceScreen() {
               onChangeText={setMovieSearch}
               autoFocus
             />
+            {movieSearchError ? (
+              <Text style={[styles.modalEmptyText, { color: SpaceTheme.danger }]}>
+                {movieSearchError}
+              </Text>
+            ) : movieSearchNotice ? (
+              <Text style={[styles.modalEmptyText, { color: SpaceTheme.mutedOrbit }]}>
+                {movieSearchNotice}
+              </Text>
+            ) : null}
             {movieSearching ? (
               <ActivityIndicator color={SpaceTheme.glowCyan} style={{ marginTop: 20 }} />
             ) : (

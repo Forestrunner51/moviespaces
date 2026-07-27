@@ -21,36 +21,33 @@ function mapResults(results: any[]): Movie[] {
   }));
 }
 
-export async function searchMovies(query: string): Promise<Movie[]> {
-  if (!query.trim()) return [];
-
-  const url = `${process.env.EXPO_PUBLIC_API_URL}/api/movies/search?query=${encodeURIComponent(query)}`;
-  try {
-    const res = await fetch(url);
-    if (!res.ok) return [];
-
-    const data = await res.json();
-    return mapResults(data.results);
-  } catch (err) {
-    console.warn("searchMovies failed:", err);
-    return [];
-  }
+export interface SearchOutcome {
+  results: Movie[];
+  // Set when OMDb rejected the query itself (e.g. too short/generic) rather
+  // than genuinely finding nothing — worth showing the user, not an error.
+  notice: string | null;
 }
 
-export async function searchTvShows(query: string): Promise<Movie[]> {
-  if (!query.trim()) return [];
+export async function searchMovies(query: string): Promise<SearchOutcome> {
+  if (!query.trim()) return { results: [], notice: null };
+
+  const url = `${process.env.EXPO_PUBLIC_API_URL}/api/movies/search?query=${encodeURIComponent(query)}`;
+  const res = await fetch(url);
+  if (!res.ok) throw new Error(`Movie search failed (${res.status})`);
+
+  const data = await res.json();
+  return { results: mapResults(data.results), notice: data.message ?? null };
+}
+
+export async function searchTvShows(query: string): Promise<SearchOutcome> {
+  if (!query.trim()) return { results: [], notice: null };
 
   const url = `${process.env.EXPO_PUBLIC_API_URL}/api/movies/search-tv?query=${encodeURIComponent(query)}`;
-  try {
-    const res = await fetch(url);
-    if (!res.ok) return [];
+  const res = await fetch(url);
+  if (!res.ok) throw new Error(`TV search failed (${res.status})`);
 
-    const data = await res.json();
-    return mapResults(data.results);
-  } catch (err) {
-    console.warn("searchTvShows failed:", err);
-    return [];
-  }
+  const data = await res.json();
+  return { results: mapResults(data.results), notice: data.message ?? null };
 }
 
 // A rotating "Surprise Me" pick, used to pre-populate the movie picker + home
