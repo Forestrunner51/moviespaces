@@ -1,3 +1,4 @@
+using System.Globalization;
 using System.Text.Json;
 using Microsoft.AspNetCore.Mvc;
 using Microsoft.Extensions.Caching.Memory;
@@ -23,10 +24,12 @@ namespace Backend.Controllers
 
         private const string BaseUrl = "https://www.omdbapi.com/";
 
-        // Curated "Popular Movies" seed for the home carousel + the movie
-        // picker's default list (OMDb can't return a popularity list). Edit
-        // freely — an unknown/removed id is simply skipped, never fatal.
-        private static readonly string[] PopularImdbIds = new[]
+        // Curated pool for the "Surprise Me" home carousel + the movie
+        // picker's default list (OMDb can't return a popularity list). Each
+        // week we deterministically shuffle this pool and take 10, so the
+        // list rotates automatically without any scheduled job. Edit freely —
+        // an unknown/removed id is simply skipped, never fatal.
+        private static readonly string[] SurpriseMeImdbIds = new[]
         {
             "tt1160419",  // Dune (2021)
             "tt15398776", // Oppenheimer
@@ -40,6 +43,24 @@ namespace Backend.Controllers
             "tt0816692",  // Interstellar
             "tt6791350",  // Guardians of the Galaxy Vol. 3
             "tt9362722",  // Spider-Man: Across the Spider-Verse
+            "tt0111161",  // The Shawshank Redemption
+            "tt0110912",  // Pulp Fiction
+            "tt0137523",  // Fight Club
+            "tt0109830",  // Forrest Gump
+            "tt0133093",  // The Matrix
+            "tt0245429",  // Spirited Away
+            "tt0993846",  // The Wolf of Wall Street
+            "tt2911666",  // John Wick
+            "tt1345836",  // The Dark Knight Rises
+            "tt0816711",  // World War Z
+            "tt1596363",  // The Girl with the Dragon Tattoo
+            "tt0499549",  // Avatar
+            "tt1630029",  // Avatar: The Way of Water
+            "tt6710474",  // Everything Everywhere All at Once
+            "tt15239678", // Dune: Part Two
+            "tt10648342", // Thor: Love and Thunder
+            "tt9114286",  // Black Panther: Wakanda Forever
+            "tt5433140",  // Fast & Furious Presents: Hobbs & Shaw
         };
 
         public MoviesController(IHttpClientFactory httpClientFactory, IConfiguration configuration, IMemoryCache cache)
@@ -69,14 +90,37 @@ namespace Backend.Controllers
             return Ok(new { results = await SearchOmdb(query.Trim(), "series") });
         }
 
-        // Curated popular titles fetched by id in parallel (OMDb has no list
-        // endpoint). Individually cached, and a failed lookup just drops out.
+        // "Surprise Me" — 10 titles picked from the curated pool, fetched by
+        // id in parallel (OMDb has no list endpoint). The pick is seeded by
+        // ISO week/year so it's stable all week and rotates automatically
+        // every Monday with no scheduled job. Individually cached, and a
+        // failed lookup just drops out.
         [HttpGet("now-playing")]
         public async Task<IActionResult> NowPlaying()
         {
-            var movies = await Task.WhenAll(PopularImdbIds.Select(GetMovieById));
+            var picks = PickWeeklySurpriseIds(10);
+            var movies = await Task.WhenAll(picks.Select(GetMovieById));
             var results = movies.Where(m => m != null).Select(m => m!).ToList();
             return Ok(new { results });
+        }
+
+        // Deterministic weekly shuffle: same pick for everyone all week,
+        // different pick next week — no cron job needed.
+        private static List<string> PickWeeklySurpriseIds(int count)
+        {
+            var now = DateTime.UtcNow;
+            var isoWeek = ISOWeek.GetWeekOfYear(now);
+            var seed = now.Year * 100 + isoWeek;
+
+            var pool = SurpriseMeImdbIds.ToList();
+            var rng = new Random(seed);
+            for (var i = pool.Count - 1; i > 0; i--)
+            {
+                var j = rng.Next(i + 1);
+                (pool[i], pool[j]) = (pool[j], pool[i]);
+            }
+
+            return pool.Take(count).ToList();
         }
 
         // OMDb title search (?s=) → our internal shape. Returns [] on any

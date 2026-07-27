@@ -25,32 +25,47 @@ export async function searchMovies(query: string): Promise<Movie[]> {
   if (!query.trim()) return [];
 
   const url = `${process.env.EXPO_PUBLIC_API_URL}/api/movies/search?query=${encodeURIComponent(query)}`;
-  const res = await fetch(url);
-  if (!res.ok) return [];
+  try {
+    const res = await fetch(url);
+    if (!res.ok) return [];
 
-  const data = await res.json();
-  return mapResults(data.results);
+    const data = await res.json();
+    return mapResults(data.results);
+  } catch (err) {
+    console.warn("searchMovies failed:", err);
+    return [];
+  }
 }
 
 export async function searchTvShows(query: string): Promise<Movie[]> {
   if (!query.trim()) return [];
 
   const url = `${process.env.EXPO_PUBLIC_API_URL}/api/movies/search-tv?query=${encodeURIComponent(query)}`;
-  const res = await fetch(url);
-  if (!res.ok) return [];
+  try {
+    const res = await fetch(url);
+    if (!res.ok) return [];
 
-  const data = await res.json();
-  return mapResults(data.results);
+    const data = await res.json();
+    return mapResults(data.results);
+  } catch (err) {
+    console.warn("searchTvShows failed:", err);
+    return [];
+  }
 }
 
-// Most-popular current movies, used to pre-populate the movie picker + home
-// carousel before the host types anything. (MoviesDatabase has no literal
-// "now playing in theaters" list; this is the closest equivalent.)
+// A rotating "Surprise Me" pick, used to pre-populate the movie picker + home
+// carousel before the host types anything. The backend rotates the set
+// weekly from a larger curated pool (OMDb has no popularity/list endpoint).
 export async function getNowPlaying(): Promise<Movie[]> {
   const url = `${process.env.EXPO_PUBLIC_API_URL}/api/movies/now-playing`;
-  const res = await fetch(url);
-  if (!res.ok) return [];
+  try {
+    const res = await fetch(url);
+    if (!res.ok) return [];
 
-  const data = await res.json();
-  return mapResults(data.results);
+    const data = await res.json();
+    return mapResults(data.results);
+  } catch (err) {
+    console.warn("getNowPlaying failed:", err);
+    return [];
+  }
 }
