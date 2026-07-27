@@ -119,10 +119,15 @@ namespace Backend.Controllers
 
             await _db.SaveChangesAsync();
 
-            // Purge screenings that have already happened. The 6h grace keeps
-            // a film visible for the length of its own runtime rather than
-            // vanishing from the app the moment it starts.
-            var cutoff = DateTime.UtcNow.AddHours(-6);
+            // Purge screenings that have already happened.
+            //
+            // StartsAt is local wall-clock with no known offset, so it can't
+            // be compared exactly against UTC. The window is deliberately
+            // wide (rather than the 6h a same-timezone comparison would use)
+            // so that no timezone we might scrape can have tonight's real
+            // showtimes deleted out from under it. Leaving a few stale rows
+            // is harmless — the read endpoint filters upcoming ones properly.
+            var cutoff = DateTime.SpecifyKind(DateTime.UtcNow.AddHours(-18), DateTimeKind.Unspecified);
             var purged = await _db.Showtimes.Where(s => s.StartsAt < cutoff).ExecuteDeleteAsync();
 
             _logger.LogInformation(
@@ -189,6 +194,7 @@ namespace Backend.Controllers
                     MovieId = movieId,
                     TheaterName = item.TheaterName!,
                     StartsAt = startsAt,
+                    City = item.City,
                     BookingLink = item.BookingLink,
                     Format = item.Format,
                     ZipCode = item.ZipCode,
@@ -197,6 +203,7 @@ namespace Backend.Controllers
                 return;
             }
 
+            existing.City = item.City ?? existing.City;
             existing.BookingLink = item.BookingLink ?? existing.BookingLink;
             existing.Format = item.Format ?? existing.Format;
             existing.ZipCode = item.ZipCode ?? existing.ZipCode;
@@ -219,10 +226,11 @@ namespace Backend.Controllers
             {
                 items.Add(new ScrapedShowtime
                 {
-                    // Field names vary between scraper versions, so accept the
-                    // common aliases rather than hard-failing on one shape.
+                    // Primary names are the confirmed CinemaClock actor schema;
+                    // the aliases are tolerated in case the actor changes.
                     MovieTitle = FirstString(el, "movieTitle", "title", "movie", "filmTitle"),
                     TheaterName = FirstString(el, "theaterName", "theatre", "theater", "cinema", "cinemaName", "venue"),
+                    City = FirstString(el, "city", "location"),
                     BookingLink = FirstString(el, "bookingLink", "bookingUrl", "url", "link", "ticketUrl"),
                     Format = FirstString(el, "format", "screenType", "presentation"),
                     ZipCode = FirstString(el, "zipCode", "zip", "postalCode"),
@@ -232,25 +240,82 @@ namespace Backend.Controllers
             return items;
         }
 
-        // The scraper may emit a full ISO timestamp, or a separate date +
-        // clock time that have to be recombined.
+        // The CinemaClock actor emits a bare date and a bare clock time that
+        // have to be recombined:
+        //   date     -> "Today Jul 27", "Tomorrow Jul 28", "Tue Jul 28"
+        //   showtime -> "11:00 AM", "2:00 PM"
+        //
+        // Neither carries a year or a timezone. The result is deliberately
+        // DateTimeKind.Unspecified — see Showtime.StartsAt for why we store
+        // local wall-clock rather than inventing a UTC offset.
+        //
+        // An ISO timestamp is still accepted first in case the actor is ever
+        // reconfigured to emit one.
         private static DateTime? ParseShowtime(JsonElement el)
         {
-            var iso = FirstString(el, "showtime", "startsAt", "dateTime", "datetime", "startTime");
-            if (iso != null && DateTime.TryParse(iso, CultureInfo.InvariantCulture,
-                    DateTimeStyles.AdjustToUniversal | DateTimeStyles.AssumeUniversal, out var parsed))
+            var raw = FirstString(el, "showtime", "startsAt", "dateTime", "datetime", "startTime");
+
+            if (raw != null && DateTime.TryParse(raw, CultureInfo.InvariantCulture,
+                    DateTimeStyles.RoundtripKind, out var iso)
+                && raw.Length > 8) // a bare "2:00 PM" also parses, so require more than a clock time
             {
-                return parsed;
+                return DateTime.SpecifyKind(iso, DateTimeKind.Unspecified);
             }
 
-            var date = FirstString(el, "date", "showDate");
-            var time = FirstString(el, "time", "showTime");
-            if (date != null && time != null && DateTime.TryParse($"{date} {time}", CultureInfo.InvariantCulture,
-                    DateTimeStyles.AdjustToUniversal | DateTimeStyles.AssumeUniversal, out var combined))
-            {
-                return combined;
-            }
+            var datePart = ParseScrapedDate(FirstString(el, "date", "showDate"));
+            var timePart = ParseScrapedTime(raw ?? FirstString(el, "time", "showTime"));
+            if (datePart == null || timePart == null) return null;
 
+            return DateTime.SpecifyKind(datePart.Value.Add(timePart.Value), DateTimeKind.Unspecified);
+        }
+
+        // "Today Jul 27" / "Tomorrow Jul 28" / "Tue Jul 28" -> a real date.
+        // The leading word is a relative/weekday label with no bearing on the
+        // actual date, so it's dropped and the trailing "MMM d" is parsed.
+        private static DateTime? ParseScrapedDate(string? value)
+        {
+            if (string.IsNullOrWhiteSpace(value)) return null;
+
+            var tokens = value.Split(' ', StringSplitOptions.RemoveEmptyEntries);
+            // Take the last two tokens ("Jul", "27"); anything before is a label.
+            if (tokens.Length < 2) return null;
+            var monthDay = $"{tokens[^2]} {tokens[^1]}";
+
+            foreach (var format in new[] { "MMM d", "MMMM d", "MMM dd", "MMMM dd" })
+            {
+                if (DateTime.TryParseExact(monthDay, format, CultureInfo.InvariantCulture,
+                        DateTimeStyles.None, out var parsed))
+                {
+                    return WithInferredYear(parsed);
+                }
+            }
+            return null;
+        }
+
+        // The feed has no year. TryParseExact defaults to the current one,
+        // which breaks across the New Year boundary: a "Jan 2" showtime
+        // scraped on Dec 30 would land 12 months in the past. Anything that
+        // looks meaningfully stale is therefore rolled forward a year.
+        private static DateTime WithInferredYear(DateTime parsed)
+        {
+            var today = DateTime.UtcNow.Date;
+            if (parsed.Date < today.AddDays(-60)) return parsed.AddYears(1);
+            return parsed;
+        }
+
+        // "11:00 AM" / "2:00 PM" -> time of day.
+        private static TimeSpan? ParseScrapedTime(string? value)
+        {
+            if (string.IsNullOrWhiteSpace(value)) return null;
+
+            foreach (var format in new[] { "h:mm tt", "hh:mm tt", "h:mmtt", "hh:mmtt", "H:mm", "HH:mm" })
+            {
+                if (DateTime.TryParseExact(value.Trim(), format, CultureInfo.InvariantCulture,
+                        DateTimeStyles.None, out var parsed))
+                {
+                    return parsed.TimeOfDay;
+                }
+            }
             return null;
         }
 
@@ -305,6 +370,7 @@ namespace Backend.Controllers
         {
             public string? MovieTitle { get; set; }
             public string? TheaterName { get; set; }
+            public string? City { get; set; }
             public string? BookingLink { get; set; }
             public string? Format { get; set; }
             public string? ZipCode { get; set; }

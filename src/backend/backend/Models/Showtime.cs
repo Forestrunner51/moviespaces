@@ -25,10 +25,26 @@ namespace Backend.Models
         [MaxLength(255)]
         public string TheaterName { get; set; } = "";
 
-        // Named StartsAt rather than Showtime so the property doesn't collide
-        // with the type name; the column keeps the spec's `showtime` name.
+        // LOCAL wall-clock time at the theater, stored as `timestamp without
+        // time zone` (DateTimeKind.Unspecified).
+        //
+        // The scraper emits a bare clock time ("2:00 PM") and a bare date
+        // ("Tue Jul 28") with no timezone or UTC offset anywhere, so we
+        // genuinely do not know the instant this screening occurs — only the
+        // wall-clock time a local moviegoer would read. Storing that as
+        // `timestamptz` would force us to invent an offset and silently shift
+        // every showtime by hours. Consumers should treat this as "the time
+        // printed on the marquee", which is exactly what the create-space
+        // date/time pickers want anyway.
         [Column("showtime")]
         public DateTime StartsAt { get; set; }
+
+        // Scraper-provided city (e.g. "dallas"), used to disambiguate the
+        // fuzzy theater-name match — chain names like "AMC NorthPark" repeat
+        // across metros.
+        [Column("city")]
+        [MaxLength(120)]
+        public string? City { get; set; }
 
         [Column("booking_link")]
         public string? BookingLink { get; set; }
