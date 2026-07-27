@@ -2,7 +2,18 @@ import * as Notifications from "expo-notifications";
 import Constants from "expo-constants";
 import * as Device from "expo-device";
 import { Platform } from "react-native";
+import AsyncStorage from "@react-native-async-storage/async-storage";
 import { authFetch } from "@/frontend/services/api";
+
+// Settings screen toggle. Defaults to enabled (existing users who never
+// touch the toggle keep getting notifications, matching behavior before
+// this setting existed).
+const NOTIFICATIONS_ENABLED_KEY = "pushNotificationsEnabled";
+
+export async function areNotificationsEnabled(): Promise<boolean> {
+  const stored = await AsyncStorage.getItem(NOTIFICATIONS_ENABLED_KEY);
+  return stored !== "false";
+}
 
 // Registers this device for push notifications and hands the Expo push
 // token to the backend, which is what actually sends notifications (e.g. on
@@ -14,6 +25,7 @@ export async function registerForPushNotifications(): Promise<void> {
   // entitlement is possible without a real device), so don't even try —
   // avoids a guaranteed-to-fail attempt and its console warning every launch.
   if (!Device.isDevice) return;
+  if (!(await areNotificationsEnabled())) return;
 
   try {
     if (Platform.OS === "android") {
@@ -42,5 +54,25 @@ export async function registerForPushNotifications(): Promise<void> {
     });
   } catch (err) {
     console.warn("Failed to register for push notifications:", err);
+  }
+}
+
+// Settings screen "Push Notifications" toggle. Turning it off deletes the
+// token server-side — every push send path here only looks up tokens for a
+// user id, so a removed row is what actually stops notifications from going
+// out, not a flag the server has no way to check. Turning it back on
+// re-registers (re-prompting for permission only if it was never granted).
+export async function setNotificationsEnabled(enabled: boolean): Promise<void> {
+  await AsyncStorage.setItem(NOTIFICATIONS_ENABLED_KEY, enabled ? "true" : "false");
+
+  if (enabled) {
+    await registerForPushNotifications();
+    return;
+  }
+
+  try {
+    await authFetch(`${process.env.EXPO_PUBLIC_API_URL}/api/pushtokens`, { method: "DELETE" });
+  } catch (err) {
+    console.warn("Failed to unregister push token:", err);
   }
 }

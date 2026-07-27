@@ -44,6 +44,12 @@ export default function GroupChatScreen() {
   const [text, setText] = useState("");
   const listRef = useRef<FlatList>(null);
   const [blockedIds, setBlockedIds] = useState<string[]>([]);
+  // A ref, not state: a fast double-tap fires both handleSend calls before
+  // React re-renders with the cleared input, so a state-based guard reads
+  // stale on the second tap and the same message (and its push to every
+  // other member) goes out twice. A ref updates synchronously, so the
+  // second tap sees it in time.
+  const sendingRef = useRef(false);
 
   useEffect(() => {
     getBlockedUserIds().then(setBlockedIds);
@@ -63,9 +69,11 @@ export default function GroupChatScreen() {
 
   const handleSend = async () => {
     const content = text.trim();
-    if (!content) return;
+    if (!content || sendingRef.current) return;
+    sendingRef.current = true;
     setText("");
     const result = await sendMessage(content);
+    sendingRef.current = false;
     if (!result.success) {
       // Every sendMessage failure path (RLS rejection, network error, or
       // currentUserId not loaded yet) was previously swallowed here — the

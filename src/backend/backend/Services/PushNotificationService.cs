@@ -43,26 +43,53 @@ namespace Backend.Services
 
                 if (tokens.Count == 0) return;
 
-                var messages = tokens.Select(token => new
-                {
-                    to = token,
-                    sound = "default",
-                    title,
-                    body,
-                });
-
-                var client = _httpClientFactory.CreateClient();
-                var request = new HttpRequestMessage(HttpMethod.Post, "https://exp.host/--/api/v2/push/send")
-                {
-                    Content = new StringContent(JsonSerializer.Serialize(messages), Encoding.UTF8, "application/json"),
-                };
-                request.Headers.Add("Accept", "application/json");
-                await client.SendAsync(request);
+                await SendExpoPushAsync(tokens, title, body);
             }
             catch (Exception ex)
             {
                 _logger.LogError(ex, "Failed to send push notifications for group {GroupId}", groupId);
             }
+        }
+
+        // Same best-effort push, but to a single user by id rather than every
+        // member of a group — used for DM notifications, which have no group
+        // to fan out to.
+        public async Task NotifyUserAsync(AppDbContext db, string userId, string title, string body)
+        {
+            try
+            {
+                var tokens = await db.PushTokens
+                    .Where(t => t.UserId == userId)
+                    .Select(t => t.Token)
+                    .ToListAsync();
+
+                if (tokens.Count == 0) return;
+
+                await SendExpoPushAsync(tokens, title, body);
+            }
+            catch (Exception ex)
+            {
+                _logger.LogError(ex, "Failed to send push notification to user {UserId}", userId);
+            }
+        }
+
+        private async Task SendExpoPushAsync(List<string> tokens, string title, string body)
+        {
+            var messages = tokens.Select(token => new
+            {
+                to = token,
+                sound = "default",
+                title,
+                body,
+            });
+
+            var client = _httpClientFactory.CreateClient();
+            var request = new HttpRequestMessage(HttpMethod.Post, "https://exp.host/--/api/v2/push/send")
+            {
+                Content = new StringContent(JsonSerializer.Serialize(messages), Encoding.UTF8, "application/json"),
+            };
+            request.Headers.Add("Accept", "application/json");
+            await client.SendAsync(request);
         }
     }
 }

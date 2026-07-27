@@ -2,6 +2,7 @@ import { useEffect, useState } from "react";
 import {
   View,
   Text,
+  TextInput,
   FlatList,
   StyleSheet,
   ActivityIndicator,
@@ -48,6 +49,7 @@ export default function ExploreScreen() {
   const [loading, setLoading] = useState(true);
   const [deviceLocation, setDeviceLocation] = useState<Coordinates | null>(null);
 
+  const [movieNameFilter, setMovieNameFilter] = useState("");
   const [typeFilter, setTypeFilter] = useState<TypeFilter>("all");
   const [priceFilter, setPriceFilter] = useState<PriceFilter>("any");
   const [distanceFilter, setDistanceFilter] = useState<DistanceFilter>("any");
@@ -128,6 +130,12 @@ export default function ExploreScreen() {
   };
 
   const filteredSpaces = openSpaces.filter((space) => {
+    if (
+      movieNameFilter.trim() &&
+      !space.filmName.toLowerCase().includes(movieNameFilter.trim().toLowerCase())
+    ) {
+      return false;
+    }
     if (typeFilter !== "all" && space.spaceType !== typeFilter) return false;
     if (openOnly && space.members.length >= space.maxCapacity) return false;
     if (activityFilter && !space.postActivities?.split(",").includes(activityFilter)) return false;
@@ -193,6 +201,18 @@ export default function ExploreScreen() {
           keyExtractor={(item) => item.id}
           ListHeaderComponent={
             <View style={styles.filters}>
+              <View style={styles.searchBox}>
+                <Ionicons name="search-outline" size={18} color={SpaceTheme.mutedOrbit} />
+                <TextInput
+                  style={styles.searchInput}
+                  placeholder="Search by movie name..."
+                  placeholderTextColor={SpaceTheme.mutedOrbit}
+                  value={movieNameFilter}
+                  onChangeText={setMovieNameFilter}
+                  returnKeyType="search"
+                  clearButtonMode="while-editing"
+                />
+              </View>
               <View style={styles.filterBarRow}>
                 <TouchableOpacity
                   activeOpacity={0.8}
@@ -515,6 +535,21 @@ const styles = StyleSheet.create({
   title: { fontSize: 28, fontWeight: "bold", color: SpaceTheme.starWhite },
   subtitle: { fontSize: 14, color: SpaceTheme.mutedOrbit, marginBottom: 16 },
   filters: { marginBottom: 8 },
+  searchBox: {
+    ...SpaceStyles.glassCard,
+    flexDirection: "row",
+    alignItems: "center",
+    gap: 8,
+    paddingVertical: 10,
+    paddingHorizontal: 12,
+    marginBottom: 10,
+  },
+  searchInput: {
+    flex: 1,
+    fontSize: 15,
+    color: SpaceTheme.starWhite,
+    padding: 0,
+  },
   filterBarRow: {
     flexDirection: "row",
     alignItems: "center",

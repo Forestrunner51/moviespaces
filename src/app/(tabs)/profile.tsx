@@ -14,6 +14,7 @@ import { useCallback, useEffect, useState } from "react";
 import { useFocusEffect, router } from "expo-router";
 import { authFetch } from "@/frontend/services/api";
 import * as ImagePicker from "expo-image-picker";
+import { Ionicons } from "@expo/vector-icons";
 import { Starfield } from "@/frontend/components/starfield";
 import { SpaceTheme, SpaceStyles } from "@/frontend/constants/theme";
 import { THEATER_MEMBERSHIPS, membershipLabel } from "@/frontend/constants/theater-memberships";
@@ -116,57 +117,6 @@ export default function ProfileScreen() {
       loadMySpaces();
     }, [load, loadMySpaces]),
   );
-
-  const handleSignOut = async () => {
-    await supabase.auth.signOut();
-  };
-
-  const [deletingAccount, setDeletingAccount] = useState(false);
-
-  const handleDeleteAccount = () => {
-    Alert.alert(
-      "Delete your account?",
-      "This permanently deletes your profile, your Spaces, and everything else tied to your account. This can't be undone.",
-      [
-        { text: "Cancel", style: "cancel" },
-        {
-          text: "Continue",
-          style: "destructive",
-          onPress: () => {
-            Alert.alert(
-              "Are you absolutely sure?",
-              "There's no way to recover your account after this.",
-              [
-                { text: "Cancel", style: "cancel" },
-                {
-                  text: "Delete My Account",
-                  style: "destructive",
-                  onPress: async () => {
-                    setDeletingAccount(true);
-                    try {
-                      const res = await authFetch(`${process.env.EXPO_PUBLIC_API_URL}/api/account`, {
-                        method: "DELETE",
-                      });
-                      if (!res.ok) {
-                        const body = await res.json().catch(() => ({}));
-                        throw new Error(body.error || "Please try again.");
-                      }
-                      await supabase.auth.signOut();
-                      router.replace("/auth");
-                    } catch (err: any) {
-                      Alert.alert("Couldn't delete account", err.message || "Please try again.");
-                    } finally {
-                      setDeletingAccount(false);
-                    }
-                  },
-                },
-              ],
-            );
-          },
-        },
-      ],
-    );
-  };
 
   const startEditing = () => {
     setNameInput(profile?.displayName ?? "");
@@ -324,7 +274,17 @@ export default function ProfileScreen() {
         contentContainerStyle={styles.containerContent}
         keyboardShouldPersistTaps="handled"
       >
-        <Text style={[styles.title, SpaceStyles.glowText, SpaceStyles.wordmark]}>Profile</Text>
+        <View style={styles.titleRow}>
+          <Text style={[styles.title, SpaceStyles.glowText, SpaceStyles.wordmark]}>Profile</Text>
+          <TouchableOpacity
+            activeOpacity={0.7}
+            hitSlop={10}
+            style={styles.settingsButton}
+            onPress={() => router.push("/settings")}
+          >
+            <Ionicons name="settings-outline" size={24} color={SpaceTheme.starWhite} />
+          </TouchableOpacity>
+        </View>
 
         <View style={styles.card}>
           <TouchableOpacity
@@ -516,30 +476,14 @@ export default function ProfileScreen() {
           )}
         </View>
 
-        <TouchableOpacity activeOpacity={0.8} style={styles.button} onPress={handleSignOut}>
-          <Text style={styles.buttonText}>Sign Out</Text>
-        </TouchableOpacity>
-
         <TouchableOpacity
           activeOpacity={0.8}
-          style={styles.deleteAccountButton}
-          onPress={handleDeleteAccount}
-          disabled={deletingAccount}
+          style={styles.settingsLinkButton}
+          onPress={() => router.push("/settings")}
         >
-          <Text style={styles.deleteAccountButtonText}>
-            {deletingAccount ? "Deleting..." : "Delete Account"}
-          </Text>
+          <Ionicons name="settings-outline" size={16} color={SpaceTheme.mutedOrbit} />
+          <Text style={styles.settingsLinkButtonText}>Settings</Text>
         </TouchableOpacity>
-
-        <View style={styles.legalLinksRow}>
-          <TouchableOpacity onPress={() => router.push("/legal/terms")}>
-            <Text style={styles.legalLinkText}>Terms of Service</Text>
-          </TouchableOpacity>
-          <Text style={styles.legalLinkSeparator}>•</Text>
-          <TouchableOpacity onPress={() => router.push("/legal/privacy")}>
-            <Text style={styles.legalLinkText}>Privacy Policy</Text>
-          </TouchableOpacity>
-        </View>
       </ScrollView>
     </Starfield>
   );
@@ -558,8 +502,14 @@ const styles = StyleSheet.create({
     fontSize: 28,
     fontWeight: "bold",
     color: SpaceTheme.starWhite,
+  },
+  titleRow: {
+    flexDirection: "row",
+    justifyContent: "space-between",
+    alignItems: "center",
     marginBottom: 20,
   },
+  settingsButton: { padding: 4 },
   card: {
     ...SpaceStyles.glassCard,
     padding: 24,
@@ -659,13 +609,14 @@ const styles = StyleSheet.create({
     paddingHorizontal: 16,
   },
   cancelEditButtonText: { color: SpaceTheme.mutedOrbit, fontSize: 15 },
-  button: {
-    backgroundColor: SpaceTheme.supernovaPink,
-    padding: 14,
-    borderRadius: 8,
+  settingsLinkButton: {
+    flexDirection: "row",
     alignItems: "center",
+    justifyContent: "center",
+    gap: 6,
+    padding: 14,
   },
-  buttonText: { color: SpaceTheme.backgroundVoid, fontWeight: "700", fontSize: 16 },
+  settingsLinkButtonText: { color: SpaceTheme.mutedOrbit, fontSize: 14, fontWeight: "600" },
   spacesSection: { marginBottom: 24 },
   spacesSectionTitle: {
     fontSize: 16,
@@ -681,19 +632,4 @@ const styles = StyleSheet.create({
   },
   spaceRowTitle: { fontSize: 15, fontWeight: "600", color: SpaceTheme.starWhite },
   spaceRowSubtitle: { fontSize: 12, color: SpaceTheme.mutedOrbit, marginTop: 2 },
-  legalLinksRow: {
-    flexDirection: "row",
-    justifyContent: "center",
-    alignItems: "center",
-    gap: 8,
-    marginTop: 20,
-  },
-  legalLinkText: { fontSize: 12, color: SpaceTheme.mutedOrbit },
-  legalLinkSeparator: { fontSize: 12, color: SpaceTheme.mutedOrbit },
-  deleteAccountButton: {
-    marginTop: 12,
-    padding: 12,
-    alignItems: "center",
-  },
-  deleteAccountButtonText: { color: SpaceTheme.danger, fontSize: 13, fontWeight: "600" },
 });

@@ -30,12 +30,19 @@ export default function ChatScreen() {
   // safe-area top inset + standard iOS nav-bar height (44).
   const insets = useSafeAreaInsets();
   const headerHeight = insets.top + 44;
+  // A ref, not state: a fast double-tap fires both handleSend calls before
+  // React re-renders with the cleared input, so a state-based guard reads
+  // stale on the second tap and the same message (and its push) goes out
+  // twice. A ref updates synchronously, so the second tap sees it in time.
+  const sendingRef = useRef(false);
 
   const handleSend = async () => {
     const content = text.trim();
-    if (!content) return;
+    if (!content || sendingRef.current) return;
+    sendingRef.current = true;
     setText("");
     const result = await sendMessage(content);
+    sendingRef.current = false;
     if (!result.success) {
       // The optimistic bubble is rolled back by the hook's fetchHistory; tell
       // the user why instead of letting the message just silently disappear

@@ -12,24 +12,28 @@ import {
 import { router } from "expo-router";
 import { SpaceTheme, SpaceStyles } from "@/frontend/constants/theme";
 import { useFriends, Profile } from "@/frontend/hooks/use-friends";
+import { blockUser } from "@/frontend/services/moderation";
 
 export function FriendsPanel() {
   const {
     friends,
     pendingRequests,
+    sentRequests,
     loading,
     sendFriendRequest,
     acceptFriendRequest,
     declineFriendRequest,
+    cancelFriendRequest,
+    removeFriend,
     searchUsers,
   } = useFriends();
 
   const [query, setQuery] = useState("");
   const [results, setResults] = useState<Profile[]>([]);
   const [searching, setSearching] = useState(false);
-  const [requestedIds, setRequestedIds] = useState<Set<string>>(new Set());
 
   const friendIds = new Set(friends.map((f) => f.id));
+  const sentRequestByUserId = new Map(sentRequests.map((r) => [r.receiver.id, r.id]));
 
   // The same search box doubles as a live filter over your existing friends
   // — without this, a large friends list has no way to jump to a specific
@@ -58,14 +62,74 @@ export function FriendsPanel() {
 
   const handleAdd = async (userId: string) => {
     const result = await sendFriendRequest(userId);
-    if (result.success) {
-      setRequestedIds((prev) => new Set(prev).add(userId));
-    } else if (result.error?.includes("already exists")) {
-      // Already friends/requested — just reflect that in the UI, no need to alert.
-      setRequestedIds((prev) => new Set(prev).add(userId));
-    } else {
+    if (!result.success && !result.error?.includes("already exists")) {
       Alert.alert("Couldn't send request", result.error || "Please try again.");
     }
+  };
+
+  // Tapping "Requested" again un-sends it — same gesture, opposite direction.
+  const handleCancelRequest = async (friendshipId: string) => {
+    const result = await cancelFriendRequest(friendshipId);
+    if (!result.success) {
+      Alert.alert("Couldn't cancel request", result.error || "Please try again.");
+    }
+  };
+
+  const handleRemoveFriend = (friendshipId: string, name: string) => {
+    Alert.alert("Remove friend?", `${name} will be removed from your friends list.`, [
+      { text: "Cancel", style: "cancel" },
+      {
+        text: "Remove",
+        style: "destructive",
+        onPress: async () => {
+          const result = await removeFriend(friendshipId);
+          if (!result.success) {
+            Alert.alert("Couldn't remove friend", result.error || "Please try again.");
+          }
+        },
+      },
+    ]);
+  };
+
+  const handleBlockFriend = (userId: string, friendshipId: string, name: string) => {
+    Alert.alert(
+      "Block this person?",
+      `${name} will be removed as a friend and won't be able to contact you.`,
+      [
+        { text: "Cancel", style: "cancel" },
+        {
+          text: "Block",
+          style: "destructive",
+          onPress: async () => {
+            const result = await blockUser(userId);
+            if (!result.success) {
+              Alert.alert("Couldn't block user", result.error || "Please try again.");
+              return;
+            }
+            await removeFriend(friendshipId);
+          },
+        },
+      ],
+    );
+  };
+
+  // Remove/Block live behind a single "⋯" rather than as inline links —
+  // three tap targets plus a name don't fit a row on a narrow screen, and
+  // this matches how Explore already surfaces per-item actions.
+  const handleFriendOptions = (friend: (typeof friends)[number]) => {
+    Alert.alert(friend.display_name, undefined, [
+      { text: "Cancel", style: "cancel" },
+      {
+        text: "Remove Friend",
+        style: "destructive",
+        onPress: () => handleRemoveFriend(friend.friendshipId, friend.display_name),
+      },
+      {
+        text: "Block",
+        style: "destructive",
+        onPress: () => handleBlockFriend(friend.id, friend.friendshipId, friend.display_name),
+      },
+    ]);
   };
 
   return (
@@ -86,14 +150,27 @@ export function FriendsPanel() {
           <Text style={styles.sectionLabel}>SEARCH RESULTS</Text>
           {results.map((user) => (
             <View key={user.id} style={styles.row}>
-              <View>
-                <Text style={styles.rowText}>{user.display_name}</Text>
-                {user.username && <Text style={styles.rowUsername}>@{user.username}</Text>}
+              <View style={styles.rowTextBlock}>
+                <Text style={styles.rowText} numberOfLines={1}>
+                  {user.display_name}
+                </Text>
+                {user.username && (
+                  <Text style={styles.rowUsername} numberOfLines={1}>
+                    @{user.username}
+                  </Text>
+                )}
               </View>
               {friendIds.has(user.id) ? (
                 <Text style={styles.rowSubtext}>Friends</Text>
-              ) : requestedIds.has(user.id) ? (
-                <Text style={styles.rowSubtext}>Requested</Text>
+              ) : sentRequestByUserId.has(user.id) ? (
+                <TouchableOpacity
+                  activeOpacity={0.8}
+                  style={styles.actionButton}
+                  hitSlop={8}
+                  onPress={() => handleCancelRequest(sentRequestByUserId.get(user.id)!)}
+                >
+                  <Text style={styles.cancelRequestText}>Requested ✕</Text>
+                </TouchableOpacity>
               ) : (
                 <TouchableOpacity activeOpacity={0.8} style={styles.actionButton} onPress={() => handleAdd(user.id)}>
                   <Text style={styles.actionButtonText}>Add</Text>
@@ -109,10 +186,14 @@ export function FriendsPanel() {
           <Text style={styles.sectionLabel}>PENDING REQUESTS</Text>
           {pendingRequests.map((req) => (
             <View key={req.id} style={styles.row}>
-              <View>
-                <Text style={styles.rowText}>{req.requester.display_name}</Text>
+              <View style={styles.rowTextBlock}>
+                <Text style={styles.rowText} numberOfLines={1}>
+                  {req.requester.display_name}
+                </Text>
                 {req.requester.username && (
-                  <Text style={styles.rowUsername}>@{req.requester.username}</Text>
+                  <Text style={styles.rowUsername} numberOfLines={1}>
+                    @{req.requester.username}
+                  </Text>
                 )}
               </View>
               <View style={styles.requestActions}>
@@ -163,11 +244,28 @@ export function FriendsPanel() {
                   })
                 }
               >
-                <View>
-                  <Text style={styles.rowText}>{item.display_name}</Text>
-                  {item.username && <Text style={styles.rowUsername}>@{item.username}</Text>}
+                <View style={styles.rowTextBlock}>
+                  <Text style={styles.rowText} numberOfLines={1}>
+                    {item.display_name}
+                  </Text>
+                  {item.username && (
+                    <Text style={styles.rowUsername} numberOfLines={1}>
+                      @{item.username}
+                    </Text>
+                  )}
                 </View>
-                <Text style={styles.rowSubtext}>Message</Text>
+                <View style={styles.friendActions}>
+                  <Text style={styles.rowSubtext}>Message</Text>
+                  <TouchableOpacity
+                    hitSlop={10}
+                    onPress={(e) => {
+                      e.stopPropagation();
+                      handleFriendOptions(item);
+                    }}
+                  >
+                    <Text style={styles.optionsLink}>⋯</Text>
+                  </TouchableOpacity>
+                </View>
               </TouchableOpacity>
             )}
           />
@@ -196,12 +294,18 @@ const styles = StyleSheet.create({
     padding: 14,
     marginTop: 8,
   },
+  // Names are user-supplied and can be long — let the name block take the
+  // slack and truncate, so the action side never gets pushed off the row.
+  rowTextBlock: { flex: 1, marginRight: 12 },
   rowText: { color: SpaceTheme.starWhite, fontSize: 16 },
   rowUsername: { color: SpaceTheme.mutedOrbit, fontSize: 12, marginTop: 1 },
   rowSubtext: { color: SpaceTheme.mutedOrbit, fontSize: 13 },
+  friendActions: { flexDirection: "row", alignItems: "center", gap: 14, flexShrink: 0 },
+  optionsLink: { color: SpaceTheme.mutedOrbit, fontSize: 20, fontWeight: "700", lineHeight: 22 },
+  cancelRequestText: { color: SpaceTheme.mutedOrbit, fontSize: 13, fontWeight: "600" },
   emptyText: { color: SpaceTheme.mutedOrbit, marginTop: 12 },
-  requestActions: { flexDirection: "row", gap: 12 },
-  actionButton: { marginLeft: 12 },
+  requestActions: { flexDirection: "row", gap: 12, flexShrink: 0 },
+  actionButton: { flexShrink: 0 },
   actionButtonText: { color: SpaceTheme.glowCyan, fontWeight: "700", fontSize: 14 },
   declineButtonText: { color: SpaceTheme.mutedOrbit, fontWeight: "700", fontSize: 14 },
 });
