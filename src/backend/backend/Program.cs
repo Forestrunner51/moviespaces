@@ -19,6 +19,7 @@ builder.WebHost.UseSentry(options =>
 builder.Services.AddHttpClient();
 builder.Services.AddMemoryCache();
 builder.Services.AddSingleton<PushNotificationService>();
+builder.Services.AddSingleton<OmdbClient>();
 builder.Services.AddHostedService<ReminderBackgroundService>();
 
 builder.Services.AddCors(options =>

@@ -22,6 +22,8 @@ public class AppDbContext : DbContext
     public DbSet<Group> Groups { get; set; }
     public DbSet<GroupMember> GroupMembers { get; set; }
     public DbSet<PushToken> PushTokens { get; set; }
+    public DbSet<NowPlayingMovie> NowPlayingMovies => Set<NowPlayingMovie>();
+    public DbSet<Showtime> Showtimes => Set<Showtime>();
 
     protected override void OnModelCreating(ModelBuilder builder)
     {
@@ -33,5 +35,26 @@ public class AppDbContext : DbContext
         builder.Entity<Group>()
             .HasIndex(g => g.Slug)
             .IsUnique();
+
+        // Title is the only stable identifier the scraper gives us, so it's
+        // the upsert target for the nightly ingest.
+        builder.Entity<NowPlayingMovie>()
+            .HasIndex(m => m.Title)
+            .IsUnique();
+
+        builder.Entity<Showtime>()
+            .HasOne(s => s.Movie)
+            .WithMany(m => m.Showtimes)
+            .HasForeignKey(s => s.MovieId)
+            .OnDelete(DeleteBehavior.Cascade);
+
+        // Makes the nightly ingest idempotent — see Showtime for why.
+        builder.Entity<Showtime>()
+            .HasIndex(s => new { s.MovieId, s.TheaterName, s.StartsAt })
+            .IsUnique();
+
+        // Serves the app's "what's playing, soonest first" read path.
+        builder.Entity<Showtime>()
+            .HasIndex(s => new { s.MovieId, s.StartsAt });
     }
 }
