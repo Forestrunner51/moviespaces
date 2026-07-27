@@ -27,6 +27,12 @@ import { searchMovies, searchTvShows, getNowPlaying, Movie } from "@/frontend/se
 import * as WebBrowser from "expo-web-browser";
 import { buildGoogleShowtimesUrl } from "@/frontend/services/ticket-links";
 import {
+  fetchShowtimes,
+  groupSlotsByDate,
+  formatSlotDate,
+  ShowtimeSlot,
+} from "@/frontend/services/showtimes";
+import {
   getDeviceLocation,
   fetchNearbyTheaters,
   NearbyTheater,
@@ -190,6 +196,9 @@ export default function CreateSpaceScreen() {
   const [movieSearchError, setMovieSearchError] = useState<string | null>(null);
   const [movieSearchNotice, setMovieSearchNotice] = useState<string | null>(null);
   const [showtimeConfirmed, setShowtimeConfirmed] = useState(false);
+  const [showtimeSlots, setShowtimeSlots] = useState<ShowtimeSlot[]>([]);
+  const [showtimesLoading, setShowtimesLoading] = useState(false);
+  const [selectedSlotId, setSelectedSlotId] = useState<string | null>(null);
   const [nowPlaying, setNowPlaying] = useState<Movie[]>([]);
 
   const [datePickerVisible, setDatePickerVisible] = useState(false);
@@ -306,13 +315,66 @@ export default function CreateSpaceScreen() {
     setShowTime(formatTime(selected));
   };
 
-  // Opens Google's showtimes results for the picked film near the chosen
-  // theater in an in-app browser. Google localizes and shows real theaters,
-  // times, and ticket links — the host reads off the real showtime, then sets
-  // the time in the picker below. (No paid showtimes API.)
+  // Fallback only — used when we have no scraped showtimes for this film at
+  // this theater. Opens Google's showtimes results in an in-app browser; the
+  // host reads off the real time and sets it in the pickers manually.
   const handleFindShowtimes = () => {
     WebBrowser.openBrowserAsync(buildGoogleShowtimesUrl(movieName, theaterName));
   };
+
+  // Look up real showtimes from our own nightly-scraped data once the host has
+  // picked both a film and a theater. Theater screenings only — a private
+  // rental isn't a public showing that appears in any listings.
+  useEffect(() => {
+    if (spaceType !== "public_gathering" || !movieName.trim() || !theaterName.trim()) {
+      setShowtimeSlots([]);
+      setSelectedSlotId(null);
+      return;
+    }
+
+    let cancelled = false;
+    setShowtimesLoading(true);
+    fetchShowtimes(movieName, theaterName)
+      .then((lookup) => {
+        if (cancelled) return;
+        setShowtimeSlots(lookup.slots);
+        setSelectedSlotId(null);
+      })
+      .finally(() => {
+        if (!cancelled) setShowtimesLoading(false);
+      });
+
+    // The film/theater can change while a request is in flight; without this
+    // an older response could land last and show the wrong film's showtimes.
+    return () => {
+      cancelled = true;
+    };
+  }, [spaceType, movieName, theaterName]);
+
+  // Tapping a real showtime fills both pickers from verified data.
+  //
+  // slot.startsAt is local wall-clock with no timezone (see services/
+  // showtimes.ts) — it's split into parts and fed to the Date constructor
+  // rather than parsed, since `new Date("...")` would apply a UTC offset and
+  // shift the time the host sees.
+  const handleSelectSlot = (slot: ShowtimeSlot) => {
+    const [datePart, timePart] = slot.startsAt.split("T");
+    const [year, month, day] = datePart.split("-").map(Number);
+    const [hour, minute] = (timePart ?? "").split(":").map(Number);
+    if (!year || !month || !day || Number.isNaN(hour) || Number.isNaN(minute)) return;
+
+    const localDate = new Date(year, month - 1, day, hour, minute, 0, 0);
+    setDateValue(localDate);
+    setShowDate(formatDate(localDate));
+    setTimeValue(localDate);
+    setShowTime(formatTime(localDate));
+    setSelectedSlotId(slot.id);
+  };
+
+  // A screening we scraped from real listings needs no host attestation —
+  // that checkbox exists purely because we otherwise can't verify the film is
+  // actually playing there.
+  const hasVerifiedShowtimes = showtimeSlots.length > 0;
 
   const handleSubmit = async () => {
     const isOtherActivity = spaceType === "private_rental" && rentalActivityType === "other";
@@ -334,7 +396,7 @@ export default function CreateSpaceScreen() {
     // there's no way to verify server-side that this movie is actually
     // playing at this theater at this time, so we require the host to
     // attest to it instead of silently allowing bogus/expired listings.
-    if (spaceType === "public_gathering" && !showtimeConfirmed) {
+    if (spaceType === "public_gathering" && !hasVerifiedShowtimes && !showtimeConfirmed) {
       Alert.alert(
         "Confirm the showtime",
         "Please check the box confirming this movie is actually playing at this theater at the date/time you picked.",
@@ -657,38 +719,93 @@ export default function CreateSpaceScreen() {
             </TouchableOpacity>
           )}
 
-          {/* Look up real showtimes on Google (opens in-app browser) for the
-              chosen film + theater — the host reads the time and sets it in the
-              picker above. Movie screenings only. */}
-          {spaceType === "public_gathering" && !!movieName.trim() && (
-            <TouchableOpacity
-              activeOpacity={0.85}
-              style={styles.showtimeButton}
-              onPress={handleFindShowtimes}
-            >
-              <Ionicons name="search-outline" size={18} color={SpaceTheme.backgroundVoid} />
-              <Text style={styles.showtimeButtonText}>Find Showtimes Near Me</Text>
-            </TouchableOpacity>
+          {/* Real showtimes from our nightly scrape, when we have them for
+              this film at this theater. Tapping a slot fills the date/time
+              pickers above from verified data. */}
+          {spaceType === "public_gathering" && showtimesLoading && (
+            <View style={styles.showtimeLoadingRow}>
+              <ActivityIndicator size="small" color={SpaceTheme.glowCyan} />
+              <Text style={styles.showtimeLoadingText}>Checking showtimes…</Text>
+            </View>
           )}
 
-          {/* We have no real showtimes API to verify this against — the host
-              has to attest that the movie is actually playing at this
-              theater at this time. Required at submit. */}
-          {spaceType === "public_gathering" && (
-            <TouchableOpacity
-              activeOpacity={0.8}
-              style={styles.confirmRow}
-              onPress={() => setShowtimeConfirmed((prev) => !prev)}
-            >
-              <Ionicons
-                name={showtimeConfirmed ? "checkbox" : "square-outline"}
-                size={20}
-                color={showtimeConfirmed ? SpaceTheme.glowCyan : SpaceTheme.mutedOrbit}
-              />
-              <Text style={styles.confirmRowText}>
-                I&apos;ve confirmed this movie is actually playing at this theater at this date/time.
+          {spaceType === "public_gathering" && !showtimesLoading && hasVerifiedShowtimes && (
+            <View style={styles.slotSection}>
+              <Text style={styles.slotSectionTitle}>Showtimes at this theater</Text>
+              <Text style={styles.slotSectionSubtext}>
+                Tap a time to use it — no need to enter the date and time yourself.
               </Text>
-            </TouchableOpacity>
+              {groupSlotsByDate(showtimeSlots).map(({ date, slots }) => (
+                <View key={date} style={styles.slotDateGroup}>
+                  <Text style={styles.slotDateLabel}>{formatSlotDate(date)}</Text>
+                  <View style={styles.slotChipRow}>
+                    {slots.map((slot) => (
+                      <TouchableOpacity
+                        key={slot.id}
+                        activeOpacity={0.8}
+                        style={[
+                          styles.slotChip,
+                          selectedSlotId === slot.id && styles.slotChipActive,
+                        ]}
+                        onPress={() => handleSelectSlot(slot)}
+                      >
+                        <Text
+                          style={[
+                            styles.slotChipText,
+                            selectedSlotId === slot.id && styles.slotChipTextActive,
+                          ]}
+                        >
+                          {slot.time}
+                        </Text>
+                        {slot.format && slot.format.toLowerCase() !== "standard" && (
+                          <Text
+                            style={[
+                              styles.slotChipFormat,
+                              selectedSlotId === slot.id && styles.slotChipTextActive,
+                            ]}
+                          >
+                            {slot.format}
+                          </Text>
+                        )}
+                      </TouchableOpacity>
+                    ))}
+                  </View>
+                </View>
+              ))}
+            </View>
+          )}
+
+          {/* Fallback — we have no scraped showtimes for this pairing, so the
+              host looks the time up on Google and attests to it, exactly as
+              before this data existed. */}
+          {spaceType === "public_gathering" && !showtimesLoading && !hasVerifiedShowtimes && (
+            <>
+              {!!movieName.trim() && (
+                <TouchableOpacity
+                  activeOpacity={0.85}
+                  style={styles.showtimeButton}
+                  onPress={handleFindShowtimes}
+                >
+                  <Ionicons name="search-outline" size={18} color={SpaceTheme.backgroundVoid} />
+                  <Text style={styles.showtimeButtonText}>Find Showtimes Near Me</Text>
+                </TouchableOpacity>
+              )}
+
+              <TouchableOpacity
+                activeOpacity={0.8}
+                style={styles.confirmRow}
+                onPress={() => setShowtimeConfirmed((prev) => !prev)}
+              >
+                <Ionicons
+                  name={showtimeConfirmed ? "checkbox" : "square-outline"}
+                  size={20}
+                  color={showtimeConfirmed ? SpaceTheme.glowCyan : SpaceTheme.mutedOrbit}
+                />
+                <Text style={styles.confirmRowText}>
+                  I&apos;ve confirmed this movie is actually playing at this theater at this date/time.
+                </Text>
+              </TouchableOpacity>
+            </>
           )}
 
           {spaceType === "private_rental" && (
@@ -1192,6 +1309,48 @@ const styles = StyleSheet.create({
     marginTop: 4,
   },
   showtimeButtonText: { color: SpaceTheme.backgroundVoid, fontSize: 15, fontWeight: "700" },
+  showtimeLoadingRow: {
+    flexDirection: "row",
+    alignItems: "center",
+    gap: 8,
+    paddingVertical: 10,
+  },
+  showtimeLoadingText: { color: SpaceTheme.mutedOrbit, fontSize: 13 },
+  slotSection: {
+    ...SpaceStyles.glassCard,
+    padding: 14,
+    marginBottom: 12,
+    borderColor: "rgba(56, 189, 248, 0.3)",
+  },
+  slotSectionTitle: { color: SpaceTheme.starWhite, fontSize: 15, fontWeight: "700" },
+  slotSectionSubtext: {
+    color: SpaceTheme.mutedOrbit,
+    fontSize: 12,
+    marginTop: 2,
+    marginBottom: 10,
+  },
+  slotDateGroup: { marginTop: 10 },
+  slotDateLabel: {
+    color: SpaceTheme.mutedOrbit,
+    fontSize: 12,
+    fontWeight: "700",
+    textTransform: "uppercase",
+    marginBottom: 6,
+  },
+  slotChipRow: { flexDirection: "row", flexWrap: "wrap", gap: 8 },
+  slotChip: {
+    ...SpaceStyles.glassCard,
+    alignItems: "center",
+    paddingVertical: 8,
+    paddingHorizontal: 12,
+  },
+  slotChipActive: {
+    backgroundColor: SpaceTheme.glowCyan,
+    borderColor: SpaceTheme.glowCyan,
+  },
+  slotChipText: { color: SpaceTheme.starWhite, fontSize: 14, fontWeight: "600" },
+  slotChipFormat: { color: SpaceTheme.mutedOrbit, fontSize: 10, marginTop: 1 },
+  slotChipTextActive: { color: SpaceTheme.backgroundVoid },
   confirmRow: {
     flexDirection: "row",
     alignItems: "center",

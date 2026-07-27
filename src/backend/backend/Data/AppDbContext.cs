@@ -42,6 +42,15 @@ public class AppDbContext : DbContext
             .HasIndex(m => m.Title)
             .IsUnique();
 
+        // Npgsql maps DateTime to `timestamptz` by default, which REJECTS a
+        // DateTimeKind.Unspecified value at write time. Scraped showtimes are
+        // local wall-clock with no known offset (see the Showtime model), so
+        // the column has to be `timestamp without time zone` or every ingest
+        // throws.
+        builder.Entity<Showtime>()
+            .Property(s => s.StartsAt)
+            .HasColumnType("timestamp without time zone");
+
         builder.Entity<Showtime>()
             .HasOne(s => s.Movie)
             .WithMany(m => m.Showtimes)
