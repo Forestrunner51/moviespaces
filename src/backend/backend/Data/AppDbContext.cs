@@ -24,6 +24,7 @@ public class AppDbContext : DbContext
     public DbSet<PushToken> PushTokens { get; set; }
     public DbSet<NowPlayingMovie> NowPlayingMovies => Set<NowPlayingMovie>();
     public DbSet<Showtime> Showtimes => Set<Showtime>();
+    public DbSet<MetroScrapeLog> MetroScrapeLogs => Set<MetroScrapeLog>();
 
     protected override void OnModelCreating(ModelBuilder builder)
     {

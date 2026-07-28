@@ -24,18 +24,35 @@ export interface ShowtimeLookup {
   // "AMC Empire 25"). Null when nothing matched closely enough.
   matchedTheaterName: string | null;
   slots: ShowtimeSlot[];
+  // The metro the backend mapped this user to ("dallas"), or null if their
+  // area isn't covered by the scraper at all.
+  metroSlug: string | null;
+  // True when this request kicked off a fresh scrape. Showtimes aren't ready
+  // yet, but will be on a later attempt — worth telling the user rather than
+  // implying their theater simply has nothing playing.
+  isRefreshing: boolean;
 }
 
-const EMPTY: ShowtimeLookup = { matchedTheaterName: null, slots: [] };
+const EMPTY: ShowtimeLookup = {
+  matchedTheaterName: null,
+  slots: [],
+  metroSlug: null,
+  isRefreshing: false,
+};
 
 export async function fetchShowtimes(
   movieTitle: string,
   theaterName?: string,
+  place?: { city?: string | null; state?: string | null },
 ): Promise<ShowtimeLookup> {
   if (!movieTitle.trim()) return EMPTY;
 
   const params = new URLSearchParams({ movieTitle: movieTitle.trim() });
   if (theaterName?.trim()) params.set("theaterName", theaterName.trim());
+  // Drives the backend's on-demand scrape: without a city it can't tell which
+  // metro to refresh, so it will only ever serve already-cached data.
+  if (place?.city) params.set("city", place.city);
+  if (place?.state) params.set("state", place.state);
 
   try {
     const res = await fetch(
@@ -47,6 +64,8 @@ export async function fetchShowtimes(
     return {
       matchedTheaterName: data.matchedTheaterName ?? null,
       slots: (data.showtimes || []) as ShowtimeSlot[],
+      metroSlug: data.metroSlug ?? null,
+      isRefreshing: data.isRefreshing === true,
     };
   } catch (err) {
     // Never surface as an error — a failed lookup just means the host falls

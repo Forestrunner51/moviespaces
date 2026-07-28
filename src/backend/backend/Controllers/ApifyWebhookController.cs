@@ -130,9 +130,27 @@ namespace Backend.Controllers
             var cutoff = DateTime.SpecifyKind(DateTime.UtcNow.AddHours(-18), DateTimeKind.Unspecified);
             var purged = await _db.Showtimes.Where(s => s.StartsAt < cutoff).ExecuteDeleteAsync();
 
+            // Stamp each metro present in the payload as freshly scraped, so
+            // the 48h TTL runs from when real rows landed rather than from
+            // when the run was merely requested. Doing this from the scraped
+            // rows avoids a second Apify call just to learn the run's input.
+            var scrapedMetros = scraped
+                .Select(s => s.City)
+                .Where(c => !string.IsNullOrWhiteSpace(c))
+                .Select(c => c!)
+                .Distinct(StringComparer.OrdinalIgnoreCase)
+                .ToList();
+
+            foreach (var metro in scrapedMetros)
+            {
+                var rowsForMetro = scraped.Count(s =>
+                    string.Equals(s.City, metro, StringComparison.OrdinalIgnoreCase));
+                await ShowtimeRefreshService.MarkScrapedAsync(_db, metro, rowsForMetro);
+            }
+
             _logger.LogInformation(
-                "Apify ingest: {Rows} rows, {Titles} titles, {Written} showtimes written, {Purged} purged.",
-                scraped.Count, distinctTitles.Count, insertedOrUpdated, purged);
+                "Apify ingest: {Rows} rows, {Titles} titles, {Written} showtimes written, {Purged} purged, metros [{Metros}].",
+                scraped.Count, distinctTitles.Count, insertedOrUpdated, purged, string.Join(", ", scrapedMetros));
 
             return Ok(new
             {
