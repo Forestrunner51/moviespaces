@@ -116,10 +116,14 @@ namespace Backend.Controllers
             // already records which metro a theater belongs to — so any row
             // whose TheaterName matches a directory entry gets that theater's
             // MetroSlug filled in as its City.
+            // Keyed on ScrapedText.ComparisonKey, not the raw name — the
+            // directory's Name is clean (parsed from real HTML) while a
+            // scraped name may carry malformed entities, so a raw-string
+            // dictionary silently never hits.
             var directoryTheaters = await _db.CinemaClockTheaters.ToListAsync();
-            var metroByTheaterName = directoryTheaters
-                .GroupBy(t => t.Name, StringComparer.OrdinalIgnoreCase)
-                .ToDictionary(g => g.Key, g => g.First().MetroSlug, StringComparer.OrdinalIgnoreCase);
+            var metroByTheaterKey = directoryTheaters
+                .GroupBy(t => ScrapedText.ComparisonKey(t.Name))
+                .ToDictionary(g => g.Key, g => g.First().MetroSlug);
 
             var insertedOrUpdated = 0;
             foreach (var item in scraped)
@@ -130,7 +134,7 @@ namespace Backend.Controllers
                 if (!movieIdByTitle.TryGetValue(item.MovieTitle, out var movieId)) continue;
 
                 if (string.IsNullOrWhiteSpace(item.City)
-                    && metroByTheaterName.TryGetValue(item.TheaterName, out var backfilledMetro))
+                    && metroByTheaterKey.TryGetValue(ScrapedText.ComparisonKey(item.TheaterName), out var backfilledMetro))
                 {
                     item.City = backfilledMetro;
                 }
@@ -179,18 +183,23 @@ namespace Backend.Controllers
             // this is equivalent — a theater is fresh once we've genuinely
             // seen its current showtimes, regardless of which scrape mode
             // produced them.
-            var scrapedTheaterNames = scraped
-                .Select(s => s.TheaterName)
-                .Where(t => !string.IsNullOrWhiteSpace(t))
-                .Select(t => t!)
-                .Distinct(StringComparer.OrdinalIgnoreCase)
-                .ToList();
+            // Matched in memory on the normalized key rather than via a SQL
+            // Contains on raw names: the DB comparison is byte-exact, so a
+            // scraped name carrying a malformed entity never matched the
+            // directory's clean Name — which is why theater_scrape_logs was
+            // never getting stamped "ok" even after a successful per-theater
+            // scrape, leaving the theater stuck as stale. directoryTheaters
+            // is already loaded above, so this costs no extra query.
+            var scrapedTheaterKeys = scraped
+                .Select(s => ScrapedText.ComparisonKey(s.TheaterName))
+                .Where(k => k.Length > 0)
+                .ToHashSet();
 
-            if (scrapedTheaterNames.Count > 0)
+            if (scrapedTheaterKeys.Count > 0)
             {
-                var directoryMatches = await _db.CinemaClockTheaters
-                    .Where(t => scrapedTheaterNames.Contains(t.Name))
-                    .ToListAsync();
+                var directoryMatches = directoryTheaters
+                    .Where(t => scrapedTheaterKeys.Contains(ScrapedText.ComparisonKey(t.Name)))
+                    .ToList();
 
                 foreach (var theater in directoryMatches)
                 {
@@ -404,7 +413,10 @@ namespace Backend.Controllers
                     && v.ValueKind == JsonValueKind.String
                     && !string.IsNullOrWhiteSpace(v.GetString()))
                 {
-                    return System.Net.WebUtility.HtmlDecode(v.GetString()!.Trim());
+                    // ScrapedText, not plain HtmlDecode — the actor emits
+                    // malformed semicolon-less entities ("Dine&#8209In") that
+                    // HtmlDecode leaves untouched. See ScrapedText for why.
+                    return ScrapedText.Decode(v.GetString());
                 }
             }
             return null;

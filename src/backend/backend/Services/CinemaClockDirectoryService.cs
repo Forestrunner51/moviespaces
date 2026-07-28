@@ -25,12 +25,18 @@ namespace Backend.Services
     {
         private readonly IHttpClientFactory _httpClientFactory;
         private readonly IConfiguration _configuration;
+        private readonly IServiceScopeFactory _scopeFactory;
         private readonly ILogger<CinemaClockDirectoryService> _logger;
 
         // Static data, not showtimes — theaters don't open/close/rebrand
         // often, so this is refreshed on a much longer cycle than the 48h
         // showtime TTL.
         public static readonly TimeSpan DirectoryTtl = TimeSpan.FromDays(30);
+
+        // How long to wait before retrying a metro whose crawl produced no
+        // usable (geocoded) rows. Without this, a persistently failing
+        // geocode would re-crawl on every single request.
+        private static readonly TimeSpan FailedRetryDelay = TimeSpan.FromMinutes(15);
 
         // A theater within this radius of the Google Places pick is treated
         // as the same physical building. Tight enough that two distinct
@@ -39,14 +45,83 @@ namespace Backend.Services
         // own geocoded coordinates for the same address.
         private const double MatchRadiusMeters = 200;
 
+        // In-process guard so concurrent requests for the same uncrawled
+        // metro don't each start their own crawl (each of which would fire a
+        // billable geocode per theater). Single Render instance, so in-memory
+        // is sufficient; the DB-level TTL is the durable backstop.
+        private static readonly System.Collections.Concurrent.ConcurrentDictionary<string, DateTime> LastAttemptByMetro = new();
+        private static readonly System.Collections.Concurrent.ConcurrentDictionary<string, byte> InFlight = new();
+
         public CinemaClockDirectoryService(
             IHttpClientFactory httpClientFactory,
             IConfiguration configuration,
+            IServiceScopeFactory scopeFactory,
             ILogger<CinemaClockDirectoryService> logger)
         {
             _httpClientFactory = httpClientFactory;
             _configuration = configuration;
+            _scopeFactory = scopeFactory;
             _logger = logger;
+        }
+
+        // Is this metro's directory actually USABLE right now?
+        //
+        // Deliberately requires at least one row WITH coordinates, not merely
+        // a recent LastVerifiedAt. A crawl that stored 81 theaters but
+        // geocoded none of them is worthless for geo-matching, and treating
+        // it as "fresh" would lock that dead state in for the full 30-day TTL
+        // — which is exactly the failure mode that made this feature look
+        // built-but-broken.
+        public Task<bool> IsUsableAsync(AppDbContext db, string metroSlug)
+        {
+            var staleBefore = DateTime.UtcNow - DirectoryTtl;
+            return db.CinemaClockTheaters.AnyAsync(t =>
+                t.MetroSlug == metroSlug
+                && t.Latitude != null
+                && t.Longitude != null
+                && t.LastVerifiedAt >= staleBefore);
+        }
+
+        // Kicks off a directory crawl in the BACKGROUND if this metro needs
+        // one. Returns immediately — never blocks the caller.
+        //
+        // The crawl is one HTTP fetch plus a geocode per theater (81 for
+        // Dallas). Awaiting that inside a request took ~30s end to end, which
+        // is well past any reasonable client timeout. The first caller for a
+        // new metro therefore falls back to fuzzy matching and the directory
+        // is ready for subsequent callers — the same lazy pattern used for
+        // showtime scrapes.
+        public void RequestRefresh(string metroSlug)
+        {
+            if (LastAttemptByMetro.TryGetValue(metroSlug, out var lastAttempt)
+                && DateTime.UtcNow - lastAttempt < FailedRetryDelay)
+            {
+                return;
+            }
+
+            if (!InFlight.TryAdd(metroSlug, 0)) return; // already crawling
+            LastAttemptByMetro[metroSlug] = DateTime.UtcNow;
+
+            _ = Task.Run(async () =>
+            {
+                try
+                {
+                    // Own scope: this outlives the request, and AppDbContext
+                    // is scoped (and not thread-safe), so reusing the
+                    // request's context here would be a use-after-dispose.
+                    using var scope = _scopeFactory.CreateScope();
+                    var db = scope.ServiceProvider.GetRequiredService<AppDbContext>();
+                    await EnsureFreshAsync(db, metroSlug);
+                }
+                catch (Exception ex)
+                {
+                    _logger.LogError(ex, "Background directory refresh for {Metro} failed.", metroSlug);
+                }
+                finally
+                {
+                    InFlight.TryRemove(metroSlug, out _);
+                }
+            });
         }
 
         // CinemaClock's per-metro directory page slug. CONFIRMED against the
@@ -96,10 +171,7 @@ namespace Backend.Services
         // the metro-wide scrape-and-fuzzy-match path, not an error.
         public async Task EnsureFreshAsync(AppDbContext db, string metroSlug)
         {
-            var staleBefore = DateTime.UtcNow - DirectoryTtl;
-            var hasFreshEntry = await db.CinemaClockTheaters
-                .AnyAsync(t => t.MetroSlug == metroSlug && t.LastVerifiedAt >= staleBefore);
-            if (hasFreshEntry) return;
+            if (await IsUsableAsync(db, metroSlug)) return;
 
             if (!DirectorySlugByMetro.TryGetValue(metroSlug, out var pageSlug))
             {
@@ -124,20 +196,33 @@ namespace Backend.Services
                 return;
             }
 
+            // Load this metro's existing rows ONCE. Querying per theater was
+            // an N+1 — 81 round trips for Dallas alone, on top of the
+            // geocoding below.
+            var existingByUrl = (await db.CinemaClockTheaters
+                    .Where(t => t.MetroSlug == metroSlug)
+                    .ToListAsync())
+                .GroupBy(t => t.Url, StringComparer.OrdinalIgnoreCase)
+                .ToDictionary(g => g.Key, g => g.First(), StringComparer.OrdinalIgnoreCase);
+
             var geocoded = 0;
+            var geocodeFailures = 0;
             foreach (var (name, url, address) in rows)
             {
                 double? lat = null, lng = null;
-                if (!string.IsNullOrWhiteSpace(address))
+                // Skip the geocode entirely when we already have coordinates
+                // for this theater — addresses effectively never change, and
+                // this is a billable Google call per theater per refresh.
+                existingByUrl.TryGetValue(url, out var existing);
+                var alreadyHasCoords = existing?.Latitude != null && existing.Longitude != null;
+
+                if (!alreadyHasCoords && !string.IsNullOrWhiteSpace(address))
                 {
                     var coords = await GeocodeAsync(address);
                     lat = coords?.lat;
                     lng = coords?.lng;
-                    if (coords != null) geocoded++;
+                    if (coords != null) geocoded++; else geocodeFailures++;
                 }
-
-                var existing = await db.CinemaClockTheaters
-                    .FirstOrDefaultAsync(t => t.MetroSlug == metroSlug && t.Url == url);
 
                 if (existing == null)
                 {
@@ -165,9 +250,28 @@ namespace Backend.Services
             }
 
             await db.SaveChangesAsync();
+
+            var usableRows = await db.CinemaClockTheaters
+                .CountAsync(t => t.MetroSlug == metroSlug && t.Latitude != null && t.Longitude != null);
+
+            if (usableRows == 0)
+            {
+                // Rows were stored (names/URLs are still useful for the
+                // per-theater scrape), but with no coordinates the geo-match
+                // can't run at all. Logged as an error because it's silent
+                // from the outside — geo matching just quietly never fires.
+                _logger.LogError(
+                    "CinemaClock directory for {Metro}: stored {Count} theaters but geocoded NONE "
+                    + "({Failures} geocode failures). Geo-matching is disabled for this metro — check that "
+                    + "the Geocoding API is enabled on GooglePlaces:ApiKey (it is a separate API from Places).",
+                    metroSlug, rows.Count, geocodeFailures);
+                return;
+            }
+
             _logger.LogInformation(
-                "CinemaClock directory refreshed for {Metro}: {Count} theaters, {Geocoded} geocoded.",
-                metroSlug, rows.Count, geocoded);
+                "CinemaClock directory refreshed for {Metro}: {Count} theaters, {Geocoded} newly geocoded, "
+                + "{Failures} failures, {Usable} usable for geo-matching.",
+                metroSlug, rows.Count, geocoded, geocodeFailures, usableRows);
         }
 
         // Nearest directory entry to the given point, or null if nothing in
@@ -270,12 +374,36 @@ namespace Backend.Services
                 var url = "https://maps.googleapis.com/maps/api/geocode/json"
                     + $"?address={Uri.EscapeDataString(address)}&key={apiKey}";
                 var response = await client.GetAsync(url);
-                if (!response.IsSuccessStatusCode) return null;
+                if (!response.IsSuccessStatusCode)
+                {
+                    _logger.LogError("Geocoding HTTP {Status} for \"{Address}\".", response.StatusCode, address);
+                    return null;
+                }
 
                 var body = await response.Content.ReadAsStringAsync();
                 using var doc = JsonDocument.Parse(body);
                 var root = doc.RootElement;
-                if (!root.TryGetProperty("status", out var status) || status.GetString() != "OK") return null;
+                var statusText = root.TryGetProperty("status", out var status) ? status.GetString() : null;
+                if (statusText != "OK")
+                {
+                    // Logged loudly, not swallowed. This failing silently is
+                    // what made the whole geo-match feature look "built but
+                    // dead": every theater stored with null coordinates, so
+                    // FindNearestAsync had zero candidates and always fell
+                    // back to fuzzy matching, with nothing in the logs.
+                    //
+                    // REQUEST_DENIED here almost always means the Geocoding
+                    // API isn't enabled on the key — it's a SEPARATE API from
+                    // Places in Google Cloud, and a Places-only key is
+                    // rejected. ZERO_RESULTS means the address genuinely
+                    // didn't resolve.
+                    var errorMessage = root.TryGetProperty("error_message", out var em) ? em.GetString() : null;
+                    _logger.LogError(
+                        "Geocoding returned {Status} for \"{Address}\"{Detail}",
+                        statusText, address,
+                        string.IsNullOrWhiteSpace(errorMessage) ? "" : $" — {errorMessage}");
+                    return null;
+                }
 
                 var location = root.GetProperty("results")[0].GetProperty("geometry").GetProperty("location");
                 return (location.GetProperty("lat").GetDouble(), location.GetProperty("lng").GetDouble());
