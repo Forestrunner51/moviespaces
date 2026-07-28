@@ -148,6 +148,34 @@ namespace Backend.Controllers
                 await ShowtimeRefreshService.MarkScrapedAsync(_db, metro, rowsForMetro);
             }
 
+            // Also stamp per-theater freshness for any scraped theater name
+            // that matches a CinemaClockDirectoryService entry — covers both
+            // a getTheaterShowtimes result (city is typically absent, one
+            // theater) and any directory theater that happened to appear in
+            // a getCityShowtimes dump. Matched by name, not by which run
+            // triggered this webhook: the payload doesn't tell us that, and
+            // this is equivalent — a theater is fresh once we've genuinely
+            // seen its current showtimes, regardless of which scrape mode
+            // produced them.
+            var scrapedTheaterNames = scraped
+                .Select(s => s.TheaterName)
+                .Where(t => !string.IsNullOrWhiteSpace(t))
+                .Select(t => t!)
+                .Distinct(StringComparer.OrdinalIgnoreCase)
+                .ToList();
+
+            if (scrapedTheaterNames.Count > 0)
+            {
+                var directoryMatches = await _db.CinemaClockTheaters
+                    .Where(t => scrapedTheaterNames.Contains(t.Name))
+                    .ToListAsync();
+
+                foreach (var theater in directoryMatches)
+                {
+                    await ShowtimeRefreshService.MarkTheaterScrapedAsync(_db, theater.Id);
+                }
+            }
+
             _logger.LogInformation(
                 "Apify ingest: {Rows} rows, {Titles} titles, {Written} showtimes written, {Purged} purged, metros [{Metros}].",
                 scraped.Count, distinctTitles.Count, insertedOrUpdated, purged, string.Join(", ", scrapedMetros));

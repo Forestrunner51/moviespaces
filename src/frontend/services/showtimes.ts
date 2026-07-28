@@ -44,6 +44,12 @@ export async function fetchShowtimes(
   movieTitle: string,
   theaterName?: string,
   place?: { city?: string | null; state?: string | null },
+  // The Google Places coordinates for the picked theater — when given, the
+  // backend geo-matches this against its own CinemaClock theater directory
+  // for an EXACT match (same physical building, not a guessed name), instead
+  // of fuzzy-matching theaterName against whatever showed up in a metro-wide
+  // scrape. Omit these and it falls back to the fuzzy path unchanged.
+  theaterCoords?: { latitude: number | null; longitude: number | null },
 ): Promise<ShowtimeLookup> {
   if (!movieTitle.trim()) return EMPTY;
 
@@ -53,6 +59,10 @@ export async function fetchShowtimes(
   // metro to refresh, so it will only ever serve already-cached data.
   if (place?.city) params.set("city", place.city);
   if (place?.state) params.set("state", place.state);
+  if (theaterCoords?.latitude != null && theaterCoords?.longitude != null) {
+    params.set("theaterLat", String(theaterCoords.latitude));
+    params.set("theaterLng", String(theaterCoords.longitude));
+  }
 
   try {
     const res = await fetch(

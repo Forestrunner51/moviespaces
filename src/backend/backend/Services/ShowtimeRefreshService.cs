@@ -118,6 +118,100 @@ namespace Backend.Services
             }
         }
 
+        // Per-theater equivalent of TryClaimRefreshAsync — same atomic
+        // conditional UPDATE / guarded INSERT pattern, keyed by a
+        // CinemaClockTheater's id instead of a metro slug. Used when the
+        // directory has a geo-matched theater and we want its exact
+        // showtimes via getTheaterShowtimes, rather than falling back to a
+        // whole-metro scrape.
+        public async Task<bool> TryClaimTheaterRefreshAsync(AppDbContext db, Guid theaterId)
+        {
+            var staleBefore = DateTime.UtcNow - CacheTtl;
+
+            var claimed = await db.TheaterScrapeLogs
+                .Where(l => l.TheaterId == theaterId && l.LastScrapedAt < staleBefore)
+                .ExecuteUpdateAsync(setters => setters
+                    .SetProperty(l => l.LastScrapedAt, DateTime.UtcNow)
+                    .SetProperty(l => l.Status, "refreshing"));
+
+            if (claimed > 0) return true;
+
+            if (await db.TheaterScrapeLogs.AnyAsync(l => l.TheaterId == theaterId)) return false;
+
+            try
+            {
+                db.TheaterScrapeLogs.Add(new TheaterScrapeLog
+                {
+                    TheaterId = theaterId,
+                    LastScrapedAt = DateTime.UtcNow,
+                    Status = "refreshing",
+                });
+                await db.SaveChangesAsync();
+                return true;
+            }
+            catch (DbUpdateException)
+            {
+                db.ChangeTracker.Clear();
+                return false;
+            }
+        }
+
+        // Same fire-and-forget contract as TriggerScrapeAsync, but scoped to
+        // one theater's exact CinemaClock URL — no metro-wide row cap or
+        // theater-ordering problem to hit.
+        public async Task TriggerTheaterScrapeAsync(string theaterUrl)
+        {
+            var token = _configuration["Apify:ApiToken"];
+            if (string.IsNullOrWhiteSpace(token))
+            {
+                _logger.LogError("Cannot trigger theater scrape: Apify:ApiToken is not configured.");
+                return;
+            }
+
+            var input = new { mode = "getTheaterShowtimes", theaterUrl };
+            var url = $"https://api.apify.com/v2/acts/{ActorId}/runs?token={Uri.EscapeDataString(token)}";
+            try
+            {
+                var client = _httpClientFactory.CreateClient();
+                var response = await client.PostAsync(url,
+                    new StringContent(JsonSerializer.Serialize(input), Encoding.UTF8, "application/json"));
+
+                if (!response.IsSuccessStatusCode)
+                {
+                    var body = await response.Content.ReadAsStringAsync();
+                    _logger.LogError("Apify theater run for {Url} failed: {Status} {Body}",
+                        theaterUrl, response.StatusCode, body);
+                    return;
+                }
+
+                _logger.LogInformation("Triggered Apify theater scrape for {Url}.", theaterUrl);
+            }
+            catch (Exception ex)
+            {
+                _logger.LogError(ex, "Apify theater run for {Url} threw.", theaterUrl);
+            }
+        }
+
+        public static async Task MarkTheaterScrapedAsync(AppDbContext db, Guid theaterId)
+        {
+            var existing = await db.TheaterScrapeLogs.FirstOrDefaultAsync(l => l.TheaterId == theaterId);
+            if (existing == null)
+            {
+                db.TheaterScrapeLogs.Add(new TheaterScrapeLog
+                {
+                    TheaterId = theaterId,
+                    LastScrapedAt = DateTime.UtcNow,
+                    Status = "ok",
+                });
+            }
+            else
+            {
+                existing.LastScrapedAt = DateTime.UtcNow;
+                existing.Status = "ok";
+            }
+            await db.SaveChangesAsync();
+        }
+
         // Called by the webhook once rows land, so the TTL window starts from
         // real data rather than from when the run was merely requested.
         public static async Task MarkScrapedAsync(AppDbContext db, string metroSlug, int rowCount)
