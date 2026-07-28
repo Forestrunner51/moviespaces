@@ -35,7 +35,9 @@ import {
 import {
   getDeviceLocation,
   fetchNearbyTheaters,
+  getUserPlace,
   NearbyTheater,
+  UserPlace,
 } from "@/frontend/services/nearby-theaters";
 
 type SpaceType = "public_gathering" | "private_rental";
@@ -184,6 +186,7 @@ export default function CreateSpaceScreen() {
   };
 
   const [theaters, setTheaters] = useState<NearbyTheater[]>([]);
+  const [userPlace, setUserPlace] = useState<UserPlace | null>(null);
   const [theatersLoading, setTheatersLoading] = useState(true);
   const [theatersError, setTheatersError] = useState<string | null>(null);
   const [theaterModalVisible, setTheaterModalVisible] = useState(false);
@@ -198,6 +201,7 @@ export default function CreateSpaceScreen() {
   const [showtimeConfirmed, setShowtimeConfirmed] = useState(false);
   const [showtimeSlots, setShowtimeSlots] = useState<ShowtimeSlot[]>([]);
   const [showtimesLoading, setShowtimesLoading] = useState(false);
+  const [showtimesRefreshing, setShowtimesRefreshing] = useState(false);
   const [selectedSlotId, setSelectedSlotId] = useState<string | null>(null);
   const [nowPlaying, setNowPlaying] = useState<Movie[]>([]);
 
@@ -233,7 +237,15 @@ export default function CreateSpaceScreen() {
 
   useEffect(() => {
     getDeviceLocation()
-      .then((coords) => (coords ? fetchNearbyTheaters(coords) : []))
+      .then(async (coords) => {
+        if (!coords) return [];
+        // Resolve the city alongside the theaters — the showtimes API needs
+        // it to map this user to a scrapable metro. Deliberately not awaited
+        // in series with the theater fetch failing: a geocode miss shouldn't
+        // cost us the theater list.
+        getUserPlace(coords).then(setUserPlace).catch(() => {});
+        return fetchNearbyTheaters(coords);
+      })
       .then(setTheaters)
       .catch((err) => {
         console.error("Failed to load nearby theaters:", err);
@@ -322,23 +334,28 @@ export default function CreateSpaceScreen() {
     WebBrowser.openBrowserAsync(buildGoogleShowtimesUrl(movieName, theaterName));
   };
 
-  // Look up real showtimes from our own nightly-scraped data once the host has
-  // picked both a film and a theater. Theater screenings only — a private
-  // rental isn't a public showing that appears in any listings.
+  // Look up real showtimes once the host has picked both a film and a
+  // theater. Theater screenings only — a private rental isn't a public
+  // showing that appears in any listings.
+  //
+  // Passing the user's city is what lets the backend scrape their metro on
+  // demand; without it they can only ever be served already-cached data.
   useEffect(() => {
     if (spaceType !== "public_gathering" || !movieName.trim() || !theaterName.trim()) {
       setShowtimeSlots([]);
       setSelectedSlotId(null);
+      setShowtimesRefreshing(false);
       return;
     }
 
     let cancelled = false;
     setShowtimesLoading(true);
-    fetchShowtimes(movieName, theaterName)
+    fetchShowtimes(movieName, theaterName, userPlace ?? undefined)
       .then((lookup) => {
         if (cancelled) return;
         setShowtimeSlots(lookup.slots);
         setSelectedSlotId(null);
+        setShowtimesRefreshing(lookup.isRefreshing);
       })
       .finally(() => {
         if (!cancelled) setShowtimesLoading(false);
@@ -349,7 +366,7 @@ export default function CreateSpaceScreen() {
     return () => {
       cancelled = true;
     };
-  }, [spaceType, movieName, theaterName]);
+  }, [spaceType, movieName, theaterName, userPlace]);
 
   // Tapping a real showtime fills both pickers from verified data.
   //
@@ -780,6 +797,15 @@ export default function CreateSpaceScreen() {
               before this data existed. */}
           {spaceType === "public_gathering" && !showtimesLoading && !hasVerifiedShowtimes && (
             <>
+              {/* A scrape was just kicked off for this area. Say so, rather
+                  than letting an empty list imply nothing is playing. */}
+              {showtimesRefreshing && (
+                <Text style={styles.showtimeRefreshingText}>
+                  Getting showtimes for your area — this can take a minute. Use the search below
+                  for now.
+                </Text>
+              )}
+
               {!!movieName.trim() && (
                 <TouchableOpacity
                   activeOpacity={0.85}
@@ -1316,6 +1342,12 @@ const styles = StyleSheet.create({
     paddingVertical: 10,
   },
   showtimeLoadingText: { color: SpaceTheme.mutedOrbit, fontSize: 13 },
+  showtimeRefreshingText: {
+    color: SpaceTheme.accentGold,
+    fontSize: 13,
+    lineHeight: 18,
+    marginBottom: 10,
+  },
   slotSection: {
     ...SpaceStyles.glassCard,
     padding: 14,
