@@ -148,14 +148,32 @@ namespace Backend.Controllers
             // building differently, so this can't be a SQL equality filter.
             if (exactTheaterMatch != null)
             {
+                // HtmlDecode both sides — confirmed live that rows scraped
+                // before the ingest-side decode fix landed still carry raw
+                // entities (e.g. "Dine&#8209;In") that can never byte-match
+                // CinemaClockDirectoryService's already-clean Name. Decoding
+                // here lets that already-stored data self-heal immediately
+                // instead of staying invisible until a fresh scrape happens
+                // to overwrite it — same reasoning as the City IS NULL
+                // leniency above.
                 candidates = candidates
-                    .Where(s => string.Equals(s.TheaterName, exactTheaterMatch, StringComparison.OrdinalIgnoreCase))
+                    .Where(s => string.Equals(
+                        System.Net.WebUtility.HtmlDecode(s.TheaterName),
+                        exactTheaterMatch,
+                        StringComparison.OrdinalIgnoreCase))
                     .ToList();
             }
             else if (!string.IsNullOrWhiteSpace(theaterName))
             {
+                // Decoded before scoring — a raw "&#8209;" survives
+                // TheaterNameMatcher's normalization as the literal digits
+                // "8209" (non-alphanumeric characters are stripped, but
+                // digits aren't), which is pure noise polluting the
+                // similarity score. Harmless when it doesn't change the
+                // winner, real risk when it's the difference between two
+                // close candidates.
                 var distinctTheaters = candidates
-                    .Select(s => s.TheaterName)
+                    .Select(s => System.Net.WebUtility.HtmlDecode(s.TheaterName))
                     .Distinct(StringComparer.OrdinalIgnoreCase)
                     .ToList();
 
@@ -173,7 +191,7 @@ namespace Backend.Controllers
                 }
 
                 candidates = candidates
-                    .Where(s => string.Equals(s.TheaterName, matched, StringComparison.OrdinalIgnoreCase))
+                    .Where(s => string.Equals(System.Net.WebUtility.HtmlDecode(s.TheaterName), matched, StringComparison.OrdinalIgnoreCase))
                     .ToList();
             }
 
@@ -187,11 +205,15 @@ namespace Backend.Controllers
                 movie = Project(movie),
                 metroSlug,
                 isRefreshing,
-                matchedTheaterName = candidates.FirstOrDefault()?.TheaterName,
+                // Decoded for the client too — old rows scraped before the
+                // ingest-side fix can still carry raw entities in the DB.
+                matchedTheaterName = candidates.FirstOrDefault() is { } first
+                    ? System.Net.WebUtility.HtmlDecode(first.TheaterName)
+                    : null,
                 showtimes = candidates.Select(s => new
                 {
                     id = s.Id,
-                    theaterName = s.TheaterName,
+                    theaterName = System.Net.WebUtility.HtmlDecode(s.TheaterName),
                     city = s.City,
                     // ISO-ish local wall clock, NO trailing Z — the client must
                     // not reinterpret this as UTC.

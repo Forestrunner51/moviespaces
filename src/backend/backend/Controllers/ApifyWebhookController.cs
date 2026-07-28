@@ -387,6 +387,15 @@ namespace Backend.Controllers
             return null;
         }
 
+        // HTML-decoded, not just trimmed — confirmed live that the actor's
+        // dataset carries raw HTML entities in theaterName (e.g. AMC's
+        // "Dine-In" comes through as "Dine&#8209;In", a non-breaking hyphen,
+        // and a non-breaking space renders as "&nbsp;"). Undecoded, that
+        // string can never byte-match CinemaClockDirectoryService's Name
+        // (which IS decoded, since it's parsed from real HTML via
+        // HtmlAgilityPack) — silently breaking exact theater matching, the
+        // City backfill, and theater-freshness stamping, all three of which
+        // compare these strings for equality.
         private static string? FirstString(JsonElement el, params string[] names)
         {
             foreach (var name in names)
@@ -395,7 +404,7 @@ namespace Backend.Controllers
                     && v.ValueKind == JsonValueKind.String
                     && !string.IsNullOrWhiteSpace(v.GetString()))
                 {
-                    return v.GetString()!.Trim();
+                    return System.Net.WebUtility.HtmlDecode(v.GetString()!.Trim());
                 }
             }
             return null;
