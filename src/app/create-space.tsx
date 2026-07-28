@@ -349,22 +349,54 @@ export default function CreateSpaceScreen() {
     }
 
     let cancelled = false;
-    setShowtimesLoading(true);
-    fetchShowtimes(movieName, theaterName, userPlace ?? undefined)
-      .then((lookup) => {
-        if (cancelled) return;
-        setShowtimeSlots(lookup.slots);
-        setSelectedSlotId(null);
-        setShowtimesRefreshing(lookup.isRefreshing);
-      })
-      .finally(() => {
-        if (!cancelled) setShowtimesLoading(false);
-      });
+    let pollHandle: ReturnType<typeof setInterval> | null = null;
+    let giveUpHandle: ReturnType<typeof setTimeout> | null = null;
+
+    const runLookup = (showSpinner: boolean) => {
+      if (showSpinner) setShowtimesLoading(true);
+      fetchShowtimes(movieName, theaterName, userPlace ?? undefined)
+        .then((lookup) => {
+          if (cancelled) return;
+          setShowtimeSlots(lookup.slots);
+          setSelectedSlotId(null);
+          setShowtimesRefreshing(lookup.isRefreshing);
+
+          // Real data landed, or the backend has nothing left to refresh —
+          // either way there's nothing more polling can accomplish.
+          if (lookup.slots.length > 0 || !lookup.isRefreshing) {
+            if (pollHandle) clearInterval(pollHandle);
+          }
+        })
+        .finally(() => {
+          if (!cancelled && showSpinner) setShowtimesLoading(false);
+        });
+    };
+
+    runLookup(true);
+
+    // A first-time metro request kicks off a real scrape (see
+    // ShowtimeRefreshService) that takes longer than any request should wait
+    // on — the initial response comes back empty with isRefreshing:true.
+    // Without this, that host is stuck on the Google fallback forever, even
+    // once the data actually arrives seconds later, because nothing else
+    // would ever check again. Each poll is a cheap DB read on our own
+    // backend, not a second Apify call: the atomic TTL claim there means
+    // re-checking here can't trigger a second billable scrape no matter how
+    // many times it fires.
+    pollHandle = setInterval(() => runLookup(false), 12000);
+
+    // Give up after ~2 minutes so a metro whose scrape is slow, empty, or
+    // failed doesn't poll in the background indefinitely.
+    giveUpHandle = setTimeout(() => {
+      if (pollHandle) clearInterval(pollHandle);
+    }, 120000);
 
     // The film/theater can change while a request is in flight; without this
     // an older response could land last and show the wrong film's showtimes.
     return () => {
       cancelled = true;
+      if (pollHandle) clearInterval(pollHandle);
+      if (giveUpHandle) clearTimeout(giveUpHandle);
     };
   }, [spaceType, movieName, theaterName, userPlace]);
 
