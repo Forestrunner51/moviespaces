@@ -92,9 +92,18 @@ namespace Backend.Controllers
             // on the raw city would exclude every suburb, which is the whole
             // problem metro mapping exists to solve. An unmapped caller isn't
             // filtered at all rather than being filtered to nothing.
+            //
+            // A row with City == null is NOT excluded here — confirmed live
+            // that getTheaterShowtimes results carry no city field at all, so
+            // ingest backfills it from the theater directory when it can, but
+            // a row can still land without one (theater not yet directoried).
+            // Excluding those would silently hide a real, successfully
+            // scraped showtime. The subsequent theater-name match (exact
+            // directory match or fuzzy) still scopes correctly to one
+            // physical theater regardless of whether City is populated.
             if (metroSlug != null)
             {
-                query = query.Where(s => s.City != null && s.City.ToLower() == metroSlug.ToLower());
+                query = query.Where(s => s.City == null || s.City.ToLower() == metroSlug.ToLower());
             }
 
             var candidates = (await query.OrderBy(s => s.StartsAt).ToListAsync())
