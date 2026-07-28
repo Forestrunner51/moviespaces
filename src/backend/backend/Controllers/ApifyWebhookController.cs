@@ -105,6 +105,22 @@ namespace Backend.Controllers
                 movieIdByTitle[title] = movieId;
             }
 
+            // getTheaterShowtimes results carry NO city field at all —
+            // confirmed live, not assumed: a real per-theater scrape (AMC
+            // Dine-In Stonebriar 24) came back with every row's City null.
+            // Without a backfill, ShowtimesController's read query excludes
+            // every one of those rows once a metro is resolved (it requires
+            // City to match the metro slug), so a successful per-theater
+            // scrape would write real showtimes that the app could never
+            // actually see. We DO know the metro here — CinemaClockTheater
+            // already records which metro a theater belongs to — so any row
+            // whose TheaterName matches a directory entry gets that theater's
+            // MetroSlug filled in as its City.
+            var directoryTheaters = await _db.CinemaClockTheaters.ToListAsync();
+            var metroByTheaterName = directoryTheaters
+                .GroupBy(t => t.Name, StringComparer.OrdinalIgnoreCase)
+                .ToDictionary(g => g.Key, g => g.First().MetroSlug, StringComparer.OrdinalIgnoreCase);
+
             var insertedOrUpdated = 0;
             foreach (var item in scraped)
             {
@@ -112,6 +128,12 @@ namespace Backend.Controllers
                 if (item.StartsAt == null) continue;
                 if (string.IsNullOrWhiteSpace(item.TheaterName)) continue;
                 if (!movieIdByTitle.TryGetValue(item.MovieTitle, out var movieId)) continue;
+
+                if (string.IsNullOrWhiteSpace(item.City)
+                    && metroByTheaterName.TryGetValue(item.TheaterName, out var backfilledMetro))
+                {
+                    item.City = backfilledMetro;
+                }
 
                 await UpsertShowtimeAsync(movieId, item);
                 insertedOrUpdated++;
