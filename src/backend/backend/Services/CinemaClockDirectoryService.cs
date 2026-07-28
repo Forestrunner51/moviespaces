@@ -313,6 +313,26 @@ namespace Backend.Services
                 .First().Theater;
         }
 
+        // Diagnostic: the nearest N directory entries to a point with their
+        // actual distances, regardless of match radius. Answers "why didn't
+        // my theater match?" — which is otherwise invisible, since a failed
+        // geo-match is indistinguishable from having no data at all.
+        public async Task<List<(CinemaClockTheater Theater, double DistanceMeters)>> NearestWithDistancesAsync(
+            AppDbContext db, string metroSlug, double lat, double lng, int take = 5)
+        {
+            var candidates = await db.CinemaClockTheaters
+                .Where(t => t.MetroSlug == metroSlug && t.Latitude != null && t.Longitude != null)
+                .ToListAsync();
+
+            return candidates
+                .Select(t => (Theater: t, DistanceMeters: HaversineMeters(lat, lng, t.Latitude!.Value, t.Longitude!.Value)))
+                .OrderBy(c => c.DistanceMeters)
+                .Take(take)
+                .ToList();
+        }
+
+        public static double MatchRadius => MatchRadiusMeters;
+
         private async Task<List<(string Name, string Url, string? Address)>> FetchDirectoryPageAsync(string pageSlug)
         {
             var client = _httpClientFactory.CreateClient();

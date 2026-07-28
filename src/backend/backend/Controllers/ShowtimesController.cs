@@ -238,6 +238,42 @@ namespace Backend.Controllers
         // isn't playing there". Aggregate counts only: no keys, no URLs, no
         // user data, so this is safe to leave unauthenticated alongside the
         // public catalog data this controller already serves.
+        // Companion to /diagnostics: given the coordinates the app would send
+        // for a picked theater, show the nearest directory entries and their
+        // actual distances. A geo-match failure is otherwise silent and
+        // indistinguishable from "no data", so this is the only way to tell
+        // "the theater isn't in the directory" from "it's there but the two
+        // geocoders disagree by more than the match radius".
+        [HttpGet("diagnostics/nearest")]
+        public async Task<IActionResult> GetNearest(
+            [FromQuery] double lat,
+            [FromQuery] double lng,
+            [FromQuery] string? city,
+            [FromQuery] string? state)
+        {
+            var metroSlug = MetroAreas.Resolve(city, state);
+            if (metroSlug == null)
+            {
+                return Ok(new { metroSlug = (string?)null, error = "City/state did not resolve to a supported metro." });
+            }
+
+            var nearest = await _directory.NearestWithDistancesAsync(_db, metroSlug, lat, lng);
+            return Ok(new
+            {
+                metroSlug,
+                matchRadiusMeters = CinemaClockDirectoryService.MatchRadius,
+                nearest = nearest.Select(n => new
+                {
+                    name = n.Theater.Name,
+                    address = n.Theater.Address,
+                    latitude = n.Theater.Latitude,
+                    longitude = n.Theater.Longitude,
+                    distanceMeters = Math.Round(n.DistanceMeters),
+                    withinRadius = n.DistanceMeters <= CinemaClockDirectoryService.MatchRadius,
+                }),
+            });
+        }
+
         [HttpGet("diagnostics")]
         public async Task<IActionResult> GetDiagnostics()
         {
