@@ -123,7 +123,15 @@ namespace Backend.Controllers
             {
                 try
                 {
-                    await _directory.EnsureFreshAsync(_db, metroSlug);
+                    // Non-blocking: a first-time crawl is one page fetch plus
+                    // a geocode per theater (~30s for Dallas's 81), far too
+                    // slow to await inside a request. This caller falls back
+                    // to fuzzy matching and the directory serves the next one.
+                    if (!await _directory.IsUsableAsync(_db, metroSlug))
+                    {
+                        _directory.RequestRefresh(metroSlug);
+                    }
+
                     var directoryMatch = await _directory.FindNearestAsync(_db, metroSlug, theaterLat.Value, theaterLng.Value, theaterName);
                     if (directoryMatch != null)
                     {
@@ -148,19 +156,16 @@ namespace Backend.Controllers
             // building differently, so this can't be a SQL equality filter.
             if (exactTheaterMatch != null)
             {
-                // HtmlDecode both sides — confirmed live that rows scraped
-                // before the ingest-side decode fix landed still carry raw
-                // entities (e.g. "Dine&#8209;In") that can never byte-match
-                // CinemaClockDirectoryService's already-clean Name. Decoding
-                // here lets that already-stored data self-heal immediately
-                // instead of staying invisible until a fresh scrape happens
-                // to overwrite it — same reasoning as the City IS NULL
-                // leniency above.
+                // Compared via ScrapedText, not raw equality — rows scraped
+                // before the ingest-side decode fix still carry malformed
+                // entities ("Dine&#8209In") that plain HtmlDecode can't
+                // repair, so a byte comparison against the directory's clean
+                // Name fails. Normalizing both sides lets already-stored data
+                // self-heal immediately rather than staying invisible until a
+                // fresh scrape overwrites it — same reasoning as the
+                // City IS NULL leniency above.
                 candidates = candidates
-                    .Where(s => string.Equals(
-                        System.Net.WebUtility.HtmlDecode(s.TheaterName),
-                        exactTheaterMatch,
-                        StringComparison.OrdinalIgnoreCase))
+                    .Where(s => ScrapedText.SameTheater(s.TheaterName, exactTheaterMatch))
                     .ToList();
             }
             else if (!string.IsNullOrWhiteSpace(theaterName))
@@ -173,7 +178,7 @@ namespace Backend.Controllers
                 // winner, real risk when it's the difference between two
                 // close candidates.
                 var distinctTheaters = candidates
-                    .Select(s => System.Net.WebUtility.HtmlDecode(s.TheaterName))
+                    .Select(s => ScrapedText.Decode(s.TheaterName))
                     .Distinct(StringComparer.OrdinalIgnoreCase)
                     .ToList();
 
@@ -191,7 +196,7 @@ namespace Backend.Controllers
                 }
 
                 candidates = candidates
-                    .Where(s => string.Equals(System.Net.WebUtility.HtmlDecode(s.TheaterName), matched, StringComparison.OrdinalIgnoreCase))
+                    .Where(s => ScrapedText.SameTheater(s.TheaterName, matched))
                     .ToList();
             }
 
@@ -208,12 +213,12 @@ namespace Backend.Controllers
                 // Decoded for the client too — old rows scraped before the
                 // ingest-side fix can still carry raw entities in the DB.
                 matchedTheaterName = candidates.FirstOrDefault() is { } first
-                    ? System.Net.WebUtility.HtmlDecode(first.TheaterName)
+                    ? ScrapedText.Decode(first.TheaterName)
                     : null,
                 showtimes = candidates.Select(s => new
                 {
                     id = s.Id,
-                    theaterName = System.Net.WebUtility.HtmlDecode(s.TheaterName),
+                    theaterName = ScrapedText.Decode(s.TheaterName),
                     city = s.City,
                     // ISO-ish local wall clock, NO trailing Z — the client must
                     // not reinterpret this as UTC.
@@ -223,6 +228,56 @@ namespace Backend.Controllers
                     format = s.Format,
                     bookingLink = s.BookingLink,
                 }),
+            });
+        }
+
+        // Operational visibility into the ingest pipeline, which is otherwise
+        // completely opaque — there's no other way to tell "no showtimes"
+        // (nothing scraped yet) apart from "geo-matching is silently broken"
+        // (theaters stored but none geocoded) apart from "this movie just
+        // isn't playing there". Aggregate counts only: no keys, no URLs, no
+        // user data, so this is safe to leave unauthenticated alongside the
+        // public catalog data this controller already serves.
+        [HttpGet("diagnostics")]
+        public async Task<IActionResult> GetDiagnostics()
+        {
+            var theatersByMetro = await _db.CinemaClockTheaters
+                .GroupBy(t => t.MetroSlug)
+                .Select(g => new
+                {
+                    metro = g.Key,
+                    theaters = g.Count(),
+                    geocoded = g.Count(t => t.Latitude != null && t.Longitude != null),
+                    lastVerified = g.Max(t => t.LastVerifiedAt),
+                })
+                .ToListAsync();
+
+            var showtimesByCity = await _db.Showtimes
+                .GroupBy(s => s.City)
+                .Select(g => new
+                {
+                    city = g.Key ?? "(null)",
+                    showtimes = g.Count(),
+                    theaters = g.Select(s => s.TheaterName).Distinct().Count(),
+                })
+                .ToListAsync();
+
+            var metroLogs = await _db.MetroScrapeLogs
+                .Select(l => new { l.MetroSlug, l.Status, l.LastScrapedAt, l.LastRowCount })
+                .ToListAsync();
+
+            var theaterLogs = await _db.TheaterScrapeLogs.CountAsync();
+
+            return Ok(new
+            {
+                movies = await _db.NowPlayingMovies.CountAsync(),
+                totalShowtimes = await _db.Showtimes.CountAsync(),
+                // geocoded == 0 while theaters > 0 is the specific signature
+                // of the Geocoding API not being enabled on the key.
+                directory = theatersByMetro,
+                showtimesByCity,
+                metroScrapeLogs = metroLogs,
+                theaterScrapeLogCount = theaterLogs,
             });
         }
 
