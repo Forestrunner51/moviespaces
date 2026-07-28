@@ -20,11 +20,19 @@ namespace Backend.Controllers
     {
         private readonly AppDbContext _db;
         private readonly ShowtimeRefreshService _refresh;
+        private readonly CinemaClockDirectoryService _directory;
+        private readonly ILogger<ShowtimesController> _logger;
 
-        public ShowtimesController(AppDbContext db, ShowtimeRefreshService refresh)
+        public ShowtimesController(
+            AppDbContext db,
+            ShowtimeRefreshService refresh,
+            CinemaClockDirectoryService directory,
+            ILogger<ShowtimesController> logger)
         {
             _db = db;
             _refresh = refresh;
+            _directory = directory;
+            _logger = logger;
         }
 
         [HttpGet]
@@ -33,7 +41,9 @@ namespace Backend.Controllers
             [FromQuery] string? theaterName,
             [FromQuery] string? date,
             [FromQuery] string? city,
-            [FromQuery] string? state)
+            [FromQuery] string? state,
+            [FromQuery] double? theaterLat,
+            [FromQuery] double? theaterLng)
         {
             if (string.IsNullOrWhiteSpace(movieTitle))
             {
@@ -91,9 +101,49 @@ namespace Backend.Controllers
                 .Where(IsUpcoming)
                 .ToList();
 
+            // Directory-first: if we know exactly which physical theater this
+            // is (geo-matched, not guessed), match on CinemaClock's own exact
+            // name for it — no fuzzy string comparison, no risk of the
+            // "Regal North Star" / "Regal South Star" mismatch class of bug.
+            // Falls through to the fuzzy path below when there's no directory
+            // coverage for this metro or nothing within match radius, so
+            // theaters we haven't directoried yet still work exactly as
+            // before this feature existed.
+            string? exactTheaterMatch = null;
+            if (metroSlug != null && theaterLat.HasValue && theaterLng.HasValue)
+            {
+                try
+                {
+                    await _directory.EnsureFreshAsync(_db, metroSlug);
+                    var directoryMatch = await _directory.FindNearestAsync(_db, metroSlug, theaterLat.Value, theaterLng.Value, theaterName);
+                    if (directoryMatch != null)
+                    {
+                        exactTheaterMatch = directoryMatch.Name;
+                        if (await _refresh.TryClaimTheaterRefreshAsync(_db, directoryMatch.Id))
+                        {
+                            _ = _refresh.TriggerTheaterScrapeAsync(directoryMatch.Url);
+                            isRefreshing = true;
+                        }
+                    }
+                }
+                catch (Exception ex)
+                {
+                    // Directory lookup is a precision improvement, not a
+                    // requirement — any failure here just means the fuzzy
+                    // path below runs exactly as it always has.
+                    _logger.LogWarning(ex, "CinemaClock directory lookup failed for metro {Metro}.", metroSlug);
+                }
+            }
+
             // Theater matching runs in memory: the two sources name the same
             // building differently, so this can't be a SQL equality filter.
-            if (!string.IsNullOrWhiteSpace(theaterName))
+            if (exactTheaterMatch != null)
+            {
+                candidates = candidates
+                    .Where(s => string.Equals(s.TheaterName, exactTheaterMatch, StringComparison.OrdinalIgnoreCase))
+                    .ToList();
+            }
+            else if (!string.IsNullOrWhiteSpace(theaterName))
             {
                 var distinctTheaters = candidates
                     .Select(s => s.TheaterName)

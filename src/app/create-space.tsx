@@ -354,7 +354,10 @@ export default function CreateSpaceScreen() {
 
     const runLookup = (showSpinner: boolean) => {
       if (showSpinner) setShowtimesLoading(true);
-      fetchShowtimes(movieName, theaterName, userPlace ?? undefined)
+      fetchShowtimes(movieName, theaterName, userPlace ?? undefined, {
+        latitude: theaterLat,
+        longitude: theaterLng,
+      })
         .then((lookup) => {
           if (cancelled) return;
           setShowtimeSlots(lookup.slots);
@@ -398,7 +401,7 @@ export default function CreateSpaceScreen() {
       if (pollHandle) clearInterval(pollHandle);
       if (giveUpHandle) clearTimeout(giveUpHandle);
     };
-  }, [spaceType, movieName, theaterName, userPlace]);
+  }, [spaceType, movieName, theaterName, userPlace, theaterLat, theaterLng]);
 
   // Tapping a real showtime fills both pickers from verified data.
   //

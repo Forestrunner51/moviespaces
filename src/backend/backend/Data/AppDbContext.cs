@@ -25,6 +25,8 @@ public class AppDbContext : DbContext
     public DbSet<NowPlayingMovie> NowPlayingMovies => Set<NowPlayingMovie>();
     public DbSet<Showtime> Showtimes => Set<Showtime>();
     public DbSet<MetroScrapeLog> MetroScrapeLogs => Set<MetroScrapeLog>();
+    public DbSet<CinemaClockTheater> CinemaClockTheaters => Set<CinemaClockTheater>();
+    public DbSet<TheaterScrapeLog> TheaterScrapeLogs => Set<TheaterScrapeLog>();
 
     protected override void OnModelCreating(ModelBuilder builder)
     {
@@ -66,5 +68,17 @@ public class AppDbContext : DbContext
         // Serves the app's "what's playing, soonest first" read path.
         builder.Entity<Showtime>()
             .HasIndex(s => new { s.MovieId, s.StartsAt });
+
+        // A theater can't appear twice under the same URL within one metro —
+        // guards the directory-refresh upsert against duplicate rows.
+        builder.Entity<CinemaClockTheater>()
+            .HasIndex(t => new { t.MetroSlug, t.Url })
+            .IsUnique();
+
+        // Nearest-neighbor search scans a metro's rows in memory (see
+        // CinemaClockDirectoryService) — this index makes fetching "all
+        // theaters for this metro" itself cheap.
+        builder.Entity<CinemaClockTheater>()
+            .HasIndex(t => t.MetroSlug);
     }
 }
