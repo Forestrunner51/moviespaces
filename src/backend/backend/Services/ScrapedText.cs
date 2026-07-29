@@ -36,11 +36,37 @@ namespace Backend.Services
             return Whitespace.Replace(decoded.Replace(' ', ' '), " ").Trim();
         }
 
-        // Case/whitespace/entity-insensitive key for comparing a scraped
+        // Every Unicode dash that renders as a hyphen. The two sources
+        // genuinely disagree on which one they use for the SAME theater:
+        // CinemaClock's directory page yields an ASCII "-" (U+002D) while the
+        // Apify dataset yields a non-breaking hyphen (U+2011) — "AMC Dine-In
+        // Stonebriar 24" vs "AMC Dine‑In Stonebriar 24". Those are different
+        // strings, so an exact comparison silently returns nothing.
+        private static readonly char[] DashVariants =
+        {
+            '‐', // hyphen
+            '‑', // non-breaking hyphen
+            '‒', // figure dash
+            '–', // en dash
+            '—', // em dash
+            '―', // horizontal bar
+            '−', // minus sign
+            '﹘', '﹣', '－', // small/fullwidth forms
+        };
+
+        // Case/whitespace/entity/dash-insensitive key for comparing a scraped
         // theater name against a directory name. Deliberately preserves
         // digits — "AMC Grapevine 30" and "AMC Grapevine 12" are different
         // venues — so this is a normalization, not a fuzzy match.
-        public static string ComparisonKey(string? value) => Decode(value).ToLowerInvariant();
+        public static string ComparisonKey(string? value)
+        {
+            var decoded = Decode(value).ToLowerInvariant();
+            foreach (var dash in DashVariants)
+            {
+                decoded = decoded.Replace(dash, '-');
+            }
+            return decoded;
+        }
 
         public static bool SameTheater(string? a, string? b) =>
             ComparisonKey(a).Length > 0 && ComparisonKey(a) == ComparisonKey(b);
