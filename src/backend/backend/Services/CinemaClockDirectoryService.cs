@@ -38,12 +38,24 @@ namespace Backend.Services
         // geocode would re-crawl on every single request.
         private static readonly TimeSpan FailedRetryDelay = TimeSpan.FromMinutes(15);
 
-        // A theater within this radius of the Google Places pick is treated
-        // as the same physical building. Tight enough that two distinct
-        // theaters in the same shopping center shouldn't collide, loose
-        // enough to absorb small geocoding error between Google's and our
-        // own geocoded coordinates for the same address.
-        private const double MatchRadiusMeters = 200;
+        // Two-tier matching, because a single radius can't be both tight
+        // enough to avoid conflating neighbours and loose enough to absorb
+        // real geocoder disagreement.
+        //
+        // The two sides come from DIFFERENT Google APIs: the app sends the
+        // Places POI location for the theater, while we store the Geocoding
+        // result for its street address. For a venue on a large parcel those
+        // legitimately differ — measured 236m for AMC Dine-In Stonebriar 24
+        // (a mall), which an earlier 200m radius rejected by 36 metres while
+        // the nearest *other* theater sat 5.7km away. Distance alone was
+        // never going to separate those two cases.
+        //
+        // So: very close means same building, no further evidence needed.
+        // Further out, require the names to agree as well — which is exactly
+        // where a wrong match would otherwise slip in.
+        private const double CloseRadiusMeters = 450;
+        private const double WideRadiusMeters = 2000;
+        private const double WideRadiusMinNameSimilarity = 0.55;
 
         // In-process guard so concurrent requests for the same uncrawled
         // metro don't each start their own crawl (each of which would fire a
@@ -274,22 +286,16 @@ namespace Backend.Services
                 metroSlug, rows.Count, geocoded, geocodeFailures, usableRows);
         }
 
-        // Nearest directory entry to the given point, or null if nothing in
-        // this metro's directory is within MatchRadiusMeters — returning null
-        // rather than the closest-however-far entry means a genuinely
-        // uncovered theater falls back to the fuzzy-match path instead of
-        // silently being mapped to the wrong building.
+        // The directory entry for the same physical theater as the given
+        // point, or null when we can't be confident — returning null makes
+        // the caller fall back to fuzzy name matching, which is strictly
+        // better than silently attaching the wrong theater's showtimes.
         //
-        // nameHint (the Google Places name, when available) is used to break
-        // ties among MULTIPLE candidates within the radius — confirmed via
-        // real-world distance testing that two distinct theaters in the same
-        // shopping plaza can be as little as ~80m apart, both comfortably
-        // inside a 200m radius. Pure nearest-distance would pick whichever one
-        // happens to be a few meters closer, which has no relationship to
-        // which one the host actually selected. When two+ candidates are
-        // within range, the one whose name is also most similar to what the
-        // host picked wins; distance alone only decides when there's no name
-        // to compare against.
+        // Nearest-within-CloseRadius wins outright: at that distance it's the
+        // same building, and the name hint can't help anyway (the two sources
+        // name theaters differently, which is the whole reason geo matching
+        // exists). Between Close and Wide, distance is no longer sufficient
+        // evidence on its own, so the names must also agree.
         public async Task<CinemaClockTheater?> FindNearestAsync(
             AppDbContext db, string metroSlug, double lat, double lng, string? nameHint = null)
         {
@@ -297,20 +303,46 @@ namespace Backend.Services
                 .Where(t => t.MetroSlug == metroSlug && t.Latitude != null && t.Longitude != null)
                 .ToListAsync();
 
-            var inRange = candidates
-                .Select(t => (Theater: t, Distance: HaversineMeters(lat, lng, t.Latitude!.Value, t.Longitude!.Value)))
-                .Where(c => c.Distance <= MatchRadiusMeters)
+            var scored = candidates
+                .Select(t => (
+                    Theater: t,
+                    Distance: HaversineMeters(lat, lng, t.Latitude!.Value, t.Longitude!.Value),
+                    NameScore: string.IsNullOrWhiteSpace(nameHint)
+                        ? 0
+                        : TheaterNameMatcher.Similarity(nameHint, t.Name)))
+                .OrderBy(c => c.Distance)
                 .ToList();
 
-            if (inRange.Count == 0) return null;
-            if (inRange.Count == 1 || string.IsNullOrWhiteSpace(nameHint)) return inRange
-                .OrderBy(c => c.Distance)
-                .First().Theater;
+            if (scored.Count == 0) return null;
 
-            return inRange
-                .OrderByDescending(c => TheaterNameMatcher.Similarity(nameHint, c.Theater.Name))
+            // Unambiguously close — accept the nearest.
+            var close = scored.Where(c => c.Distance <= CloseRadiusMeters).ToList();
+            if (close.Count > 0)
+            {
+                // More than one candidate this close means neighbouring
+                // venues (a multi-theater plaza); let the name decide which
+                // one the host actually picked.
+                if (close.Count > 1 && !string.IsNullOrWhiteSpace(nameHint))
+                {
+                    return close
+                        .OrderByDescending(c => c.NameScore)
+                        .ThenBy(c => c.Distance)
+                        .First().Theater;
+                }
+                return close[0].Theater;
+            }
+
+            // Beyond the close radius, distance alone isn't evidence — the
+            // name has to corroborate it.
+            if (string.IsNullOrWhiteSpace(nameHint)) return null;
+
+            var corroborated = scored
+                .Where(c => c.Distance <= WideRadiusMeters && c.NameScore >= WideRadiusMinNameSimilarity)
+                .OrderByDescending(c => c.NameScore)
                 .ThenBy(c => c.Distance)
-                .First().Theater;
+                .ToList();
+
+            return corroborated.Count > 0 ? corroborated[0].Theater : null;
         }
 
         // Diagnostic: the nearest N directory entries to a point with their
@@ -331,7 +363,8 @@ namespace Backend.Services
                 .ToList();
         }
 
-        public static double MatchRadius => MatchRadiusMeters;
+        public static double CloseRadius => CloseRadiusMeters;
+        public static double WideRadius => WideRadiusMeters;
 
         private async Task<List<(string Name, string Url, string? Address)>> FetchDirectoryPageAsync(string pageSlug)
         {
