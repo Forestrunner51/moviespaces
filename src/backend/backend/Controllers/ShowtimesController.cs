@@ -261,7 +261,8 @@ namespace Backend.Controllers
             return Ok(new
             {
                 metroSlug,
-                matchRadiusMeters = CinemaClockDirectoryService.MatchRadius,
+                closeRadiusMeters = CinemaClockDirectoryService.CloseRadius,
+                wideRadiusMeters = CinemaClockDirectoryService.WideRadius,
                 nearest = nearest.Select(n => new
                 {
                     name = n.Theater.Name,
@@ -269,7 +270,10 @@ namespace Backend.Controllers
                     latitude = n.Theater.Latitude,
                     longitude = n.Theater.Longitude,
                     distanceMeters = Math.Round(n.DistanceMeters),
-                    withinRadius = n.DistanceMeters <= CinemaClockDirectoryService.MatchRadius,
+                    // Close = matched on distance alone; wide = matched only
+                    // if the name also corroborates it.
+                    withinCloseRadius = n.DistanceMeters <= CinemaClockDirectoryService.CloseRadius,
+                    withinWideRadius = n.DistanceMeters <= CinemaClockDirectoryService.WideRadius,
                 }),
             });
         }
