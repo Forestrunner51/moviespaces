@@ -64,6 +64,48 @@ namespace Backend.Controllers
                 isRefreshing = true;
             }
 
+            // Resolve the picked theater against the directory BEFORE the
+            // movie lookup, because triggering a per-theater scrape doesn't
+            // depend on the movie — and gating it behind a known movie
+            // creates a chicken-and-egg deadlock: a theater we've never
+            // scraped only has movies we've never seen, so the movie lookup
+            // fails, we return early, and the scrape that would have taught
+            // us those movies never fires. That theater then stays
+            // permanently unscraped no matter how many times it's picked.
+            string? exactTheaterMatch = null;
+            if (metroSlug != null && theaterLat.HasValue && theaterLng.HasValue)
+            {
+                try
+                {
+                    // Non-blocking: a first-time crawl is one page fetch plus
+                    // a geocode per theater (~30s for Dallas's 81), far too
+                    // slow to await inside a request. This caller falls back
+                    // to fuzzy matching and the directory serves the next one.
+                    if (!await _directory.IsUsableAsync(_db, metroSlug))
+                    {
+                        _directory.RequestRefresh(metroSlug);
+                    }
+
+                    var directoryMatch = await _directory.FindNearestAsync(_db, metroSlug, theaterLat.Value, theaterLng.Value, theaterName);
+                    if (directoryMatch != null)
+                    {
+                        exactTheaterMatch = directoryMatch.Name;
+                        if (await _refresh.TryClaimTheaterRefreshAsync(_db, directoryMatch.Id))
+                        {
+                            _ = _refresh.TriggerTheaterScrapeAsync(directoryMatch.Url);
+                            isRefreshing = true;
+                        }
+                    }
+                }
+                catch (Exception ex)
+                {
+                    // Directory lookup is a precision improvement, not a
+                    // requirement — any failure here just means the fuzzy
+                    // path below runs exactly as it always has.
+                    _logger.LogWarning(ex, "CinemaClock directory lookup failed for metro {Metro}.", metroSlug);
+                }
+            }
+
             var movie = await ResolveMovieAsync(movieTitle);
             if (movie == null)
             {
@@ -71,7 +113,11 @@ namespace Backend.Controllers
                 {
                     movie = (object?)null,
                     metroSlug,
+                    // isRefreshing may now be true here: we don't know this
+                    // movie yet, but a scrape for the picked theater is
+                    // underway and may well introduce it.
                     isRefreshing,
+                    matchedTheaterName = exactTheaterMatch,
                     showtimes = Array.Empty<object>(),
                 });
             }
@@ -110,50 +156,9 @@ namespace Backend.Controllers
                 .Where(IsUpcoming)
                 .ToList();
 
-            // Directory-first: if we know exactly which physical theater this
-            // is (geo-matched, not guessed), match on CinemaClock's own exact
-            // name for it — no fuzzy string comparison, no risk of the
-            // "Regal North Star" / "Regal South Star" mismatch class of bug.
-            // Falls through to the fuzzy path below when there's no directory
-            // coverage for this metro or nothing within match radius, so
-            // theaters we haven't directoried yet still work exactly as
-            // before this feature existed.
-            string? exactTheaterMatch = null;
-            if (metroSlug != null && theaterLat.HasValue && theaterLng.HasValue)
-            {
-                try
-                {
-                    // Non-blocking: a first-time crawl is one page fetch plus
-                    // a geocode per theater (~30s for Dallas's 81), far too
-                    // slow to await inside a request. This caller falls back
-                    // to fuzzy matching and the directory serves the next one.
-                    if (!await _directory.IsUsableAsync(_db, metroSlug))
-                    {
-                        _directory.RequestRefresh(metroSlug);
-                    }
-
-                    var directoryMatch = await _directory.FindNearestAsync(_db, metroSlug, theaterLat.Value, theaterLng.Value, theaterName);
-                    if (directoryMatch != null)
-                    {
-                        exactTheaterMatch = directoryMatch.Name;
-                        if (await _refresh.TryClaimTheaterRefreshAsync(_db, directoryMatch.Id))
-                        {
-                            _ = _refresh.TriggerTheaterScrapeAsync(directoryMatch.Url);
-                            isRefreshing = true;
-                        }
-                    }
-                }
-                catch (Exception ex)
-                {
-                    // Directory lookup is a precision improvement, not a
-                    // requirement — any failure here just means the fuzzy
-                    // path below runs exactly as it always has.
-                    _logger.LogWarning(ex, "CinemaClock directory lookup failed for metro {Metro}.", metroSlug);
-                }
-            }
-
             // Theater matching runs in memory: the two sources name the same
             // building differently, so this can't be a SQL equality filter.
+            // exactTheaterMatch was resolved above, before the movie lookup.
             if (exactTheaterMatch != null)
             {
                 // Compared via ScrapedText, not raw equality — rows scraped
