@@ -202,6 +202,12 @@ export default function CreateSpaceScreen() {
   const [showtimeSlots, setShowtimeSlots] = useState<ShowtimeSlot[]>([]);
   const [showtimesLoading, setShowtimesLoading] = useState(false);
   const [showtimesRefreshing, setShowtimesRefreshing] = useState(false);
+  // Dev-only visibility into the showtimes lookup. __DEV__ is false in any
+  // production/EAS build, so this can never reach the App Store — it exists
+  // because a failed lookup is otherwise indistinguishable on-device from
+  // "this movie isn't playing here", which made the picker impossible to
+  // debug from outside.
+  const [showtimeDebug, setShowtimeDebug] = useState<string | null>(null);
   const [selectedSlotId, setSelectedSlotId] = useState<string | null>(null);
   const [nowPlaying, setNowPlaying] = useState<Movie[]>([]);
 
@@ -363,12 +369,27 @@ export default function CreateSpaceScreen() {
           setShowtimeSlots(lookup.slots);
           setSelectedSlotId(null);
           setShowtimesRefreshing(lookup.isRefreshing);
+          if (__DEV__) {
+            setShowtimeDebug(
+              `sent: movie="${movieName}" theater="${theaterName}" ` +
+                `city=${userPlace?.city ?? "-"}/${userPlace?.state ?? "-"} ` +
+                `coords=${theaterLat ?? "-"},${theaterLng ?? "-"}\n` +
+                `got: ${lookup.slots.length} slots, metro=${lookup.metroSlug ?? "-"}, ` +
+                `matched=${lookup.matchedTheaterName ?? "none"}, refreshing=${lookup.isRefreshing}`,
+            );
+          }
 
           // Real data landed, or the backend has nothing left to refresh —
           // either way there's nothing more polling can accomplish.
           if (lookup.slots.length > 0 || !lookup.isRefreshing) {
             if (pollHandle) clearInterval(pollHandle);
           }
+        })
+        .catch((err) => {
+          // fetchShowtimes already swallows failures and returns an empty
+          // result, so this only fires on something unexpected — but without
+          // it a thrown error here would be completely invisible on-device.
+          if (!cancelled && __DEV__) setShowtimeDebug(`lookup threw: ${String(err)}`);
         })
         .finally(() => {
           if (!cancelled && showSpinner) setShowtimesLoading(false);
@@ -779,6 +800,11 @@ export default function CreateSpaceScreen() {
               <ActivityIndicator size="small" color={SpaceTheme.glowCyan} />
               <Text style={styles.showtimeLoadingText}>Checking showtimes…</Text>
             </View>
+          )}
+
+          {/* Dev-only. Stripped from any production build by __DEV__. */}
+          {__DEV__ && spaceType === "public_gathering" && showtimeDebug && (
+            <Text style={styles.showtimeDebugText}>{showtimeDebug}</Text>
           )}
 
           {spaceType === "public_gathering" && !showtimesLoading && hasVerifiedShowtimes && (
@@ -1377,6 +1403,13 @@ const styles = StyleSheet.create({
     paddingVertical: 10,
   },
   showtimeLoadingText: { color: SpaceTheme.mutedOrbit, fontSize: 13 },
+  showtimeDebugText: {
+    color: SpaceTheme.accentGold,
+    fontSize: 10,
+    lineHeight: 14,
+    marginBottom: 8,
+    fontFamily: Platform.OS === "ios" ? "Courier" : "monospace",
+  },
   showtimeRefreshingText: {
     color: SpaceTheme.accentGold,
     fontSize: 13,

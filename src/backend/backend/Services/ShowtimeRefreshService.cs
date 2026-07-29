@@ -27,6 +27,10 @@ namespace Backend.Services
 
         private const string ActorId = "botdGp1cE6tb5ixlO";
 
+        // The actor's schema maximum. Its default is 50, which is far too low
+        // for either scrape mode — see the comments at each call site.
+        private const int MaxItemsPerRun = 500;
+
         public ShowtimeRefreshService(
             IHttpClientFactory httpClientFactory,
             IConfiguration configuration,
@@ -93,7 +97,13 @@ namespace Backend.Services
             // Actor input. The webhook configured in the Apify console fires
             // on completion and ingests the resulting dataset, so nothing here
             // needs to wait for or poll the run.
-            var input = new { mode = "getCityShowtimes", city = metroSlug };
+            //
+            // maxItems MUST be set explicitly: the actor defaults to 50 rows,
+            // and a single theater alone produces ~8 showtimes per film, so a
+            // default-capped city scrape returns roughly six films at ONE
+            // theater and silently stops. That's why a film could be playing
+            // all over the metro and still be absent from our data.
+            var input = new { mode = "getCityShowtimes", city = metroSlug, maxItems = MaxItemsPerRun };
 
             var url = $"https://api.apify.com/v2/acts/{ActorId}/runs?token={Uri.EscapeDataString(token)}";
             try
@@ -168,7 +178,10 @@ namespace Backend.Services
                 return;
             }
 
-            var input = new { mode = "getTheaterShowtimes", theaterUrl };
+            // Same reasoning as the city scrape: without maxItems the actor
+            // caps at 50 rows, which for a single theater is only ~6 films —
+            // so most of what's actually playing there never gets stored.
+            var input = new { mode = "getTheaterShowtimes", theaterUrl, maxItems = MaxItemsPerRun };
             var url = $"https://api.apify.com/v2/acts/{ActorId}/runs?token={Uri.EscapeDataString(token)}";
             try
             {
