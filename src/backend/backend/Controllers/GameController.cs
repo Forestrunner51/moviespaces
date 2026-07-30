@@ -226,6 +226,22 @@ namespace Backend.Controllers
         // One-shot admin action, gated on a shared secret — there's no admin
         // role in this project, and an unauthenticated seed endpoint would
         // let anyone burn the OMDb daily request quota.
+        // TEMP DEBUG — remove alongside the logging in SeedCatalog below once
+        // the Render env var mismatch is found. No auth so it can be curled
+        // directly; reveals only length + last 4 chars, never the full value.
+        [HttpGet("catalog/seed-debug")]
+        [AllowAnonymous]
+        public IActionResult SeedDebug()
+        {
+            var expected = _configuration["CineMind:AdminSecret"];
+            return Ok(new
+            {
+                configured = !string.IsNullOrWhiteSpace(expected),
+                length = expected?.Length ?? 0,
+                tail = string.IsNullOrEmpty(expected) ? null : Tail(expected),
+            });
+        }
+
         [HttpPost("catalog/seed")]
         public async Task<IActionResult> SeedCatalog()
         {
