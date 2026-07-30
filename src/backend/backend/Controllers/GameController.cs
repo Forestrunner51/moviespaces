@@ -240,6 +240,12 @@ namespace Backend.Controllers
                     System.Text.Encoding.UTF8.GetBytes(provided.ToString()),
                     System.Text.Encoding.UTF8.GetBytes(expected)))
             {
+                // TEMP DEBUG — remove once the Render env var mismatch is diagnosed.
+                // Logs lengths/last-4-chars only, never the full secret, so this is
+                // safe to leave in Render's logs even before it's removed.
+                _logger.LogWarning(
+                    "catalog/seed 401: expected len={ExpectedLen} tail={ExpectedTail}, provided len={ProvidedLen} tail={ProvidedTail}",
+                    expected.Length, Tail(expected), provided.ToString().Length, Tail(provided.ToString()));
                 return Unauthorized(new { error = "Unauthorized" });
             }
 
@@ -293,5 +299,9 @@ namespace Backend.Controllers
             try { return JsonSerializer.Deserialize<SubmittedAnswers>(json); }
             catch (JsonException) { return null; }
         }
+
+        // TEMP DEBUG helper — see catalog/seed. Last 4 chars only.
+        private static string Tail(string value) =>
+            value.Length <= 4 ? value : value[^4..];
     }
 }
