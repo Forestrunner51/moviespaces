@@ -226,23 +226,13 @@ namespace Backend.Controllers
         // One-shot admin action, gated on a shared secret — there's no admin
         // role in this project, and an unauthenticated seed endpoint would
         // let anyone burn the OMDb daily request quota.
-        // TEMP DEBUG — remove alongside the logging in SeedCatalog below once
-        // the Render env var mismatch is found. No auth so it can be curled
-        // directly; reveals only length + last 4 chars, never the full value.
-        [HttpGet("catalog/seed-debug")]
-        [AllowAnonymous]
-        public IActionResult SeedDebug()
-        {
-            var expected = _configuration["CineMind:AdminSecret"];
-            return Ok(new
-            {
-                configured = !string.IsNullOrWhiteSpace(expected),
-                length = expected?.Length ?? 0,
-                tail = string.IsNullOrEmpty(expected) ? null : Tail(expected),
-            });
-        }
-
+        // AllowAnonymous is required, not incidental: this controller is
+        // [Authorize]d for the per-user game endpoints, but seeding is an
+        // operator action run from a shell with no Supabase JWT to present.
+        // Without this the JWT challenge rejects the request before the
+        // admin-secret check below ever runs, so no secret value can work.
         [HttpPost("catalog/seed")]
+        [AllowAnonymous]
         public async Task<IActionResult> SeedCatalog()
         {
             var expected = _configuration["CineMind:AdminSecret"];
@@ -256,12 +246,7 @@ namespace Backend.Controllers
                     System.Text.Encoding.UTF8.GetBytes(provided.ToString()),
                     System.Text.Encoding.UTF8.GetBytes(expected)))
             {
-                // TEMP DEBUG — remove once the Render env var mismatch is diagnosed.
-                // Logs lengths/last-4-chars only, never the full secret, so this is
-                // safe to leave in Render's logs even before it's removed.
-                _logger.LogWarning(
-                    "catalog/seed 401: expected len={ExpectedLen} tail={ExpectedTail}, provided len={ProvidedLen} tail={ProvidedTail}",
-                    expected.Length, Tail(expected), provided.ToString().Length, Tail(provided.ToString()));
+                _logger.LogWarning("Rejected catalog/seed: bad or missing x-admin-secret.");
                 return Unauthorized(new { error = "Unauthorized" });
             }
 
@@ -315,9 +300,5 @@ namespace Backend.Controllers
             try { return JsonSerializer.Deserialize<SubmittedAnswers>(json); }
             catch (JsonException) { return null; }
         }
-
-        // TEMP DEBUG helper — see catalog/seed. Last 4 chars only.
-        private static string Tail(string value) =>
-            value.Length <= 4 ? value : value[^4..];
     }
 }
