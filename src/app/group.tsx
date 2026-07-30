@@ -28,6 +28,7 @@ import { SpaceTheme, SpaceStyles } from "@/frontend/constants/theme";
 import { buildTicketUrl } from "@/frontend/services/ticket-links";
 import { activityLabel, activityEmoji } from "@/frontend/constants/activities";
 import { useFriends } from "@/frontend/hooks/use-friends";
+import { CineMindLeaderboard } from "@/frontend/components/cinemind-leaderboard";
 
 interface Member {
   id: string;
@@ -585,6 +586,10 @@ export default function GroupScreen() {
             )}
           </View>
         )}
+
+        {/* Renders nothing unless this Space's members have CineMind results
+            today — see the component for why. */}
+        {!!groupId && <CineMindLeaderboard spaceId={groupId} />}
 
         <View style={styles.section}>
           <Text style={styles.sectionTitle}>
