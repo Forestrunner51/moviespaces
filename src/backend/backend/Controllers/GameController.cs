@@ -223,17 +223,20 @@ namespace Backend.Controllers
 
         // POST /api/game/catalog/seed
         //
-        // One-shot admin action, gated on the same shared secret the Apify
-        // webhook uses — there's no admin role in this project, and an
-        // unauthenticated seed endpoint would let anyone burn the OMDb daily
-        // request quota.
+        // One-shot admin action, gated on its own secret — there's no admin
+        // role in this project, and an unauthenticated seed endpoint would
+        // let anyone burn the OMDb daily request quota. Deliberately its own
+        // config value, NOT shared with Apify:WebhookSecret: CineMind has no
+        // relationship to the showtimes/Apify feature, and reusing that
+        // secret only invites confusion about which system a given key
+        // belongs to.
         [HttpPost("catalog/seed")]
         public async Task<IActionResult> SeedCatalog()
         {
-            var expected = _configuration["Apify:WebhookSecret"];
+            var expected = _configuration["CineMind:AdminSecret"];
             if (string.IsNullOrWhiteSpace(expected))
             {
-                return StatusCode(500, new { error = "Admin secret is not configured." });
+                return StatusCode(500, new { error = "CineMind:AdminSecret is not configured." });
             }
 
             Request.Headers.TryGetValue("x-admin-secret", out var provided);
