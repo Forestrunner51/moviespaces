@@ -7,11 +7,24 @@
 //  2. Plain text + emoji only. No markdown, no links that need unfurling —
 //     it has to survive iMessage, WhatsApp, X and Discord unchanged.
 
-import { formatDuration, SubmitResult } from "@/frontend/services/cinemind";
+import { formatDuration } from "@/frontend/services/cinemind";
+
+// Structural, not `SubmitResult`, so the locked state can build the same grid
+// from the booleans it gets back on a return visit. SubmitResult satisfies
+// this shape as-is.
+export interface ShareableResult {
+  score: number;
+  maxScore: number;
+  timeTakenMs: number;
+  streakCount: number;
+  connection: { correct: boolean };
+  chronos: { correct: boolean };
+  castDeduct: { correct: boolean };
+}
 
 export interface ShareGridOptions {
   puzzleNumber: number;
-  result: SubmitResult;
+  result: ShareableResult;
   // Optional Space to invite people into; omitted for a solo share.
   spaceId?: string | null;
   shareBaseUrl?: string;

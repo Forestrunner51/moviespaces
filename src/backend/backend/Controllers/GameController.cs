@@ -68,6 +68,13 @@ namespace Backend.Controllers
 
             if (progress != null)
             {
+                // Re-grade the stored answers so a returning player can still
+                // share their grid. Only the three booleans go out — NOT the
+                // correct answers, which would let someone who's played hand
+                // the solutions to friends who haven't.
+                var stored = SafeParse(progress.GuessHistoryJson) as SubmittedAnswers;
+                var regraded = stored == null ? null : _puzzles.Grade(payload, stored, progress.TimeTakenMs);
+
                 // Hard lock. The puzzle itself is NOT returned — a locked
                 // player holding the payload could study today's answers and
                 // coach friends who haven't played, which breaks the shared
@@ -82,7 +89,13 @@ namespace Backend.Controllers
                     streakCount = progress.StreakCount,
                     completedAt = progress.CompletedAt,
                     secondsUntilNextPuzzle = SecondsUntilMidnightUtc(),
-                    guessHistory = SafeParse(progress.GuessHistoryJson),
+                    guessHistory = stored,
+                    results = regraded == null ? null : new
+                    {
+                        connection = regraded.Connection.Correct,
+                        chronos = regraded.Chronos.Correct,
+                        castDeduct = regraded.CastDeduct.Correct,
+                    },
                 });
             }
 
@@ -130,6 +143,7 @@ namespace Backend.Controllers
                 GuessHistoryJson = JsonSerializer.Serialize(request.Answers),
                 CompletedAt = DateTime.UtcNow,
                 StreakCount = streak,
+                DisplayName = CleanDisplayName(request.DisplayName),
             };
 
             try
@@ -151,6 +165,162 @@ namespace Backend.Controllers
                 StreakCount = streak,
                 PercentileRank = await PercentileAsync(today, graded.Score),
             });
+        }
+
+        // GET /api/game/stats
+        //
+        // The player's own history. A daily game's retention hook is the run
+        // you don't want to break, so max streak and games played matter as
+        // much as today's score — none of which today's result alone shows.
+        [HttpGet("stats")]
+        public async Task<IActionResult> GetStats()
+        {
+            var userId = GetUserId();
+            if (string.IsNullOrEmpty(userId)) return Unauthorized(new { error = "Unauthorized" });
+
+            var rows = await _db.UserDailyProgress
+                .Where(p => p.UserId == userId)
+                .Select(p => new { p.PuzzleDate, p.Score })
+                .ToListAsync();
+
+            if (rows.Count == 0)
+            {
+                return Ok(new
+                {
+                    gamesPlayed = 0,
+                    currentStreak = 0,
+                    maxStreak = 0,
+                    perfectCount = 0,
+                    averageScore = 0,
+                    playedToday = false,
+                    distribution = new { perfect = 0, twoOfThree = 0, oneOfThree = 0, blank = 0 },
+                });
+            }
+
+            var today = DateOnly.FromDateTime(DateTime.UtcNow);
+            var days = rows.Select(r => r.PuzzleDate).ToHashSet();
+            var playedToday = days.Contains(today);
+
+            // Counts today only if it's actually been played — otherwise the
+            // streak is still alive from yesterday and shouldn't read as broken
+            // just because it isn't midnight yet.
+            var currentStreak = 0;
+            var cursor = playedToday ? today : today.AddDays(-1);
+            while (days.Contains(cursor))
+            {
+                currentStreak++;
+                cursor = cursor.AddDays(-1);
+            }
+
+            // Longest run anywhere in the history, not just the live one.
+            var ordered = days.OrderBy(d => d).ToList();
+            var maxStreak = 1;
+            var run = 1;
+            for (var i = 1; i < ordered.Count; i++)
+            {
+                run = ordered[i].DayNumber - ordered[i - 1].DayNumber == 1 ? run + 1 : 1;
+                if (run > maxStreak) maxStreak = run;
+            }
+
+            return Ok(new
+            {
+                gamesPlayed = rows.Count,
+                currentStreak,
+                maxStreak,
+                perfectCount = rows.Count(r => r.Score == DailyPuzzleService.MaxScore),
+                averageScore = (int)Math.Round(rows.Average(r => r.Score)),
+                playedToday,
+                // Bucketed by challenges solved rather than raw score, since
+                // every challenge is worth the same 100 points.
+                distribution = new
+                {
+                    perfect = rows.Count(r => r.Score == DailyPuzzleService.MaxScore),
+                    twoOfThree = rows.Count(r => r.Score == DailyPuzzleService.PointsPerChallenge * 2),
+                    oneOfThree = rows.Count(r => r.Score == DailyPuzzleService.PointsPerChallenge),
+                    blank = rows.Count(r => r.Score == 0),
+                },
+            });
+        }
+
+        // GET /api/game/leaderboard/global
+        //
+        // Everyone who played today, no Space membership required — a brand
+        // new user with no Spaces still has somewhere to see their result,
+        // which the per-Space board alone can't give them.
+        //
+        // Capped at TopCount: the board is a ranking, not a directory, and an
+        // unbounded list would grow with the player base and get slower every
+        // day. The caller's own row is looked up separately and always
+        // returned, so being outside the top still shows you your rank.
+        [HttpGet("leaderboard/global")]
+        public async Task<IActionResult> GetGlobalLeaderboard()
+        {
+            const int TopCount = 100;
+
+            var userId = GetUserId();
+            if (string.IsNullOrEmpty(userId)) return Unauthorized(new { error = "Unauthorized" });
+
+            var today = DateOnly.FromDateTime(DateTime.UtcNow);
+
+            // Score first, then speed — same ordering as the per-Space board,
+            // so a player's rank means the same thing on both.
+            var top = await _db.UserDailyProgress
+                .Where(p => p.PuzzleDate == today)
+                .OrderByDescending(p => p.Score)
+                .ThenBy(p => p.TimeTakenMs)
+                .Take(TopCount)
+                .ToListAsync();
+
+            var playedCount = await _db.UserDailyProgress.CountAsync(p => p.PuzzleDate == today);
+
+            var leaderboard = top
+                .Select((p, index) => ToEntry(p, index + 1, userId))
+                .ToList();
+
+            // The caller may be outside the top slice, so their rank is
+            // computed directly rather than searched for in the list above.
+            object? you = null;
+            var mine = await _db.UserDailyProgress
+                .FirstOrDefaultAsync(p => p.PuzzleDate == today && p.UserId == userId);
+            if (mine != null)
+            {
+                var ahead = await _db.UserDailyProgress.CountAsync(p =>
+                    p.PuzzleDate == today
+                    && (p.Score > mine.Score
+                        || (p.Score == mine.Score && p.TimeTakenMs < mine.TimeTakenMs)));
+                you = ToEntry(mine, ahead + 1, userId);
+            }
+
+            return Ok(new
+            {
+                puzzleDate = today.ToString("yyyy-MM-dd"),
+                playedCount,
+                isTruncated = playedCount > leaderboard.Count,
+                you,
+                leaderboard,
+            });
+        }
+
+        private static object ToEntry(UserDailyProgress p, int rank, string callerId) => new
+        {
+            rank,
+            userId = p.UserId,
+            name = string.IsNullOrWhiteSpace(p.DisplayName) ? "Player" : p.DisplayName,
+            score = p.Score,
+            timeTakenMs = p.TimeTakenMs,
+            streakCount = p.StreakCount,
+            isYou = p.UserId == callerId,
+        };
+
+        // Names come from a client-owned Supabase profile, so they're treated
+        // as untrusted input: collapsed to one line and truncated to the
+        // column width, since a 60-char name with newlines would otherwise
+        // wreck every row of the board.
+        private static string? CleanDisplayName(string? raw)
+        {
+            if (string.IsNullOrWhiteSpace(raw)) return null;
+            var collapsed = string.Join(" ", raw.Split((char[]?)null, StringSplitOptions.RemoveEmptyEntries));
+            return collapsed.Length <= 60 ? collapsed : collapsed[..60];
         }
 
         // GET /api/game/spaces/{spaceId}/leaderboard

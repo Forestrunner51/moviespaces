@@ -53,7 +53,9 @@ namespace Backend.Services
         List<string>? ChronosOrder,   // ImdbIds, oldest first
         string? CastDeductAnswer);
 
-    public record SubmitRequest(SubmittedAnswers Answers, int TimeTakenMs);
+    // DisplayName is optional: an older client that doesn't send it still
+    // submits fine and simply shows as "Player" on the global leaderboard.
+    public record SubmitRequest(SubmittedAnswers Answers, int TimeTakenMs, string? DisplayName = null);
 
     public record ChallengeResult(bool Correct, int Points, string? CorrectAnswer);
 

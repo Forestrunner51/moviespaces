@@ -4,6 +4,7 @@
 // once-per-day lock, streaks and leaderboards all key off the Supabase JWT.
 
 import { authFetch } from "@/frontend/services/api";
+import { supabase } from "@/frontend/config/supabase";
 
 export interface PuzzleMovie {
   imdbId: string;
@@ -46,6 +47,14 @@ export interface PuzzleView {
 
 // Discriminated on isLocked so the screen can't accidentally read a puzzle
 // that the server deliberately withheld.
+// Per-challenge outcome only — deliberately booleans with no answers, so a
+// player who's finished can't read the solutions back out and pass them on.
+export interface LockedResults {
+  connection: boolean;
+  chronos: boolean;
+  castDeduct: boolean;
+}
+
 export type TodayResponse =
   | {
       isLocked: true;
@@ -56,6 +65,7 @@ export type TodayResponse =
       streakCount: number;
       completedAt: string;
       secondsUntilNextPuzzle: number;
+      results: LockedResults | null;
     }
   | {
       isLocked: false;
@@ -120,19 +130,99 @@ export async function fetchTodayPuzzle(): Promise<TodayResponse> {
   return (await res.json()) as TodayResponse;
 }
 
+// The backend never reads Supabase's `profiles` table (the client owns that
+// read everywhere in this app), so the display name for the global
+// leaderboard has to be sent along with the answers. Best-effort: a failure
+// here must not cost someone their submission — they just show as "Player".
+async function currentDisplayName(): Promise<string | null> {
+  try {
+    // getSession() reads the cached session; getUser() would round-trip to
+    // Supabase to re-validate the token, and this sits directly between
+    // tapping Submit and seeing a score.
+    const {
+      data: { session },
+    } = await supabase.auth.getSession();
+    if (!session?.user) return null;
+
+    const { data } = await supabase
+      .from("profiles")
+      .select("display_name, username")
+      .eq("id", session.user.id)
+      .maybeSingle();
+
+    return data?.display_name || data?.username || null;
+  } catch (err) {
+    console.warn("Couldn't resolve display name for leaderboard:", err);
+    return null;
+  }
+}
+
 export async function submitPuzzle(
   answers: SubmittedAnswers,
   timeTakenMs: number,
 ): Promise<SubmitResult> {
+  const displayName = await currentDisplayName();
   const res = await authFetch(`${BASE}/puzzles/submit`, {
     method: "POST",
-    body: JSON.stringify({ answers, timeTakenMs }),
+    body: JSON.stringify({ answers, timeTakenMs, displayName }),
   });
   if (!res.ok) {
     const body = await res.json().catch(() => ({}));
     throw new Error(body?.error || `Couldn't submit your answers (${res.status}).`);
   }
   return (await res.json()) as SubmitResult;
+}
+
+export interface CineMindStats {
+  gamesPlayed: number;
+  currentStreak: number;
+  maxStreak: number;
+  perfectCount: number;
+  averageScore: number;
+  playedToday: boolean;
+  distribution: {
+    perfect: number;
+    twoOfThree: number;
+    oneOfThree: number;
+    blank: number;
+  };
+}
+
+// Returns null rather than throwing: stats decorate a screen that already has
+// a result on it, so a failure here should never replace a working screen
+// with an error.
+export async function fetchStats(): Promise<CineMindStats | null> {
+  try {
+    const res = await authFetch(`${BASE}/stats`);
+    if (!res.ok) return null;
+    return (await res.json()) as CineMindStats;
+  } catch (err) {
+    console.warn("fetchStats failed:", err);
+    return null;
+  }
+}
+
+export interface GlobalLeaderboard {
+  puzzleDate: string;
+  playedCount: number;
+  // True when more people played than the returned slice — the board is
+  // capped, so the list isn't the full field.
+  isTruncated: boolean;
+  // Present once you've played today, even if you rank below the cutoff.
+  you: LeaderboardEntry | null;
+  leaderboard: LeaderboardEntry[];
+}
+
+// Unlike the per-Space board, this throws on failure: it backs a whole screen
+// whose only job is to show it, so a silent null would render an empty tab
+// that looks identical to "nobody has played".
+export async function fetchGlobalLeaderboard(): Promise<GlobalLeaderboard> {
+  const res = await authFetch(`${BASE}/leaderboard/global`);
+  if (!res.ok) {
+    const body = await res.json().catch(() => ({}));
+    throw new Error(body?.error || `Couldn't load the leaderboard (${res.status}).`);
+  }
+  return (await res.json()) as GlobalLeaderboard;
 }
 
 export async function fetchSpaceLeaderboard(spaceId: string): Promise<SpaceLeaderboard | null> {
