@@ -1,0 +1,50 @@
+using System;
+using System.ComponentModel.DataAnnotations;
+using System.ComponentModel.DataAnnotations.Schema;
+
+namespace Backend.Models
+{
+    // A user's single completion of a single day's puzzle.
+    //
+    // (UserId, PuzzleDate) is enforced UNIQUE in AppDbContext — that
+    // constraint IS the once-per-day rule. Enforcing it only in application
+    // code would let two concurrent submits both pass the "have you played?"
+    // check and double-score, so the database is the real gate.
+    [Table("user_daily_progress")]
+    public class UserDailyProgress
+    {
+        [Column("id")]
+        public Guid Id { get; set; } = Guid.NewGuid();
+
+        // Supabase auth user id, stored as text to match the rest of this
+        // backend (Groups.UserId, PushToken.UserId).
+        [Column("user_id")]
+        [MaxLength(64)]
+        public string UserId { get; set; } = "";
+
+        [Column("puzzle_date")]
+        public DateOnly PuzzleDate { get; set; }
+
+        [Column("time_taken_ms")]
+        public int TimeTakenMs { get; set; }
+
+        [Column("score")]
+        public int Score { get; set; }
+
+        // Serialized SubmittedAnswers — what they actually guessed, kept so
+        // the share grid can be reconstructed after the fact and so a
+        // disputed score is auditable.
+        [Column("guess_history_json")]
+        public string GuessHistoryJson { get; set; } = "{}";
+
+        [Column("completed_at")]
+        public DateTime CompletedAt { get; set; } = DateTime.UtcNow;
+
+        // Denormalized streak as of THIS completion. Kept per-row rather than
+        // on a user record so the value is a historical fact ("you were on 12
+        // when you played #42") instead of something that silently changes
+        // when the streak later breaks — the share grid quotes it.
+        [Column("streak_count")]
+        public int StreakCount { get; set; }
+    }
+}

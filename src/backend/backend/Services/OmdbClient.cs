@@ -12,6 +12,16 @@ namespace Backend.Services
         decimal? VoteAverage,
         DateTime? ReleaseDate);
 
+    // Richer shape for the CineMind puzzle catalog, which needs the people
+    // (director + cast) that shared-person challenges are built from.
+    public record OmdbCatalogEntry(
+        string ImdbId,
+        string Title,
+        int ReleaseYear,
+        string? PosterUrl,
+        string? Director,
+        List<string> Cast);
+
     // Title -> metadata lookups against OMDb, used by the nightly showtime
     // ingest to enrich scraped titles.
     //
@@ -101,6 +111,77 @@ namespace Backend.Services
             catch (Exception ex)
             {
                 _logger.LogError(ex, "OMDb lookup for {Title} threw.", title);
+                return null;
+            }
+        }
+
+        // Full record by IMDb id, including the Director and Actors fields the
+        // CineMind puzzle catalog needs to build shared-person links.
+        //
+        // This is the reason CineMind uses OMDb rather than TMDB: OMDb returns
+        // director and top-billed cast on the same single ?i= call, so
+        // seeding a catalog costs one request per film instead of TMDB's
+        // separate /credits call — and TMDb's free tier bars commercial use
+        // anyway, which is why this project already migrated off it.
+        public async Task<OmdbCatalogEntry?> LookupCatalogEntryAsync(string imdbId)
+        {
+            var apiKey = _configuration["Omdb:ApiKey"];
+            if (string.IsNullOrWhiteSpace(apiKey))
+            {
+                _logger.LogWarning("Omdb:ApiKey is not configured — cannot seed CineMind catalog.");
+                return null;
+            }
+
+            var cacheKey = $"omdb:catalog:{imdbId}";
+            if (_cache.TryGetValue(cacheKey, out OmdbCatalogEntry? cached)) return cached;
+
+            var url = $"{BaseUrl}?apikey={apiKey}&i={Uri.EscapeDataString(imdbId)}&plot=short";
+            try
+            {
+                var client = _httpClientFactory.CreateClient();
+                var response = await client.GetAsync(url);
+                if (!response.IsSuccessStatusCode)
+                {
+                    _logger.LogWarning("OMDb catalog lookup {ImdbId} failed: {Status}", imdbId, response.StatusCode);
+                    return null;
+                }
+
+                using var doc = JsonDocument.Parse(await response.Content.ReadAsStringAsync());
+                var root = doc.RootElement;
+
+                if (root.TryGetProperty("Response", out var resp)
+                    && string.Equals(resp.GetString(), "False", StringComparison.OrdinalIgnoreCase))
+                {
+                    _cache.Set(cacheKey, (OmdbCatalogEntry?)null, TimeSpan.FromHours(24));
+                    return null;
+                }
+
+                var title = Clean(GetString(root, "Title"));
+                if (title == null) return null;
+
+                // "Actors" is a comma-separated string, typically the top 4.
+                var cast = (Clean(GetString(root, "Actors")) ?? "")
+                    .Split(',', StringSplitOptions.RemoveEmptyEntries | StringSplitOptions.TrimEntries)
+                    .ToList();
+
+                var year = 0;
+                var rawYear = Clean(GetString(root, "Year")) ?? "";
+                if (rawYear.Length >= 4) int.TryParse(rawYear[..4], out year);
+
+                var entry = new OmdbCatalogEntry(
+                    ImdbId: Clean(GetString(root, "imdbID")) ?? imdbId,
+                    Title: title,
+                    ReleaseYear: year,
+                    PosterUrl: Clean(GetString(root, "Poster")),
+                    Director: Clean(GetString(root, "Director")),
+                    Cast: cast);
+
+                _cache.Set(cacheKey, entry, TimeSpan.FromHours(24));
+                return entry;
+            }
+            catch (Exception ex)
+            {
+                _logger.LogError(ex, "OMDb catalog lookup {ImdbId} threw.", imdbId);
                 return null;
             }
         }

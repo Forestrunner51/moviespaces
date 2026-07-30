@@ -116,6 +116,7 @@ function Layout() {
         <Stack.Screen name="legal/terms" options={{ title: "Terms of Service" }} />
         <Stack.Screen name="legal/privacy" options={{ title: "Privacy Policy" }} />
         <Stack.Screen name="settings" options={{ title: "Settings" }} />
+        <Stack.Screen name="cinemind" options={{ title: "CineMind" }} />
       </Stack>
     </ThemeProvider>
   );

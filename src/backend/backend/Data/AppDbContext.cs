@@ -28,6 +28,11 @@ public class AppDbContext : DbContext
     public DbSet<CinemaClockTheater> CinemaClockTheaters => Set<CinemaClockTheater>();
     public DbSet<TheaterScrapeLog> TheaterScrapeLogs => Set<TheaterScrapeLog>();
 
+    // CineMind — the daily cinema puzzle game.
+    public DbSet<CineMindMovie> CineMindMovies => Set<CineMindMovie>();
+    public DbSet<DailyPuzzle> DailyPuzzles => Set<DailyPuzzle>();
+    public DbSet<UserDailyProgress> UserDailyProgress => Set<UserDailyProgress>();
+
     protected override void OnModelCreating(ModelBuilder builder)
     {
         base.OnModelCreating(builder);
@@ -80,5 +85,25 @@ public class AppDbContext : DbContext
         // theaters for this metro" itself cheap.
         builder.Entity<CinemaClockTheater>()
             .HasIndex(t => t.MetroSlug);
+
+        // ── CineMind ───────────────────────────────────────────────────────
+
+        // One catalog row per film; the seed is idempotent and re-runs upsert
+        // against this.
+        builder.Entity<CineMindMovie>()
+            .HasIndex(m => m.ImdbId)
+            .IsUnique();
+
+        // THE once-per-day rule, enforced by the database rather than by an
+        // application check. Two concurrent submits would both pass a
+        // "have you played?" read and double-score; this makes the second one
+        // fail outright.
+        builder.Entity<UserDailyProgress>()
+            .HasIndex(p => new { p.UserId, p.PuzzleDate })
+            .IsUnique();
+
+        // Serves the per-day leaderboard and percentile queries.
+        builder.Entity<UserDailyProgress>()
+            .HasIndex(p => p.PuzzleDate);
     }
 }
