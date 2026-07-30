@@ -31,7 +31,12 @@ namespace Backend.Services
     // ── Client-facing (answers stripped) ──
 
     public record ConnectionView(List<PuzzleMovie> Movies, string LinkKind, List<string> Options);
-    public record ChronosView(List<PuzzleMovie> Movies);
+
+    // Deliberately NOT PuzzleMovie: the release year is the answer to Chronos,
+    // so sending it — even unrendered — hands the solution to anyone reading
+    // the response body. The client only needs enough to draw the row.
+    public record ChronosMovie(string ImdbId, string Title, string? PosterPath);
+    public record ChronosView(List<ChronosMovie> Movies);
     public record CastDeductView(PuzzleMovie MovieA, PuzzleMovie MovieB, List<string> Options);
 
     public record PuzzleView(

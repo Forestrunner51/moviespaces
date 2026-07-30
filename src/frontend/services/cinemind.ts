@@ -18,8 +18,16 @@ export interface ConnectionView {
   options: string[];
 }
 
+// No releaseYear, mirroring the server: the year is the answer to Chronos, so
+// it's stripped from the payload rather than merely left unrendered.
+export interface ChronosMovie {
+  imdbId: string;
+  title: string;
+  posterPath: string | null;
+}
+
 export interface ChronosView {
-  movies: PuzzleMovie[];
+  movies: ChronosMovie[];
 }
 
 export interface CastDeductView {

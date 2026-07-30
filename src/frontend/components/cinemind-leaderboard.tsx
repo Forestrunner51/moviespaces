@@ -44,6 +44,11 @@ export function CineMindLeaderboard({ spaceId }: CineMindLeaderboardProps) {
   // supplementary, so neither should surface as an error on this screen.
   if (!data) return null;
 
+  // Nobody in this Space has played today, so there are no standings to show.
+  // Rendering the header + a "nobody played" line here would put a permanent
+  // dead section on the screen of every Space whose members don't play.
+  if (data.leaderboard.length === 0) return null;
+
   const youPlayed = data.leaderboard.some((entry) => entry.isYou);
 
   return (
@@ -55,22 +60,18 @@ export function CineMindLeaderboard({ spaceId }: CineMindLeaderboardProps) {
         </Text>
       </View>
 
-      {data.leaderboard.length === 0 ? (
-        <Text style={styles.emptyText}>Nobody here has played today&apos;s puzzle yet.</Text>
-      ) : (
-        data.leaderboard.map((entry) => (
-          <View key={entry.userId} style={[styles.row, entry.isYou && styles.rowYou]}>
-            <Text style={styles.rank}>{medalFor(entry.rank)}</Text>
-            <Text style={[styles.name, entry.isYou && styles.nameYou]} numberOfLines={1}>
-              {entry.name}
-              {entry.isYou ? " (you)" : ""}
-            </Text>
-            {entry.streakCount > 1 && <Text style={styles.streak}>🔥{entry.streakCount}</Text>}
-            <Text style={styles.time}>{formatDuration(entry.timeTakenMs)}</Text>
-            <Text style={styles.score}>{entry.score}</Text>
-          </View>
-        ))
-      )}
+      {data.leaderboard.map((entry) => (
+        <View key={entry.userId} style={[styles.row, entry.isYou && styles.rowYou]}>
+          <Text style={styles.rank}>{medalFor(entry.rank)}</Text>
+          <Text style={[styles.name, entry.isYou && styles.nameYou]} numberOfLines={1}>
+            {entry.name}
+            {entry.isYou ? " (you)" : ""}
+          </Text>
+          {entry.streakCount > 1 && <Text style={styles.streak}>🔥{entry.streakCount}</Text>}
+          <Text style={styles.time}>{formatDuration(entry.timeTakenMs)}</Text>
+          <Text style={styles.score}>{entry.score}</Text>
+        </View>
+      ))}
 
       {!youPlayed && (
         <TouchableOpacity
@@ -105,7 +106,6 @@ const styles = StyleSheet.create({
   },
   sectionTitle: { fontSize: 16, fontWeight: "700", color: SpaceTheme.starWhite },
   playedCount: { fontSize: 12, color: SpaceTheme.mutedOrbit },
-  emptyText: { fontSize: 13, color: SpaceTheme.mutedOrbit, marginBottom: 4 },
   row: {
     flexDirection: "row",
     alignItems: "center",
