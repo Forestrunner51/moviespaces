@@ -110,7 +110,9 @@ namespace Backend.Services
 
         private DailyPuzzlePayload? Generate(DateOnly date, List<CatalogEntry> catalog)
         {
-            if (catalog.Count < 8) return null;
+            // 4 (Connection) + 4 (Chronos, distinct years, unused) + 2
+            // (Cast Deduct, unused) = 10 distinct films minimum.
+            if (catalog.Count < 10) return null;
 
             var rng = SeededRandom(date);
 
@@ -166,14 +168,29 @@ namespace Backend.Services
             if (pool.Count == 0) return null;
 
             var picked = pool[rng.Next(pool.Count)];
-            var movies = Shuffle(rng, picked.Value).Take(4).Select(ToPuzzleMovie).ToList();
+            var chosen = Shuffle(rng, picked.Value).Take(4).ToList();
+            var movies = chosen.Select(ToPuzzleMovie).ToList();
+
+            // Anyone ELSE who also appears in all four is an equally valid
+            // answer to "which actor links these?" — offering them as a wrong
+            // option marks a correct player incorrect. Not hypothetical: the
+            // catalog is deliberately clustered around recurring ensembles
+            // (Marvel, LOTR), where four films sharing two cast members is
+            // routine.
+            var alsoLinksAll = useActor
+                ? chosen
+                    .Select(e => (IEnumerable<string>)e.Cast)
+                    .Aggregate((a, b) => a.Intersect(b, StringComparer.OrdinalIgnoreCase))
+                    .ToHashSet(StringComparer.OrdinalIgnoreCase)
+                : new HashSet<string>(StringComparer.OrdinalIgnoreCase);
 
             // Distractors: other real people from the catalog, so a wrong
             // option is never obviously fake.
             var allPeople = (useActor
                     ? byActor.Keys.AsEnumerable()
                     : byDirector.Keys.AsEnumerable())
-                .Where(p => !string.Equals(p, picked.Key, StringComparison.OrdinalIgnoreCase))
+                .Where(p => !string.Equals(p, picked.Key, StringComparison.OrdinalIgnoreCase)
+                    && !alsoLinksAll.Contains(p))
                 .OrderBy(p => p, StringComparer.Ordinal)
                 .ToList();
 
@@ -302,7 +319,10 @@ namespace Backend.Services
             new ConnectionView(p.Connection.Movies, p.Connection.LinkKind, p.Connection.Options),
             // Answers are omitted here, not merely unused — the payload holds
             // every solution, so returning it whole would ship the answer key.
-            new ChronosView(p.Chronos.Movies),
+            // Chronos additionally drops the release year, which IS its answer.
+            new ChronosView(p.Chronos.Movies
+                .Select(m => new ChronosMovie(m.ImdbId, m.Title, m.PosterPath))
+                .ToList()),
             new CastDeductView(p.CastDeduct.MovieA, p.CastDeduct.MovieB, p.CastDeduct.Options));
 
         // ── Helpers ────────────────────────────────────────────────────────
