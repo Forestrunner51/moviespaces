@@ -20,8 +20,6 @@ builder.Services.AddHttpClient();
 builder.Services.AddMemoryCache();
 builder.Services.AddSingleton<PushNotificationService>();
 builder.Services.AddSingleton<OmdbClient>();
-builder.Services.AddSingleton<ShowtimeRefreshService>();
-builder.Services.AddSingleton<CinemaClockDirectoryService>();
 builder.Services.AddSingleton<IDailyPuzzleService, DailyPuzzleService>();
 builder.Services.AddSingleton<CineMindCatalogService>();
 builder.Services.AddHostedService<ReminderBackgroundService>();

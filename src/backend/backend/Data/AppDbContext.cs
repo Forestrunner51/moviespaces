@@ -22,11 +22,6 @@ public class AppDbContext : DbContext
     public DbSet<Group> Groups { get; set; }
     public DbSet<GroupMember> GroupMembers { get; set; }
     public DbSet<PushToken> PushTokens { get; set; }
-    public DbSet<NowPlayingMovie> NowPlayingMovies => Set<NowPlayingMovie>();
-    public DbSet<Showtime> Showtimes => Set<Showtime>();
-    public DbSet<MetroScrapeLog> MetroScrapeLogs => Set<MetroScrapeLog>();
-    public DbSet<CinemaClockTheater> CinemaClockTheaters => Set<CinemaClockTheater>();
-    public DbSet<TheaterScrapeLog> TheaterScrapeLogs => Set<TheaterScrapeLog>();
 
     // CineMind — the daily cinema puzzle game.
     public DbSet<CineMindMovie> CineMindMovies => Set<CineMindMovie>();
@@ -43,48 +38,6 @@ public class AppDbContext : DbContext
         builder.Entity<Group>()
             .HasIndex(g => g.Slug)
             .IsUnique();
-
-        // Title is the only stable identifier the scraper gives us, so it's
-        // the upsert target for the nightly ingest.
-        builder.Entity<NowPlayingMovie>()
-            .HasIndex(m => m.Title)
-            .IsUnique();
-
-        // Npgsql maps DateTime to `timestamptz` by default, which REJECTS a
-        // DateTimeKind.Unspecified value at write time. Scraped showtimes are
-        // local wall-clock with no known offset (see the Showtime model), so
-        // the column has to be `timestamp without time zone` or every ingest
-        // throws.
-        builder.Entity<Showtime>()
-            .Property(s => s.StartsAt)
-            .HasColumnType("timestamp without time zone");
-
-        builder.Entity<Showtime>()
-            .HasOne(s => s.Movie)
-            .WithMany(m => m.Showtimes)
-            .HasForeignKey(s => s.MovieId)
-            .OnDelete(DeleteBehavior.Cascade);
-
-        // Makes the nightly ingest idempotent — see Showtime for why.
-        builder.Entity<Showtime>()
-            .HasIndex(s => new { s.MovieId, s.TheaterName, s.StartsAt })
-            .IsUnique();
-
-        // Serves the app's "what's playing, soonest first" read path.
-        builder.Entity<Showtime>()
-            .HasIndex(s => new { s.MovieId, s.StartsAt });
-
-        // A theater can't appear twice under the same URL within one metro —
-        // guards the directory-refresh upsert against duplicate rows.
-        builder.Entity<CinemaClockTheater>()
-            .HasIndex(t => new { t.MetroSlug, t.Url })
-            .IsUnique();
-
-        // Nearest-neighbor search scans a metro's rows in memory (see
-        // CinemaClockDirectoryService) — this index makes fetching "all
-        // theaters for this metro" itself cheap.
-        builder.Entity<CinemaClockTheater>()
-            .HasIndex(t => t.MetroSlug);
 
         // ── CineMind ───────────────────────────────────────────────────────
 

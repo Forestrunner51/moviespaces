@@ -19,32 +19,6 @@ export interface Coordinates {
   longitude: number;
 }
 
-export interface UserPlace {
-  city: string | null;
-  state: string | null;
-}
-
-// Resolves the device's coordinates to a city/state, which the showtimes API
-// maps to a scrapable metro ("Frisco, TX" -> "dallas"). Returns nulls rather
-// than throwing on denied permission or a geocoder miss — the caller just
-// loses on-demand showtimes and falls back to the Google link.
-export async function getUserPlace(coords: Coordinates): Promise<UserPlace> {
-  try {
-    const results = await Location.reverseGeocodeAsync(coords);
-    const first = results?.[0];
-    if (!first) return { city: null, state: null };
-    return {
-      // `city` is null in some regions where the locality lands in
-      // `subregion` (county) instead.
-      city: first.city ?? first.subregion ?? null,
-      state: first.region ?? null,
-    };
-  } catch (err) {
-    console.warn("Reverse geocode failed:", err);
-    return { city: null, state: null };
-  }
-}
-
 // Falls back to null (rather than throwing) when permission is denied or
 // location can't be resolved — callers should show a manual-entry fallback
 // instead of a hard error, same pattern as the old "no nearby theaters found"

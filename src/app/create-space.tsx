@@ -27,17 +27,9 @@ import { searchMovies, searchTvShows, getNowPlaying, Movie } from "@/frontend/se
 import * as WebBrowser from "expo-web-browser";
 import { buildGoogleShowtimesUrl } from "@/frontend/services/ticket-links";
 import {
-  fetchShowtimes,
-  groupSlotsByDate,
-  formatSlotDate,
-  ShowtimeSlot,
-} from "@/frontend/services/showtimes";
-import {
   getDeviceLocation,
   fetchNearbyTheaters,
-  getUserPlace,
   NearbyTheater,
-  UserPlace,
 } from "@/frontend/services/nearby-theaters";
 
 type SpaceType = "public_gathering" | "private_rental";
@@ -186,7 +178,6 @@ export default function CreateSpaceScreen() {
   };
 
   const [theaters, setTheaters] = useState<NearbyTheater[]>([]);
-  const [userPlace, setUserPlace] = useState<UserPlace | null>(null);
   const [theatersLoading, setTheatersLoading] = useState(true);
   const [theatersError, setTheatersError] = useState<string | null>(null);
   const [theaterModalVisible, setTheaterModalVisible] = useState(false);
@@ -199,16 +190,6 @@ export default function CreateSpaceScreen() {
   const [movieSearchError, setMovieSearchError] = useState<string | null>(null);
   const [movieSearchNotice, setMovieSearchNotice] = useState<string | null>(null);
   const [showtimeConfirmed, setShowtimeConfirmed] = useState(false);
-  const [showtimeSlots, setShowtimeSlots] = useState<ShowtimeSlot[]>([]);
-  const [showtimesLoading, setShowtimesLoading] = useState(false);
-  const [showtimesRefreshing, setShowtimesRefreshing] = useState(false);
-  // Dev-only visibility into the showtimes lookup. __DEV__ is false in any
-  // production/EAS build, so this can never reach the App Store — it exists
-  // because a failed lookup is otherwise indistinguishable on-device from
-  // "this movie isn't playing here", which made the picker impossible to
-  // debug from outside.
-  const [showtimeDebug, setShowtimeDebug] = useState<string | null>(null);
-  const [selectedSlotId, setSelectedSlotId] = useState<string | null>(null);
   const [nowPlaying, setNowPlaying] = useState<Movie[]>([]);
 
   const [datePickerVisible, setDatePickerVisible] = useState(false);
@@ -243,15 +224,7 @@ export default function CreateSpaceScreen() {
 
   useEffect(() => {
     getDeviceLocation()
-      .then(async (coords) => {
-        if (!coords) return [];
-        // Resolve the city alongside the theaters — the showtimes API needs
-        // it to map this user to a scrapable metro. Deliberately not awaited
-        // in series with the theater fetch failing: a geocode miss shouldn't
-        // cost us the theater list.
-        getUserPlace(coords).then(setUserPlace).catch(() => {});
-        return fetchNearbyTheaters(coords);
-      })
+      .then((coords) => (coords ? fetchNearbyTheaters(coords) : []))
       .then(setTheaters)
       .catch((err) => {
         console.error("Failed to load nearby theaters:", err);
@@ -333,121 +306,13 @@ export default function CreateSpaceScreen() {
     setShowTime(formatTime(selected));
   };
 
-  // Fallback only — used when we have no scraped showtimes for this film at
-  // this theater. Opens Google's showtimes results in an in-app browser; the
-  // host reads off the real time and sets it in the pickers manually.
+  // Opens Google's showtimes results for the picked film near the chosen
+  // theater in an in-app browser. Google localizes and shows real theaters,
+  // times, and ticket links — the host reads off the real showtime, then sets
+  // the time in the picker below. (No paid showtimes API.)
   const handleFindShowtimes = () => {
     WebBrowser.openBrowserAsync(buildGoogleShowtimesUrl(movieName, theaterName));
   };
-
-  // Look up real showtimes once the host has picked both a film and a
-  // theater. Theater screenings only — a private rental isn't a public
-  // showing that appears in any listings.
-  //
-  // Passing the user's city is what lets the backend scrape their metro on
-  // demand; without it they can only ever be served already-cached data.
-  useEffect(() => {
-    if (spaceType !== "public_gathering" || !movieName.trim() || !theaterName.trim()) {
-      setShowtimeSlots([]);
-      setSelectedSlotId(null);
-      setShowtimesRefreshing(false);
-      return;
-    }
-
-    let cancelled = false;
-    let pollHandle: ReturnType<typeof setInterval> | null = null;
-    let giveUpHandle: ReturnType<typeof setTimeout> | null = null;
-
-    const runLookup = (showSpinner: boolean) => {
-      if (showSpinner) setShowtimesLoading(true);
-      fetchShowtimes(movieName, theaterName, userPlace ?? undefined, {
-        latitude: theaterLat,
-        longitude: theaterLng,
-      })
-        .then((lookup) => {
-          if (cancelled) return;
-          setShowtimeSlots(lookup.slots);
-          setSelectedSlotId(null);
-          setShowtimesRefreshing(lookup.isRefreshing);
-          if (__DEV__) {
-            setShowtimeDebug(
-              `sent: movie="${movieName}" theater="${theaterName}" ` +
-                `city=${userPlace?.city ?? "-"}/${userPlace?.state ?? "-"} ` +
-                `coords=${theaterLat ?? "-"},${theaterLng ?? "-"}\n` +
-                `got: ${lookup.slots.length} slots, metro=${lookup.metroSlug ?? "-"}, ` +
-                `matched=${lookup.matchedTheaterName ?? "none"}, refreshing=${lookup.isRefreshing}`,
-            );
-          }
-
-          // Real data landed, or the backend has nothing left to refresh —
-          // either way there's nothing more polling can accomplish.
-          if (lookup.slots.length > 0 || !lookup.isRefreshing) {
-            if (pollHandle) clearInterval(pollHandle);
-          }
-        })
-        .catch((err) => {
-          // fetchShowtimes already swallows failures and returns an empty
-          // result, so this only fires on something unexpected — but without
-          // it a thrown error here would be completely invisible on-device.
-          if (!cancelled && __DEV__) setShowtimeDebug(`lookup threw: ${String(err)}`);
-        })
-        .finally(() => {
-          if (!cancelled && showSpinner) setShowtimesLoading(false);
-        });
-    };
-
-    runLookup(true);
-
-    // A first-time metro request kicks off a real scrape (see
-    // ShowtimeRefreshService) that takes longer than any request should wait
-    // on — the initial response comes back empty with isRefreshing:true.
-    // Without this, that host is stuck on the Google fallback forever, even
-    // once the data actually arrives seconds later, because nothing else
-    // would ever check again. Each poll is a cheap DB read on our own
-    // backend, not a second Apify call: the atomic TTL claim there means
-    // re-checking here can't trigger a second billable scrape no matter how
-    // many times it fires.
-    pollHandle = setInterval(() => runLookup(false), 12000);
-
-    // Give up after ~2 minutes so a metro whose scrape is slow, empty, or
-    // failed doesn't poll in the background indefinitely.
-    giveUpHandle = setTimeout(() => {
-      if (pollHandle) clearInterval(pollHandle);
-    }, 120000);
-
-    // The film/theater can change while a request is in flight; without this
-    // an older response could land last and show the wrong film's showtimes.
-    return () => {
-      cancelled = true;
-      if (pollHandle) clearInterval(pollHandle);
-      if (giveUpHandle) clearTimeout(giveUpHandle);
-    };
-  }, [spaceType, movieName, theaterName, userPlace, theaterLat, theaterLng]);
-
-  // Tapping a real showtime fills both pickers from verified data.
-  //
-  // slot.startsAt is local wall-clock with no timezone (see services/
-  // showtimes.ts) — it's split into parts and fed to the Date constructor
-  // rather than parsed, since `new Date("...")` would apply a UTC offset and
-  // shift the time the host sees.
-  const handleSelectSlot = (slot: ShowtimeSlot) => {
-    const [datePart, timePart] = slot.startsAt.split("T");
-    const [year, month, day] = datePart.split("-").map(Number);
-    const [hour, minute] = (timePart ?? "").split(":").map(Number);
-    if (!year || !month || !day || Number.isNaN(hour) || Number.isNaN(minute)) return;
-
-    const localDate = new Date(year, month - 1, day, hour, minute, 0, 0);
-    setDateValue(localDate);
-    setShowDate(formatDate(localDate));
-    setTimeValue(localDate);
-    setShowTime(formatTime(localDate));
-    setSelectedSlotId(slot.id);
-  };
-
-  // A screening we scraped from real listings needs no host attestation —
-  // that checkbox exists purely because we otherwise can't verify the film is
-  // actually playing there.
-  const hasVerifiedShowtimes = showtimeSlots.length > 0;
 
   const handleSubmit = async () => {
     const isOtherActivity = spaceType === "private_rental" && rentalActivityType === "other";
@@ -469,7 +334,7 @@ export default function CreateSpaceScreen() {
     // there's no way to verify server-side that this movie is actually
     // playing at this theater at this time, so we require the host to
     // attest to it instead of silently allowing bogus/expired listings.
-    if (spaceType === "public_gathering" && !hasVerifiedShowtimes && !showtimeConfirmed) {
+    if (spaceType === "public_gathering" && !showtimeConfirmed) {
       Alert.alert(
         "Confirm the showtime",
         "Please check the box confirming this movie is actually playing at this theater at the date/time you picked.",
@@ -792,107 +657,37 @@ export default function CreateSpaceScreen() {
             </TouchableOpacity>
           )}
 
-          {/* Real showtimes from our nightly scrape, when we have them for
-              this film at this theater. Tapping a slot fills the date/time
-              pickers above from verified data. */}
-          {spaceType === "public_gathering" && showtimesLoading && (
-            <View style={styles.showtimeLoadingRow}>
-              <ActivityIndicator size="small" color={SpaceTheme.glowCyan} />
-              <Text style={styles.showtimeLoadingText}>Checking showtimes…</Text>
-            </View>
+          {/* Look up real showtimes on Google (opens in-app browser) for the
+              chosen film + theater — the host reads the time and sets it in the
+              picker above. Movie screenings only. */}
+          {spaceType === "public_gathering" && !!movieName.trim() && (
+            <TouchableOpacity
+              activeOpacity={0.85}
+              style={styles.showtimeButton}
+              onPress={handleFindShowtimes}
+            >
+              <Ionicons name="search-outline" size={18} color={SpaceTheme.backgroundVoid} />
+              <Text style={styles.showtimeButtonText}>Find Showtimes Near Me</Text>
+            </TouchableOpacity>
           )}
 
-          {/* Dev-only. Stripped from any production build by __DEV__. */}
-          {__DEV__ && spaceType === "public_gathering" && showtimeDebug && (
-            <Text style={styles.showtimeDebugText}>{showtimeDebug}</Text>
-          )}
-
-          {spaceType === "public_gathering" && !showtimesLoading && hasVerifiedShowtimes && (
-            <View style={styles.slotSection}>
-              <Text style={styles.slotSectionTitle}>Showtimes at this theater</Text>
-              <Text style={styles.slotSectionSubtext}>
-                Tap a time to use it — no need to enter the date and time yourself.
+          {/* No showtimes API backs this, so the host attests that the film is
+              really playing there. Required at submit. */}
+          {spaceType === "public_gathering" && (
+            <TouchableOpacity
+              activeOpacity={0.8}
+              style={styles.confirmRow}
+              onPress={() => setShowtimeConfirmed((prev) => !prev)}
+            >
+              <Ionicons
+                name={showtimeConfirmed ? "checkbox" : "square-outline"}
+                size={20}
+                color={showtimeConfirmed ? SpaceTheme.glowCyan : SpaceTheme.mutedOrbit}
+              />
+              <Text style={styles.confirmRowText}>
+                I&apos;ve confirmed this movie is actually playing at this theater at this date/time.
               </Text>
-              {groupSlotsByDate(showtimeSlots).map(({ date, slots }) => (
-                <View key={date} style={styles.slotDateGroup}>
-                  <Text style={styles.slotDateLabel}>{formatSlotDate(date)}</Text>
-                  <View style={styles.slotChipRow}>
-                    {slots.map((slot) => (
-                      <TouchableOpacity
-                        key={slot.id}
-                        activeOpacity={0.8}
-                        style={[
-                          styles.slotChip,
-                          selectedSlotId === slot.id && styles.slotChipActive,
-                        ]}
-                        onPress={() => handleSelectSlot(slot)}
-                      >
-                        <Text
-                          style={[
-                            styles.slotChipText,
-                            selectedSlotId === slot.id && styles.slotChipTextActive,
-                          ]}
-                        >
-                          {slot.time}
-                        </Text>
-                        {slot.format && slot.format.toLowerCase() !== "standard" && (
-                          <Text
-                            style={[
-                              styles.slotChipFormat,
-                              selectedSlotId === slot.id && styles.slotChipTextActive,
-                            ]}
-                          >
-                            {slot.format}
-                          </Text>
-                        )}
-                      </TouchableOpacity>
-                    ))}
-                  </View>
-                </View>
-              ))}
-            </View>
-          )}
-
-          {/* Fallback — we have no scraped showtimes for this pairing, so the
-              host looks the time up on Google and attests to it, exactly as
-              before this data existed. */}
-          {spaceType === "public_gathering" && !showtimesLoading && !hasVerifiedShowtimes && (
-            <>
-              {/* A scrape was just kicked off for this area. Say so, rather
-                  than letting an empty list imply nothing is playing. */}
-              {showtimesRefreshing && (
-                <Text style={styles.showtimeRefreshingText}>
-                  Getting showtimes for your area — this can take a minute. Use the search below
-                  for now.
-                </Text>
-              )}
-
-              {!!movieName.trim() && (
-                <TouchableOpacity
-                  activeOpacity={0.85}
-                  style={styles.showtimeButton}
-                  onPress={handleFindShowtimes}
-                >
-                  <Ionicons name="search-outline" size={18} color={SpaceTheme.backgroundVoid} />
-                  <Text style={styles.showtimeButtonText}>Find Showtimes Near Me</Text>
-                </TouchableOpacity>
-              )}
-
-              <TouchableOpacity
-                activeOpacity={0.8}
-                style={styles.confirmRow}
-                onPress={() => setShowtimeConfirmed((prev) => !prev)}
-              >
-                <Ionicons
-                  name={showtimeConfirmed ? "checkbox" : "square-outline"}
-                  size={20}
-                  color={showtimeConfirmed ? SpaceTheme.glowCyan : SpaceTheme.mutedOrbit}
-                />
-                <Text style={styles.confirmRowText}>
-                  I&apos;ve confirmed this movie is actually playing at this theater at this date/time.
-                </Text>
-              </TouchableOpacity>
-            </>
+            </TouchableOpacity>
           )}
 
           {spaceType === "private_rental" && (
@@ -1396,61 +1191,6 @@ const styles = StyleSheet.create({
     marginTop: 4,
   },
   showtimeButtonText: { color: SpaceTheme.backgroundVoid, fontSize: 15, fontWeight: "700" },
-  showtimeLoadingRow: {
-    flexDirection: "row",
-    alignItems: "center",
-    gap: 8,
-    paddingVertical: 10,
-  },
-  showtimeLoadingText: { color: SpaceTheme.mutedOrbit, fontSize: 13 },
-  showtimeDebugText: {
-    color: SpaceTheme.accentGold,
-    fontSize: 10,
-    lineHeight: 14,
-    marginBottom: 8,
-    fontFamily: Platform.OS === "ios" ? "Courier" : "monospace",
-  },
-  showtimeRefreshingText: {
-    color: SpaceTheme.accentGold,
-    fontSize: 13,
-    lineHeight: 18,
-    marginBottom: 10,
-  },
-  slotSection: {
-    ...SpaceStyles.glassCard,
-    padding: 14,
-    marginBottom: 12,
-    borderColor: "rgba(56, 189, 248, 0.3)",
-  },
-  slotSectionTitle: { color: SpaceTheme.starWhite, fontSize: 15, fontWeight: "700" },
-  slotSectionSubtext: {
-    color: SpaceTheme.mutedOrbit,
-    fontSize: 12,
-    marginTop: 2,
-    marginBottom: 10,
-  },
-  slotDateGroup: { marginTop: 10 },
-  slotDateLabel: {
-    color: SpaceTheme.mutedOrbit,
-    fontSize: 12,
-    fontWeight: "700",
-    textTransform: "uppercase",
-    marginBottom: 6,
-  },
-  slotChipRow: { flexDirection: "row", flexWrap: "wrap", gap: 8 },
-  slotChip: {
-    ...SpaceStyles.glassCard,
-    alignItems: "center",
-    paddingVertical: 8,
-    paddingHorizontal: 12,
-  },
-  slotChipActive: {
-    backgroundColor: SpaceTheme.glowCyan,
-    borderColor: SpaceTheme.glowCyan,
-  },
-  slotChipText: { color: SpaceTheme.starWhite, fontSize: 14, fontWeight: "600" },
-  slotChipFormat: { color: SpaceTheme.mutedOrbit, fontSize: 10, marginTop: 1 },
-  slotChipTextActive: { color: SpaceTheme.backgroundVoid },
   confirmRow: {
     flexDirection: "row",
     alignItems: "center",

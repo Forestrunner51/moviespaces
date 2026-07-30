@@ -75,6 +75,24 @@ export default function HomeScreen() {
         <Text style={[styles.title, SpaceStyles.glowText, SpaceStyles.wordmark, styles.titleSpacing]}>MovieSpaces</Text>
         <Text style={styles.chooseSubtitle}>What do you want to do?</Text>
 
+        {/* Placed above the Space actions and visually distinct: the daily
+            puzzle is the one thing that expires, so it's the only card here
+            with a reason to be opened *today* specifically. */}
+        <TouchableOpacity
+          activeOpacity={0.85}
+          style={[styles.chooseCard, styles.cineMindCard]}
+          onPress={() => router.push("/cinemind")}
+        >
+          <Text style={styles.cineMindEmoji}>🧠</Text>
+          <View style={{ flex: 1 }}>
+            <Text style={styles.chooseCardTitle}>CineMind</Text>
+            <Text style={styles.chooseCardSubtitle}>
+              Today&apos;s 3-minute movie puzzle — one play a day
+            </Text>
+          </View>
+          <Ionicons name="chevron-forward" size={20} color={SpaceTheme.accentGold} />
+        </TouchableOpacity>
+
         <TouchableOpacity
           activeOpacity={0.85}
           style={styles.chooseCard}
@@ -222,6 +240,11 @@ const styles = StyleSheet.create({
     padding: 18,
     marginBottom: 16,
   },
+  cineMindCard: {
+    borderColor: "rgba(245, 197, 24, 0.45)",
+    backgroundColor: "rgba(245, 197, 24, 0.07)",
+  },
+  cineMindEmoji: { fontSize: 26, width: 28, textAlign: "center" },
   chooseCardTitle: {
     fontSize: 17,
     fontWeight: "700",
