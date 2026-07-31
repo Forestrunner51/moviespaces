@@ -20,6 +20,7 @@ builder.Services.AddHttpClient();
 builder.Services.AddMemoryCache();
 builder.Services.AddSingleton<PushNotificationService>();
 builder.Services.AddSingleton<OmdbClient>();
+builder.Services.AddSingleton<IProfanityFilterService, ProfanityFilterService>();
 builder.Services.AddSingleton<IDailyPuzzleService, DailyPuzzleService>();
 builder.Services.AddSingleton<CineMindCatalogService>();
 builder.Services.AddHostedService<ReminderBackgroundService>();

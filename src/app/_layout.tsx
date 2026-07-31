@@ -109,6 +109,7 @@ function Layout() {
         <Stack.Screen name="group" options={{ title: "Movie Group" }} />
         <Stack.Screen name="space/[id]" options={{ title: "Opening Space..." }} />
         <Stack.Screen name="join" options={{ title: "Join Group" }} />
+        <Stack.Screen name="join-by-code" options={{ title: "Enter Code" }} />
         <Stack.Screen name="chat/[userId]" options={{ title: "Chat" }} />
         <Stack.Screen name="group-chat/[id]" options={{ title: "Group Chat" }} />
         <Stack.Screen name="create-space" options={{ title: "Create a Space" }} />

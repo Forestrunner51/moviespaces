@@ -5,6 +5,7 @@ using Backend.Data;
 using Backend.Models;
 using Backend.Services;
 using System.Security.Claims;
+using System.Linq;
 using System.Net;
 using System.Text;
 using System.Text.Json;
@@ -21,13 +22,20 @@ namespace Backend.Controllers
         private readonly ILogger<GroupController> _logger;
         private readonly IHttpClientFactory _httpClientFactory;
         private readonly PushNotificationService _pushNotificationService;
+        private readonly IProfanityFilterService _profanityFilter;
 
-        public GroupController(AppDbContext db, ILogger<GroupController> logger, IHttpClientFactory httpClientFactory, PushNotificationService pushNotificationService)
+        public GroupController(
+            AppDbContext db,
+            ILogger<GroupController> logger,
+            IHttpClientFactory httpClientFactory,
+            PushNotificationService pushNotificationService,
+            IProfanityFilterService profanityFilter)
         {
             _db = db;
             _logger = logger;
             _httpClientFactory = httpClientFactory;
             _pushNotificationService = pushNotificationService;
+            _profanityFilter = profanityFilter;
         }
 
         // Human-readable share id, e.g. "friday-movie-night-a8f1". The random
@@ -41,6 +49,30 @@ namespace Backend.Controllers
             if (slug.Length > 40) slug = slug.Substring(0, 40).Trim('-');
             var suffix = Guid.NewGuid().ToString("N").Substring(0, 4);
             return $"{slug}-{suffix}";
+        }
+
+        // Excludes visually ambiguous characters (0/O, 1/I/L) — a code meant
+        // to be read aloud or typed by hand shouldn't hinge on telling those
+        // apart. Unlike GenerateSlug's "good enough" random suffix, a bare
+        // 6-char code has a real collision chance at any meaningful scale, so
+        // this checks the database and retries rather than trusting the odds.
+        private const string SpaceCodeAlphabet = "ABCDEFGHJKMNPQRSTUVWXYZ23456789";
+
+        private async Task<string> GenerateUniqueSpaceCodeAsync()
+        {
+            var random = Random.Shared;
+            for (var attempt = 0; attempt < 10; attempt++)
+            {
+                var code = new string(Enumerable.Range(0, 6)
+                    .Select(_ => SpaceCodeAlphabet[random.Next(SpaceCodeAlphabet.Length)])
+                    .ToArray());
+
+                if (!await _db.Groups.AnyAsync(g => g.SpaceCode == code)) return code;
+            }
+
+            // Astronomically unlikely with a 32^6 space, but a code that
+            // silently fails to be unique is worse than one that's ugly.
+            return $"{Guid.NewGuid():N}"[..8].ToUpperInvariant();
         }
 
         private Task NotifyMembersAsync(Guid groupId, string title, string body, string? excludeUserId = null) =>
@@ -63,15 +95,31 @@ namespace Backend.Controllers
             if (spaceType == "private_rental" && req.TotalCostCents.HasValue && req.TotalCostCents.Value < 0)
                 return BadRequest(new { error = "Cost can't be negative." });
 
+            // FilmName is only user-freeform for a "other" private_rental
+            // activity (no FilmId/TmdbMovieId — the host typed it rather than
+            // picking from a search result). Real movie/TV titles from OMDb
+            // are never filtered: a legitimate title landing on the blocklist
+            // would be a false positive we can't let block a real search
+            // result, and titles aren't identity the way a host's own name is.
+            var filmNameIsFreeform = req.FilmId == null && req.TmdbMovieId == null;
+            var cleanFilmName = filmNameIsFreeform
+                ? _profanityFilter.CleanOrFallback(req.FilmName, "Group Activity")
+                : req.FilmName;
+            var cleanHostName = _profanityFilter.CleanOrFallback(req.HostName, "A Movie Fan");
+            var cleanHangoutNotes = _profanityFilter.ContainsProfanity(req.HangoutNotes ?? "")
+                ? null
+                : req.HangoutNotes;
+
             var group = new Group
             {
-                Slug = GenerateSlug(req.FilmName),
-                HostName = req.HostName,
+                Slug = GenerateSlug(cleanFilmName),
+                SpaceCode = await GenerateUniqueSpaceCodeAsync(),
+                HostName = cleanHostName,
                 UserId = userId,
                 CinemaId = req.CinemaId,
                 CinemaName = req.CinemaName,
                 FilmId = req.FilmId,
-                FilmName = req.FilmName,
+                FilmName = cleanFilmName,
                 ShowTime = req.ShowTime,
                 ShowDate = req.ShowDate,
                 BookingUrl = req.BookingUrl ?? "",
@@ -82,7 +130,7 @@ namespace Backend.Controllers
                     ? string.Join(",", req.PostActivities)
                     : null,
                 HangoutNotes = req.PostActivities != null && req.PostActivities.Length > 0
-                    ? req.HangoutNotes
+                    ? cleanHangoutNotes
                     : null,
                 GooglePlaceId = req.GooglePlaceId,
                 TheaterLatitude = req.TheaterLatitude,
@@ -96,7 +144,7 @@ namespace Backend.Controllers
             group.Members.Add(new GroupMember
             {
                 GroupId = group.Id,
-                Name = req.HostName,
+                Name = cleanHostName,
                 UserId = userId,
                 Confirmed = true
             });
@@ -105,6 +153,27 @@ namespace Backend.Controllers
             await _db.SaveChangesAsync();
 
             return Ok(new { groupId = group.Id });
+        }
+
+        // GET /api/group/resolve/{code}
+        //
+        // Separate from GetGroup's Guid-or-Slug fallback rather than folded
+        // into it: SpaceCode is short and could theoretically collide with a
+        // legacy Slug's shape, and this only needs to hand back an id for the
+        // "I have a code" join screen to route with — not the full Space.
+        // AllowAnonymous: entering a code is how someone joins before they're
+        // a member, same as opening a /space/{id} link.
+        [HttpGet("resolve/{code}")]
+        [AllowAnonymous]
+        public async Task<IActionResult> ResolveSpaceCode(string code)
+        {
+            var normalized = code.Trim().ToUpperInvariant();
+            var group = await _db.Groups.FirstOrDefaultAsync(g => g.SpaceCode == normalized);
+            if (group == null) return NotFound(new { error = "No Space found with that code." });
+            if (group.Status == "cancelled")
+                return BadRequest(new { error = "This Space has been cancelled." });
+
+            return Ok(new { groupId = group.Id, filmName = group.FilmName, hostName = group.HostName });
         }
 
         [HttpGet("{id}")]
@@ -322,7 +391,7 @@ namespace Backend.Controllers
             var member = new GroupMember
             {
                 GroupId = id,
-                Name = req.Name,
+                Name = _profanityFilter.CleanOrFallback(req.Name, "A Movie Fan"),
                 UserId = userId,
                 Confirmed = false
             };
@@ -340,12 +409,18 @@ namespace Backend.Controllers
             var group = await _db.Groups.FindAsync(id);
             if (group == null) return NotFound();
 
+            // Cleaned once, up front — the de-dupe check below compares
+            // against Names already stored cleaned, so comparing against the
+            // raw, uncleaned request would never match on a repeat submit
+            // from the same person and create a duplicate member row.
+            var cleanName = _profanityFilter.CleanOrFallback(req.Name, "A Movie Fan");
+
             // Guard: web joiners have no UserId, so de-dupe on name instead (case-insensitive)
             // to avoid double-joins if the page reloads or the deep-link redirect races the click.
             var existing = await _db.GroupMembers
                 .FirstOrDefaultAsync(m => m.GroupId == id
                     && m.UserId == ""
-                    && m.Name.ToLower() == req.Name.Trim().ToLower());
+                    && m.Name.ToLower() == cleanName.Trim().ToLower());
             if (existing != null)
             {
                 return Ok(new { memberId = existing.Id });
@@ -362,7 +437,7 @@ namespace Backend.Controllers
             var member = new GroupMember
             {
                 GroupId = id,
-                Name = req.Name,
+                Name = cleanName,
                 UserId = "",
                 Confirmed = true
             };
