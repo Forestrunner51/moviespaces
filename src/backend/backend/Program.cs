@@ -23,6 +23,7 @@ builder.Services.AddSingleton<OmdbClient>();
 builder.Services.AddSingleton<IDailyPuzzleService, DailyPuzzleService>();
 builder.Services.AddSingleton<CineMindCatalogService>();
 builder.Services.AddHostedService<ReminderBackgroundService>();
+builder.Services.AddHostedService<CineMindReminderService>();
 
 builder.Services.AddCors(options =>
 {
@@ -93,6 +94,18 @@ app.UseCors("AllowReactApp");
 app.UseAuthentication();
 app.UseAuthorization();
 app.MapControllers();
+
+// Anonymous, no database work — this exists to be pinged cheaply.
+//
+// Render's free tier spins the instance down after ~15 minutes idle, which
+// costs the next real user a ~30s cold start AND stops background services
+// (the daily CineMind reminder) from running on time. An external uptime
+// pinger hitting this on a schedule keeps the instance warm.
+app.MapGet("/health", () => Results.Ok(new
+{
+    status = "ok",
+    utc = DateTime.UtcNow,
+})).AllowAnonymous();
 
 // Applies any migrations not yet recorded in __EFMigrationsHistory. The DB is
 // already fully migrated, so on a normal boot this is a single cheap check.

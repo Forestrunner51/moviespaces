@@ -27,6 +27,7 @@ public class AppDbContext : DbContext
     public DbSet<CineMindMovie> CineMindMovies => Set<CineMindMovie>();
     public DbSet<DailyPuzzle> DailyPuzzles => Set<DailyPuzzle>();
     public DbSet<UserDailyProgress> UserDailyProgress => Set<UserDailyProgress>();
+    public DbSet<CineMindReminderLog> CineMindReminderLog => Set<CineMindReminderLog>();
 
     protected override void OnModelCreating(ModelBuilder builder)
     {

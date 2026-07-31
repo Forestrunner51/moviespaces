@@ -73,23 +73,71 @@ namespace Backend.Services
             }
         }
 
+        // Same best-effort push to an explicit set of users. Used by the daily
+        // CineMind reminder, which fans out to everyone who plays rather than
+        // to the members of one group.
+        public async Task<int> NotifyUsersAsync(AppDbContext db, List<string> userIds, string title, string body)
+        {
+            try
+            {
+                if (userIds.Count == 0) return 0;
+
+                var tokens = await db.PushTokens
+                    .Where(t => userIds.Contains(t.UserId))
+                    .Select(t => t.Token)
+                    .ToListAsync();
+
+                if (tokens.Count == 0) return 0;
+
+                await SendExpoPushAsync(tokens, title, body);
+                return tokens.Count;
+            }
+            catch (Exception ex)
+            {
+                _logger.LogError(ex, "Failed to send push notifications to {Count} users", userIds.Count);
+                return 0;
+            }
+        }
+
+        // Expo rejects more than 100 messages in a single request, so this
+        // chunks rather than assuming the caller's list is small. Group pushes
+        // never came close; a game-wide daily reminder does.
+        private const int ExpoBatchSize = 100;
+
         private async Task SendExpoPushAsync(List<string> tokens, string title, string body)
         {
-            var messages = tokens.Select(token => new
-            {
-                to = token,
-                sound = "default",
-                title,
-                body,
-            });
-
             var client = _httpClientFactory.CreateClient();
-            var request = new HttpRequestMessage(HttpMethod.Post, "https://exp.host/--/api/v2/push/send")
+
+            for (var i = 0; i < tokens.Count; i += ExpoBatchSize)
             {
-                Content = new StringContent(JsonSerializer.Serialize(messages), Encoding.UTF8, "application/json"),
-            };
-            request.Headers.Add("Accept", "application/json");
-            await client.SendAsync(request);
+                var messages = tokens
+                    .Skip(i)
+                    .Take(ExpoBatchSize)
+                    .Select(token => new
+                    {
+                        to = token,
+                        sound = "default",
+                        title,
+                        body,
+                    });
+
+                var request = new HttpRequestMessage(HttpMethod.Post, "https://exp.host/--/api/v2/push/send")
+                {
+                    Content = new StringContent(JsonSerializer.Serialize(messages), Encoding.UTF8, "application/json"),
+                };
+                request.Headers.Add("Accept", "application/json");
+
+                // One bad batch shouldn't cost every later one — a partial
+                // send beats none.
+                try
+                {
+                    await client.SendAsync(request);
+                }
+                catch (Exception ex)
+                {
+                    _logger.LogError(ex, "Expo push batch starting at {Offset} failed.", i);
+                }
+            }
         }
     }
 }
