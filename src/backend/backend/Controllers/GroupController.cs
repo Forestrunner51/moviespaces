@@ -278,9 +278,19 @@ namespace Backend.Controllers
                 .Append("General")
                 .ToHashSet(StringComparer.OrdinalIgnoreCase);
 
-            var clubs = await _db.Groups.Include(g => g.Members)
-                .Where(g => g.IsPublic && g.GenreCategory != null && wanted.Contains(g.GenreCategory))
+            // Filtered in memory, not in the query: EF translates
+            // HashSet<T>.Contains to a plain SQL IN (...), which drops the
+            // OrdinalIgnoreCase comparer entirely and falls back to whatever
+            // the column's collation happens to do — silently reintroducing
+            // case sensitivity this line looks like it's guarding against.
+            // The public-club table is a handful of rows, so materializing
+            // it first costs nothing.
+            var allPublicClubs = await _db.Groups.Include(g => g.Members)
+                .Where(g => g.IsPublic)
                 .ToListAsync();
+            var clubs = allPublicClubs
+                .Where(g => g.GenreCategory != null && wanted.Contains(g.GenreCategory))
+                .ToList();
 
             var joined = new List<object>();
             foreach (var club in clubs)
@@ -430,8 +440,13 @@ namespace Backend.Controllers
                 // create-space.tsx (the only creation path) always sets
                 // ScreeningTime now, so a null one means this row predates
                 // that column and is guaranteed stale — hide it rather than
-                // showing an already-past Space forever.
-                .Where(g => g.ScreeningTime != null && g.ScreeningTime >= DateTime.UtcNow)
+                // showing an already-past Space forever. Public Community
+                // Spaces are the one deliberate exception: they have no
+                // ScreeningTime by design (there's no single event), and
+                // without this OR they'd be permanently invisible in Explore
+                // — the only place a user who skipped onboarding could ever
+                // find and join one.
+                .Where(g => g.IsPublic || (g.ScreeningTime != null && g.ScreeningTime >= DateTime.UtcNow))
                 // Capacity guard — don't surface a Space nobody can actually
                 // join anymore. MaxCapacity always has a value (defaults to
                 // 40 at creation), so there's no need to special-case 0/null.

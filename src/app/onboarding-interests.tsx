@@ -37,13 +37,16 @@ export default function OnboardingInterestsScreen() {
     setLoading(true);
     try {
       const displayName = (await AsyncStorage.getItem("userName")) || "";
-      await authFetch(`${process.env.EXPO_PUBLIC_API_URL}/api/group/community-spaces/auto-join`, {
+      const res = await authFetch(`${process.env.EXPO_PUBLIC_API_URL}/api/group/community-spaces/auto-join`, {
         method: "POST",
         body: JSON.stringify({ genres: selected, displayName }),
       });
       // Best-effort: a failed auto-join shouldn't strand a new user on the
       // onboarding screen — they land in the app either way and can join
-      // Community Spaces manually later via Explore.
+      // Community Spaces manually later via Explore. Still logged (fetch
+      // doesn't throw on 4xx/5xx) so a real server-side failure isn't
+      // completely invisible in dev.
+      if (!res.ok) console.warn("Auto-join returned", res.status);
     } catch (err) {
       console.warn("Auto-join failed:", err);
     } finally {

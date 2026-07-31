@@ -68,6 +68,7 @@ export interface LockedResults {
 export type TodayResponse =
   | {
       isLocked: true;
+      shareId: string;
       puzzleNumber: number;
       score: number;
       maxScore: number;
@@ -105,6 +106,7 @@ export interface SubmitResult {
   connection: ChallengeResult;
   chronos: ChallengeResult;
   castDeduct: ChallengeResult;
+  shareId: string;
 }
 
 export interface LeaderboardEntry {

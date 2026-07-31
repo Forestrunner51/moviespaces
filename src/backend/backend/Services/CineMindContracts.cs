@@ -93,5 +93,11 @@ namespace Backend.Services
         int PercentileRank,
         ChallengeResult Connection,
         ChallengeResult Chronos,
-        ChallengeResult CastDeduct);
+        ChallengeResult CastDeduct,
+        // The UserDailyProgress row's own id, not a separate generated
+        // token — it's already an unguessable Guid and doesn't leak the
+        // Supabase user id the way using UserId in a public URL would.
+        // Filled in by the controller (which owns the row); left as
+        // Guid.Empty here so Grade() itself stays pure or DB access.
+        Guid ShareId = default);
 }
