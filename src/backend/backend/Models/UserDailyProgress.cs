@@ -59,5 +59,16 @@ namespace Backend.Models
         // when the streak later breaks — the share grid quotes it.
         [Column("streak_count")]
         public int StreakCount { get; set; }
+
+        // How many of the day's 5 challenges were solved (0-5), computed once
+        // at submit time. Score alone can't answer this anymore now that
+        // Mystery Movie/TV score by attempts used and difficulty instead of a
+        // flat 0-or-100 — a raw score like 275 no longer maps to a clean
+        // "N of 5 solved" count. Denormalized here (same reasoning as
+        // StreakCount above) so the stats distribution chart doesn't need to
+        // re-grade a user's entire history against each day's puzzle payload
+        // just to answer "how many did you usually get."
+        [Column("challenges_solved_count")]
+        public int ChallengesSolvedCount { get; set; }
     }
 }

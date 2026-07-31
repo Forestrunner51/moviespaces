@@ -15,10 +15,12 @@ export function CineMindStatsCard({ stats }: CineMindStatsCardProps) {
   if (stats.gamesPlayed <= 1) return null;
 
   const bars = [
-    { label: "3/3", count: stats.distribution.perfect },
-    { label: "2/3", count: stats.distribution.twoOfThree },
-    { label: "1/3", count: stats.distribution.oneOfThree },
-    { label: "0/3", count: stats.distribution.blank },
+    { label: "5/5", count: stats.distribution.solved5 },
+    { label: "4/5", count: stats.distribution.solved4 },
+    { label: "3/5", count: stats.distribution.solved3 },
+    { label: "2/5", count: stats.distribution.solved2 },
+    { label: "1/5", count: stats.distribution.solved1 },
+    { label: "0/5", count: stats.distribution.solved0 },
   ];
   // Scale bars to the most common outcome rather than games played, so the
   // shape of the distribution is readable even when it's lopsided.
@@ -46,7 +48,7 @@ export function CineMindStatsCard({ stats }: CineMindStatsCardProps) {
                 // Always leaves a visible stub for a nonzero count, so a rare
                 // outcome doesn't render as an invisible sliver.
                 { width: `${bar.count === 0 ? 0 : Math.max(8, (bar.count / peak) * 100)}%` },
-                bar.label === "3/3" && styles.barFillPerfect,
+                bar.label === "5/5" && styles.barFillPerfect,
               ]}
             />
           </View>

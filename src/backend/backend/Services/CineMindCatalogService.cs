@@ -109,6 +109,37 @@ namespace Backend.Services
             "tt0073486", // One Flew Over the Cuckoo's Nest
         };
 
+        // TV track for Mystery Movie (Easy only, for now). Much shorter than
+        // the movie catalog on purpose — this only ever needs one unused show
+        // per day (unlike the movie catalog, which needs enough density for
+        // Connection/Chronos/CastDeduct too), so ~20 mainstream, widely-known
+        // shows is plenty to start. Will feel repetitive sooner than the
+        // movie catalog if never expanded — same disclosed tradeoff already
+        // accepted for the movie list at launch size.
+        private static readonly string[] SeedTvImdbIds =
+        {
+            "tt0903747", // Breaking Bad
+            "tt0944947", // Game of Thrones
+            "tt4574334", // Stranger Things
+            "tt0386676", // The Office (US)
+            "tt0108778", // Friends
+            "tt2861424", // Rick and Morty
+            "tt1520211", // The Walking Dead
+            "tt0475784", // Westworld
+            "tt2356777", // True Detective
+            "tt1475582", // Sherlock
+            "tt0141842", // The Sopranos
+            "tt0455275", // Prison Break
+            "tt1190634", // The Boys
+            "tt0413573", // Grey's Anatomy
+            "tt0898266", // The Big Bang Theory
+            "tt3107288", // The Crown
+            "tt6468322", // Money Heist
+            "tt2306299", // Vikings
+            "tt1839578", // Peaky Blinders
+            "tt0417299", // Avatar: The Last Airbender
+        };
+
         // Upserts every seed film. Idempotent and safe to re-run: existing
         // rows are refreshed rather than duplicated (ImdbId is unique).
         //
@@ -139,6 +170,7 @@ namespace Backend.Services
                     row.Director = entry.Director ?? row.Director;
                     row.CastJson = castJson;
                     row.GenresJson = genresJson;
+                    row.Plot = entry.Plot ?? row.Plot;
                     updated++;
                 }
                 else
@@ -152,6 +184,7 @@ namespace Backend.Services
                         Director = entry.Director,
                         CastJson = castJson,
                         GenresJson = genresJson,
+                        Plot = entry.Plot,
                         CreatedAt = DateTime.UtcNow,
                     });
                     added++;
@@ -161,6 +194,61 @@ namespace Backend.Services
             await db.SaveChangesAsync();
             _logger.LogInformation(
                 "CineMind catalog seed: {Added} added, {Updated} updated, {Failed} failed.",
+                added, updated, failed);
+
+            return (added, updated, failed);
+        }
+
+        // Same idempotent upsert-by-ImdbId pattern as SeedAsync, against the
+        // separate TV table — see SeedTvImdbIds for why it's a much shorter
+        // list, and CineMindTvShow for why there's no Director field to set.
+        public async Task<(int Added, int Updated, int Failed)> SeedTvAsync(AppDbContext db)
+        {
+            var existing = await db.CineMindTvShows.ToDictionaryAsync(m => m.ImdbId, StringComparer.OrdinalIgnoreCase);
+            int added = 0, updated = 0, failed = 0;
+
+            foreach (var imdbId in SeedTvImdbIds.Distinct(StringComparer.OrdinalIgnoreCase))
+            {
+                var entry = await _omdb.LookupCatalogEntryAsync(imdbId, mediaType: "series");
+                if (entry == null || entry.ReleaseYear == 0)
+                {
+                    failed++;
+                    continue;
+                }
+
+                var castJson = JsonSerializer.Serialize(entry.Cast);
+                var genresJson = JsonSerializer.Serialize(entry.Genres);
+
+                if (existing.TryGetValue(imdbId, out var row))
+                {
+                    row.Title = entry.Title;
+                    row.ReleaseYear = entry.ReleaseYear;
+                    row.PosterPath = entry.PosterUrl ?? row.PosterPath;
+                    row.CastJson = castJson;
+                    row.GenresJson = genresJson;
+                    row.Plot = entry.Plot ?? row.Plot;
+                    updated++;
+                }
+                else
+                {
+                    db.CineMindTvShows.Add(new CineMindTvShow
+                    {
+                        ImdbId = entry.ImdbId,
+                        Title = entry.Title,
+                        ReleaseYear = entry.ReleaseYear,
+                        PosterPath = entry.PosterUrl,
+                        CastJson = castJson,
+                        GenresJson = genresJson,
+                        Plot = entry.Plot,
+                        CreatedAt = DateTime.UtcNow,
+                    });
+                    added++;
+                }
+            }
+
+            await db.SaveChangesAsync();
+            _logger.LogInformation(
+                "CineMind TV catalog seed: {Added} added, {Updated} updated, {Failed} failed.",
                 added, updated, failed);
 
             return (added, updated, failed);

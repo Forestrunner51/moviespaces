@@ -47,12 +47,29 @@ export interface CastDeductView {
   options: string[];
 }
 
+// No answer field — every clue here is meant to be seen, progressively, by
+// design. Only the target's own identity (title/id) is withheld, and that
+// never appears in this view at all. Shared shape for both the movie
+// (mediaType "movie") and TV (mediaType "tv") challenge — director is always
+// null for TV, since OMDb's Director field is unreliable for a series.
+export interface MysteryMovieView {
+  mediaType: "movie" | "tv";
+  director: string | null;
+  cast: string[];
+  genres: string[];
+  releaseYear: number;
+  plot: string | null;
+  posterPath: string | null;
+}
+
 export interface PuzzleView {
   puzzleNumber: number;
   puzzleDate: string;
   connection: ConnectionView;
   chronos: ChronosView;
   castDeduct: CastDeductView;
+  mysteryMovie: MysteryMovieView;
+  mysteryTv: MysteryMovieView;
 }
 
 // Discriminated on isLocked so the screen can't accidentally read a puzzle
@@ -63,6 +80,8 @@ export interface LockedResults {
   connection: boolean;
   chronos: boolean;
   castDeduct: boolean;
+  mysteryMovie: boolean;
+  mysteryTv: boolean;
 }
 
 export type TodayResponse =
@@ -85,10 +104,17 @@ export type TodayResponse =
       puzzle: PuzzleView;
     };
 
+export type MysteryDifficulty = "easy" | "medium" | "hard";
+
 export interface SubmittedAnswers {
   connectionAnswer: string | null;
   chronosOrder: string[] | null;
   castDeductAnswer: string | null;
+  mysteryMovieGuess?: string | null;
+  mysteryMovieAttemptsUsed?: number;
+  mysteryMovieDifficulty?: MysteryDifficulty;
+  mysteryTvGuess?: string | null;
+  mysteryTvAttemptsUsed?: number;
 }
 
 export interface ChallengeResult {
@@ -106,7 +132,21 @@ export interface SubmitResult {
   connection: ChallengeResult;
   chronos: ChallengeResult;
   castDeduct: ChallengeResult;
+  mysteryMovie: ChallengeResult;
+  mysteryTv: ChallengeResult;
   shareId: string;
+}
+
+// Full catalog, for Mystery Movie's local-only guess autocomplete and
+// near-miss comparison — see GameController.BrowseCatalog for why this is
+// fetched once rather than searched live per keystroke.
+export interface CatalogMovie {
+  imdbId: string;
+  title: string;
+  releaseYear: number;
+  director: string | null;
+  cast: string[];
+  posterPath: string | null;
 }
 
 export interface LeaderboardEntry {
@@ -196,11 +236,16 @@ export interface CineMindStats {
   perfectCount: number;
   averageScore: number;
   playedToday: boolean;
+  // Bucketed by how many of the 5 daily challenges were solved, not by raw
+  // score — Mystery Movie/TV's attempt- and difficulty-scaled points mean
+  // score no longer maps cleanly to a "solved count."
   distribution: {
-    perfect: number;
-    twoOfThree: number;
-    oneOfThree: number;
-    blank: number;
+    solved5: number;
+    solved4: number;
+    solved3: number;
+    solved2: number;
+    solved1: number;
+    solved0: number;
   };
 }
 
@@ -239,6 +284,20 @@ export async function fetchGlobalLeaderboard(): Promise<GlobalLeaderboard> {
     throw new Error(body?.error || `Couldn't load the leaderboard (${res.status}).`);
   }
   return (await res.json()) as GlobalLeaderboard;
+}
+
+export async function browseCatalog(mediaType: "movie" | "tv" = "movie"): Promise<CatalogMovie[]> {
+  const res = await authFetchWithTimeout(
+    `${BASE}/catalog/browse?mediaType=${mediaType}`,
+    {},
+    COLD_START_TIMEOUT_MS,
+  );
+  if (!res.ok) {
+    const body = await res.json().catch(() => ({}));
+    throw new Error(body?.error || `Couldn't load the movie list (${res.status}).`);
+  }
+  const data = await res.json();
+  return data.movies as CatalogMovie[];
 }
 
 export async function fetchSpaceLeaderboard(spaceId: string): Promise<SpaceLeaderboard | null> {

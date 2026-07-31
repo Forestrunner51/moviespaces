@@ -21,7 +21,16 @@ namespace Backend.Services
         string? PosterUrl,
         string? Director,
         List<string> Cast,
-        List<string> Genres);
+        List<string> Genres,
+        // OMDb's short marketing-style logline (already requested via
+        // plot=short, just never captured before). Used as Mystery Movie's
+        // plot clue. Not algorithmically "vaguened" — OMDb's short Plot is
+        // already a non-spoiler blurb by nature, and fabricating a vaguer
+        // version would risk inventing wrong details rather than using real
+        // ones. No tagline/quote field exists anywhere in OMDb's schema, so
+        // that clue tier from the original spec is dropped rather than
+        // faked — see DailyPuzzleService's clue-tier comment.
+        string? Plot);
 
     // Title -> metadata lookups against OMDb, used by the nightly showtime
     // ingest to enrich scraped titles.
@@ -124,7 +133,12 @@ namespace Backend.Services
         // seeding a catalog costs one request per film instead of TMDB's
         // separate /credits call — and TMDb's free tier bars commercial use
         // anyway, which is why this project already migrated off it.
-        public async Task<OmdbCatalogEntry?> LookupCatalogEntryAsync(string imdbId)
+        // mediaType: "movie" (default) or "series". Passed through as OMDb's
+        // own &type= param. For a series, OMDb's Director field is usually
+        // empty or reflects only one episode's director rather than the show
+        // as a whole — unreliable enough that the TV catalog seed deliberately
+        // drops it rather than surface a misleading credit.
+        public async Task<OmdbCatalogEntry?> LookupCatalogEntryAsync(string imdbId, string mediaType = "movie")
         {
             var apiKey = _configuration["Omdb:ApiKey"];
             if (string.IsNullOrWhiteSpace(apiKey))
@@ -136,7 +150,7 @@ namespace Backend.Services
             var cacheKey = $"omdb:catalog:{imdbId}";
             if (_cache.TryGetValue(cacheKey, out OmdbCatalogEntry? cached)) return cached;
 
-            var url = $"{BaseUrl}?apikey={apiKey}&i={Uri.EscapeDataString(imdbId)}&plot=short";
+            var url = $"{BaseUrl}?apikey={apiKey}&i={Uri.EscapeDataString(imdbId)}&type={mediaType}&plot=short";
             try
             {
                 var client = _httpClientFactory.CreateClient();
@@ -180,7 +194,8 @@ namespace Backend.Services
                     PosterUrl: Clean(GetString(root, "Poster")),
                     Director: Clean(GetString(root, "Director")),
                     Cast: cast,
-                    Genres: genres);
+                    Genres: genres,
+                    Plot: Clean(GetString(root, "Plot")));
 
                 _cache.Set(cacheKey, entry, TimeSpan.FromHours(24));
                 return entry;
