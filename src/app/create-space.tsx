@@ -234,8 +234,10 @@ export default function CreateSpaceScreen() {
       .finally(() => setTheatersLoading(false));
   }, []);
 
-  // Pre-populate with box-office-active titles so the picker isn't empty
-  // before the host types anything.
+  // Pre-populate with a rotating pick of well-known titles (a fixed curated
+  // list, not real theatrical data — OMDb has no now-playing/popularity
+  // endpoint to draw from) so the picker isn't empty before the host types
+  // anything.
   useEffect(() => {
     getNowPlaying().then(setNowPlaying);
   }, []);

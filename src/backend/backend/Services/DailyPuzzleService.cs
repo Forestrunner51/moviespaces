@@ -17,6 +17,12 @@ namespace Backend.Services
         Task<PracticeSpin?> BuildPracticeSpinAsync(AppDbContext db, string? genre);
         PracticeSpinView ToPracticeView(PracticeSpin spin);
         ChallengeResult GradePracticeChallenge(string challengeType, object challenge, SubmittedAnswers answer);
+
+        // Exposes the otherwise-private Deserialize — the public share-result
+        // page needs to re-grade a PAST day's puzzle (not necessarily today's,
+        // which is all GetOrCreateTodayAsync can hand back), so it has to load
+        // that day's DailyPuzzle row itself and deserialize its payload here.
+        DailyPuzzlePayload? DeserializePayload(string json);
     }
 
     // Generates and grades the one shared daily puzzle.
@@ -567,6 +573,8 @@ namespace Backend.Services
                 return new List<string>();
             }
         }
+
+        public DailyPuzzlePayload? DeserializePayload(string json) => Deserialize(json);
 
         private static DailyPuzzlePayload? Deserialize(string json)
         {

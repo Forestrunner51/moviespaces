@@ -82,6 +82,7 @@ namespace Backend.Controllers
                 return Ok(new
                 {
                     isLocked = true,
+                    shareId = progress.Id,
                     puzzleNumber = puzzle.PuzzleNumber,
                     score = progress.Score,
                     maxScore = DailyPuzzleService.MaxScore,
@@ -164,6 +165,7 @@ namespace Backend.Controllers
             {
                 StreakCount = streak,
                 PercentileRank = await PercentileAsync(today, graded.Score),
+                ShareId = row.Id,
             });
         }
 
@@ -457,6 +459,98 @@ namespace Backend.Controllers
             var beaten = await _db.UserDailyProgress
                 .CountAsync(p => p.PuzzleDate == date && p.Score <= score);
             return (int)Math.Round(100.0 * beaten / total);
+        }
+
+        // GET /cinemind-result/{id}
+        //
+        // What generateShareGrid actually links to now, instead of pasting the
+        // whole spoiler-free grid as raw emoji text into the message body —
+        // a real webpage a recipient can open reads as a legitimate share
+        // (same pattern as the Space invite page), not a wall of copy-pasted
+        // symbols. AllowAnonymous: the recipient hasn't necessarily played
+        // today and shouldn't need to sign in just to see a friend's score.
+        //
+        // No answers, no puzzle payload, no PII beyond what the plain-text
+        // grid already showed — same spoiler-free constraint, same content,
+        // just rendered as HTML instead of emoji lines.
+        [HttpGet("/cinemind-result/{id:guid}")]
+        [AllowAnonymous]
+        public async Task<IActionResult> ResultPage(Guid id)
+        {
+            var progress = await _db.UserDailyProgress.FirstOrDefaultAsync(p => p.Id == id);
+            if (progress == null) return NotFound();
+
+            var dailyPuzzle = await _db.DailyPuzzles.FirstOrDefaultAsync(p => p.PuzzleDate == progress.PuzzleDate);
+            var payload = dailyPuzzle != null ? _puzzles.DeserializePayload(dailyPuzzle.ChallengePayloadJson) : null;
+            var stored = SafeParse(progress.GuessHistoryJson) as SubmittedAnswers;
+            var regraded = (payload != null && stored != null)
+                ? _puzzles.Grade(payload, stored, progress.TimeTakenMs)
+                : null;
+
+            var puzzleNumber = dailyPuzzle?.PuzzleNumber ?? 0;
+            var isPerfect = progress.Score == DailyPuzzleService.MaxScore;
+            var timeText = System.Net.WebUtility.HtmlEncode(FormatDuration(progress.TimeTakenMs));
+
+            string Row(string label, bool? correct) =>
+                correct == null
+                    ? ""
+                    : $"<div class='row'><span>{(correct.Value ? "🟩" : "🟥")}</span> {label}</div>";
+
+            var html = $@"
+        <!DOCTYPE html>
+        <html>
+        <head>
+            <meta charset='utf-8'>
+            <meta name='viewport' content='width=device-width, initial-scale=1'>
+            <title>CineMind #{puzzleNumber} - MovieSpaces</title>
+            <meta property='og:title' content='CineMind #{puzzleNumber} — {progress.Score}/{DailyPuzzleService.MaxScore}'>
+            <meta property='og:description' content='A daily 3-minute movie puzzle. Can you beat this score?'>
+            <style>
+                * {{ margin: 0; padding: 0; box-sizing: border-box; }}
+                body {{ font-family: -apple-system, sans-serif; background: #111; color: #fff; min-height: 100vh; display: flex; flex-direction: column; align-items: center; justify-content: center; padding: 24px; }}
+                .card {{ background: #1a1a1a; border-radius: 16px; padding: 32px; max-width: 400px; width: 100%; text-align: center; }}
+                .emoji {{ font-size: 40px; margin-bottom: 8px; }}
+                h1 {{ font-size: 18px; color: #888; font-weight: 600; letter-spacing: 1px; text-transform: uppercase; margin-bottom: 8px; }}
+                .score {{ font-size: 56px; font-weight: 800; margin-bottom: 4px; }}
+                .score span {{ font-size: 24px; color: #888; font-weight: 600; }}
+                .meta {{ color: #888; font-size: 14px; margin-bottom: 24px; }}
+                .rows {{ background: #222; border-radius: 8px; padding: 16px; margin-bottom: 24px; text-align: left; }}
+                .row {{ font-size: 15px; padding: 6px 0; }}
+                .perfect {{ color: #F5C518; font-weight: 700; margin-bottom: 16px; }}
+                .app-link {{ margin-top: 8px; font-size: 13px; color: #38BDF8; text-decoration: none; display: block; font-weight: 600; }}
+                .cta {{ display: block; background: #38BDF8; color: #111; font-weight: 700; padding: 14px; border-radius: 8px; text-decoration: none; margin-top: 8px; }}
+            </style>
+        </head>
+        <body>
+            <div class='card'>
+                <div class='emoji'>🧠</div>
+                <h1>CineMind #{puzzleNumber}</h1>
+                <div class='score'>{progress.Score}<span>/{DailyPuzzleService.MaxScore}</span></div>
+                <p class='meta'>{timeText}{(progress.StreakCount > 1 ? $" &middot; 🔥 {progress.StreakCount} day streak" : "")}</p>
+
+                {(isPerfect ? "<p class='perfect'>🏆 Perfect score!</p>" : "")}
+
+                <div class='rows'>
+                    {Row("The Connection", regraded?.Connection.Correct)}
+                    {Row("Chronos", regraded?.Chronos.Correct)}
+                    {Row("Cast Deduct", regraded?.CastDeduct.Correct)}
+                </div>
+
+                <a href='moviespaces://cinemind' class='cta'>Play Today's CineMind</a>
+                <a href='moviespaces://cinemind' class='app-link'>Open in the MovieSpaces App</a>
+            </div>
+        </body>
+        </html>";
+
+            return Content(html, "text/html");
+        }
+
+        private static string FormatDuration(int ms)
+        {
+            var totalSeconds = Math.Max(0, ms / 1000);
+            var minutes = totalSeconds / 60;
+            var seconds = totalSeconds % 60;
+            return minutes > 0 ? $"{minutes}m {seconds}s" : $"{seconds}s";
         }
 
         private static int SecondsUntilMidnightUtc()

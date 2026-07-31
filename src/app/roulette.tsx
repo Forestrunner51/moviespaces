@@ -12,6 +12,9 @@ import Animated, {
   useSharedValue,
   useAnimatedStyle,
   withSpring,
+  withTiming,
+  withRepeat,
+  Easing,
   SharedValue,
 } from "react-native-reanimated";
 import { router } from "expo-router";
@@ -43,6 +46,26 @@ function playReveal(reveal: SharedValue<number>) {
   reveal.value = withSpring(1, { damping: 12 });
 }
 
+// The wheel spins continuously (linear, no easing) while waiting on the
+// network — an indefinite loop, not a fixed animation, since a real spin
+// has no predetermined duration.
+function startWheelSpin(wheel: SharedValue<number>) {
+  wheel.value = withRepeat(
+    withTiming(wheel.value + 360, { duration: 650, easing: Easing.linear }),
+    -1,
+    false,
+  );
+}
+// Overrides the infinite repeat with a few more decelerating rotations that
+// land on a clean multiple of 360 — the "it caught on something and slowed
+// to a stop" motion an actual spin ends with, not an abrupt cut.
+function settleWheelSpin(wheel: SharedValue<number>) {
+  wheel.value = withTiming(wheel.value + 360 * 3, { duration: 1100, easing: Easing.out(Easing.cubic) });
+}
+function resetWheelSpin(wheel: SharedValue<number>) {
+  wheel.value = 0;
+}
+
 // Movie Roulette — spin for a random film plus a one-off practice CineMind
 // challenge about it. Explicitly NOT the daily game: nothing here touches a
 // streak or a leaderboard, so it's safe to play any number of times, unlike
@@ -65,6 +88,11 @@ export default function RouletteScreen() {
     transform: [{ scale: 0.85 + reveal.value * 0.15 }],
   }));
 
+  const wheel = useSharedValue(0);
+  const wheelStyle = useAnimatedStyle(() => ({
+    transform: [{ rotate: `${wheel.value}deg` }],
+  }));
+
   const resetAnswers = () => {
     setConnectionAnswer(null);
     setChronosOrder([]);
@@ -77,14 +105,17 @@ export default function RouletteScreen() {
     setErrorText(null);
     resetAnswers();
     resetReveal(reveal);
+    startWheelSpin(wheel);
     try {
       const result = await spinRoulette(genre);
       setSpin(result);
       setPhase("revealed");
+      settleWheelSpin(wheel);
       playReveal(reveal);
     } catch (err: any) {
       setErrorText(err?.message || "Couldn't spin. Please try again.");
       setPhase("picking");
+      resetWheelSpin(wheel);
     }
   };
 
@@ -142,6 +173,15 @@ export default function RouletteScreen() {
             </View>
 
             {errorText && <Text style={styles.errorText}>{errorText}</Text>}
+
+            {phase === "spinning" && (
+              <View style={styles.wheelWrap}>
+                <Animated.View style={wheelStyle}>
+                  <Ionicons name="film" size={56} color={SpaceTheme.glowCyan} />
+                </Animated.View>
+                <Text style={styles.wheelLabel}>Spinning…</Text>
+              </View>
+            )}
 
             <TouchableOpacity
               activeOpacity={0.85}
@@ -409,6 +449,14 @@ const styles = StyleSheet.create({
   genrePillText: { color: SpaceTheme.mutedOrbit, fontSize: 13, fontWeight: "600" },
   genrePillTextActive: { color: SpaceTheme.glowCyan, fontWeight: "700" },
   errorText: { color: SpaceTheme.danger, fontSize: 13, textAlign: "center", marginBottom: 12 },
+  wheelWrap: { alignItems: "center", marginBottom: 24, gap: 10 },
+  wheelLabel: {
+    color: SpaceTheme.mutedOrbit,
+    fontSize: 12,
+    fontWeight: "700",
+    textTransform: "uppercase",
+    letterSpacing: 1,
+  },
   spinButton: {
     flexDirection: "row",
     alignItems: "center",
@@ -471,7 +519,7 @@ const styles = StyleSheet.create({
   resultBannerText: { fontSize: 20, fontWeight: "800", color: SpaceTheme.starWhite },
   resultAnswerText: { fontSize: 13, color: SpaceTheme.mutedOrbit, marginTop: 4 },
   practiceNote: { fontSize: 11, color: SpaceTheme.mutedOrbit, marginTop: 8, fontStyle: "italic" },
-  actionsRow: { flexDirection: "row", gap: 10 },
+  actionsRow: { flexDirection: "row", gap: 10, marginTop: 18 },
   secondaryButton: {
     ...SpaceStyles.glassCard,
     flex: 1,

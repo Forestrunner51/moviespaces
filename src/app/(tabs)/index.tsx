@@ -5,7 +5,6 @@ import {
   TouchableOpacity,
   StyleSheet,
   FlatList,
-  Image,
   ActivityIndicator,
   ScrollView,
 } from "react-native";
@@ -13,7 +12,6 @@ import { router } from "expo-router";
 import { Ionicons } from "@expo/vector-icons";
 import { Starfield } from "@/frontend/components/starfield";
 import { SpaceTheme, SpaceStyles } from "@/frontend/constants/theme";
-import { getNowPlaying, Movie } from "@/frontend/services/movies";
 import { MoviePoster } from "@/frontend/components/movie-poster";
 
 interface NearbySpace {
@@ -40,8 +38,6 @@ function pickRandom<T>(arr: T[], count: number): T[] {
 export default function HomeScreen() {
   const [nearbySpaces, setNearbySpaces] = useState<NearbySpace[]>([]);
   const [spacesLoading, setSpacesLoading] = useState(true);
-  const [nowPlaying, setNowPlaying] = useState<Movie[]>([]);
-  const [moviesLoading, setMoviesLoading] = useState(true);
 
   useEffect(() => {
     fetch(`${process.env.EXPO_PUBLIC_API_URL}/api/group/open`)
@@ -59,14 +55,6 @@ export default function HomeScreen() {
         setNearbySpaces([]);
       })
       .finally(() => setSpacesLoading(false));
-
-    getNowPlaying()
-      .then(setNowPlaying)
-      .catch((err) => {
-        console.warn("Failed to load now-playing movies:", err);
-        setNowPlaying([]);
-      })
-      .finally(() => setMoviesLoading(false));
   }, []);
 
   return (
@@ -199,48 +187,6 @@ export default function HomeScreen() {
             )}
           />
         )}
-
-        <Text style={styles.sectionTitle}>Now Playing</Text>
-        {moviesLoading ? (
-          <ActivityIndicator color={SpaceTheme.glowCyan} style={styles.sectionLoading} />
-        ) : nowPlaying.length === 0 ? (
-          <Text style={styles.emptySectionText}>Couldn&apos;t load movies right now.</Text>
-        ) : (
-          <FlatList
-            horizontal
-            showsHorizontalScrollIndicator={false}
-            data={nowPlaying}
-            keyExtractor={(item) => item.imdbId}
-            contentContainerStyle={styles.carouselContent}
-            renderItem={({ item }) => (
-              <TouchableOpacity
-                activeOpacity={0.85}
-                style={styles.movieCard}
-                onPress={() =>
-                  router.push({
-                    pathname: "/create-space",
-                    params: {
-                      spaceType: "public_gathering",
-                      movieName: item.title,
-                      posterPath: item.posterPath ?? "",
-                    },
-                  })
-                }
-              >
-                {item.posterPath ? (
-                  <Image source={{ uri: item.posterPath }} style={styles.moviePoster} />
-                ) : (
-                  <View style={[styles.moviePoster, styles.moviePosterFallback]}>
-                    <Ionicons name="film-outline" size={24} color={SpaceTheme.mutedOrbit} />
-                  </View>
-                )}
-                <Text style={styles.movieTitle} numberOfLines={2}>
-                  {item.title}
-                </Text>
-              </TouchableOpacity>
-            )}
-          />
-        )}
       </ScrollView>
     </Starfield>
   );
@@ -324,14 +270,4 @@ const styles = StyleSheet.create({
   spaceCardSubtitle: { fontSize: 12, color: SpaceTheme.mutedOrbit, marginBottom: 4 },
   spaceCardTime: { fontSize: 12, color: SpaceTheme.glowCyan, fontWeight: "600", marginBottom: 6 },
   spaceCardHost: { fontSize: 11, color: SpaceTheme.mutedOrbit },
-  movieCard: { width: 120 },
-  moviePoster: {
-    width: 120,
-    height: 180,
-    borderRadius: 12,
-    backgroundColor: "rgba(255,255,255,0.05)",
-    marginBottom: 6,
-  },
-  moviePosterFallback: { alignItems: "center", justifyContent: "center" },
-  movieTitle: { fontSize: 13, fontWeight: "600", color: SpaceTheme.starWhite },
 });

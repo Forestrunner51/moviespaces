@@ -132,7 +132,7 @@ export default function CineMindScreen() {
     if (!result || !puzzle) return;
     try {
       await Share.share({
-        message: generateShareGrid({ puzzleNumber: puzzle.puzzleNumber, result }),
+        message: generateShareGrid({ puzzleNumber: puzzle.puzzleNumber, result, shareId: result.shareId }),
       });
     } catch {
       // Sheet dismissed.
@@ -173,22 +173,21 @@ export default function CineMindScreen() {
   }
 
   if (phase === "locked" && today?.isLocked) {
-    // Rebuilt from the booleans the server sends back, so the grid is
-    // shareable on a return visit — not just in the moments after submitting.
-    const shareText = today.results
-      ? generateShareGrid({
-          puzzleNumber: today.puzzleNumber,
-          result: {
-            score: today.score,
-            maxScore: today.maxScore,
-            timeTakenMs: today.timeTakenMs,
-            streakCount: today.streakCount,
-            connection: { correct: today.results.connection },
-            chronos: { correct: today.results.chronos },
-            castDeduct: { correct: today.results.castDeduct },
-          },
-        })
-      : null;
+    // Built from the locked response directly, so re-sharing works on a
+    // return visit — not just in the moments right after submitting. Unlike
+    // the old emoji-grid version, this no longer needs the re-graded
+    // per-challenge booleans at all: those render on the linked webpage now,
+    // not in the message text.
+    const shareText = generateShareGrid({
+      puzzleNumber: today.puzzleNumber,
+      result: {
+        score: today.score,
+        maxScore: today.maxScore,
+        timeTakenMs: today.timeTakenMs,
+        streakCount: today.streakCount,
+      },
+      shareId: today.shareId,
+    });
 
     return (
       <Starfield>
