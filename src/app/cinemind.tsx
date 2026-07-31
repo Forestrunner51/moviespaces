@@ -9,15 +9,20 @@ import {
   Alert,
   Share,
 } from "react-native";
+import { router } from "expo-router";
 import { Ionicons } from "@expo/vector-icons";
 import { Starfield } from "@/frontend/components/starfield";
 import { MoviePoster } from "@/frontend/components/movie-poster";
 import { LockedStateView } from "@/frontend/components/locked-state-view";
+import { CineMindStatsCard } from "@/frontend/components/cinemind-stats";
 import { SpaceTheme, SpaceStyles } from "@/frontend/constants/theme";
 import {
   fetchTodayPuzzle,
+  fetchStats,
   submitPuzzle,
+  formatCountdown,
   formatDuration,
+  CineMindStats,
   PuzzleMovie,
   PuzzleView,
   SubmitResult,
@@ -33,6 +38,12 @@ export default function CineMindScreen() {
   const [today, setToday] = useState<TodayResponse | null>(null);
   const [puzzle, setPuzzle] = useState<PuzzleView | null>(null);
   const [result, setResult] = useState<SubmitResult | null>(null);
+  const [stats, setStats] = useState<CineMindStats | null>(null);
+  // Absolute timestamp, captured when the puzzle loads. The server's
+  // "seconds remaining" is only true at that moment — anchoring it later
+  // (on the results screen, after a few minutes of play) would overstate
+  // the time left by exactly how long the player took.
+  const [nextPuzzleAt, setNextPuzzleAt] = useState<number | null>(null);
 
   const [challengeIndex, setChallengeIndex] = useState(0);
   const [connectionAnswer, setConnectionAnswer] = useState<string | null>(null);
@@ -52,7 +63,11 @@ export default function CineMindScreen() {
     try {
       const data = await fetchTodayPuzzle();
       setToday(data);
+      setNextPuzzleAt(Date.now() + data.secondsUntilNextPuzzle * 1000);
       if (data.isLocked) {
+        // Only fetched once there's a history worth summarizing — a player
+        // mid-puzzle has no use for it and it'd just be a wasted request.
+        setStats(await fetchStats());
         setPhase("locked");
         return;
       }
@@ -103,6 +118,9 @@ export default function CineMindScreen() {
       );
       setResult(graded);
       setPhase("results");
+      // After the result is on screen, not before — stats are supplementary
+      // and shouldn't delay showing someone their score.
+      setStats(await fetchStats());
     } catch (err: any) {
       Alert.alert("Couldn't submit", err?.message || "Please try again.");
     } finally {
@@ -152,6 +170,23 @@ export default function CineMindScreen() {
   }
 
   if (phase === "locked" && today?.isLocked) {
+    // Rebuilt from the booleans the server sends back, so the grid is
+    // shareable on a return visit — not just in the moments after submitting.
+    const shareText = today.results
+      ? generateShareGrid({
+          puzzleNumber: today.puzzleNumber,
+          result: {
+            score: today.score,
+            maxScore: today.maxScore,
+            timeTakenMs: today.timeTakenMs,
+            streakCount: today.streakCount,
+            connection: { correct: today.results.connection },
+            chronos: { correct: today.results.chronos },
+            castDeduct: { correct: today.results.castDeduct },
+          },
+        })
+      : null;
+
     return (
       <Starfield>
         <ScrollView contentContainerStyle={styles.content}>
@@ -163,7 +198,10 @@ export default function CineMindScreen() {
             timeTakenMs={today.timeTakenMs}
             streakCount={today.streakCount}
             secondsUntilNextPuzzle={today.secondsUntilNextPuzzle}
+            shareText={shareText}
           />
+          {stats && <CineMindStatsCard stats={stats} />}
+          <LeaderboardLink />
         </ScrollView>
       </Starfield>
     );
@@ -193,6 +231,10 @@ export default function CineMindScreen() {
             <Ionicons name="share-outline" size={18} color={SpaceTheme.backgroundVoid} />
             <Text style={styles.primaryButtonText}>Share Result</Text>
           </TouchableOpacity>
+
+          {stats && <CineMindStatsCard stats={stats} />}
+          <LeaderboardLink />
+          <NextPuzzleCountdown deadline={nextPuzzleAt} />
         </ScrollView>
       </Starfield>
     );
@@ -331,6 +373,41 @@ function Header({ streak, elapsedMs }: { streak: number; elapsedMs?: number }) {
       )}
     </View>
   );
+}
+
+function LeaderboardLink() {
+  return (
+    <TouchableOpacity
+      activeOpacity={0.85}
+      style={styles.secondaryButton}
+      onPress={() => router.push("/leaderboard")}
+    >
+      <Ionicons name="trophy-outline" size={18} color={SpaceTheme.accentGold} />
+      <Text style={styles.secondaryButtonText}>See Today&apos;s Leaderboard</Text>
+    </TouchableOpacity>
+  );
+}
+
+// Live countdown to the next puzzle. Takes an absolute timestamp rather than
+// a duration, so the time played between loading and finishing doesn't get
+// added back onto the clock. Recomputing from the deadline each tick also
+// self-corrects when a throttled interval fires late.
+function NextPuzzleCountdown({ deadline }: { deadline: number | null }) {
+  const [remaining, setRemaining] = useState(() =>
+    deadline == null ? 0 : Math.max(0, Math.round((deadline - Date.now()) / 1000)),
+  );
+
+  useEffect(() => {
+    if (deadline == null) return;
+    const interval = setInterval(() => {
+      setRemaining(Math.max(0, Math.round((deadline - Date.now()) / 1000)));
+    }, 1000);
+    return () => clearInterval(interval);
+  }, [deadline]);
+
+  if (deadline == null) return null;
+
+  return <Text style={styles.countdownText}>Next CineMind in {formatCountdown(remaining)}</Text>;
 }
 
 function PosterRow({ movies, showTitles }: { movies: PuzzleMovie[]; showTitles?: boolean }) {
@@ -480,6 +557,24 @@ const styles = StyleSheet.create({
   },
   primaryButtonDisabled: { backgroundColor: "rgba(255,255,255,0.14)" },
   primaryButtonText: { color: SpaceTheme.backgroundVoid, fontSize: 16, fontWeight: "700" },
+  secondaryButton: {
+    ...SpaceStyles.glassCard,
+    flexDirection: "row",
+    alignItems: "center",
+    justifyContent: "center",
+    gap: 8,
+    paddingVertical: 14,
+    marginTop: 12,
+    borderColor: "rgba(245, 197, 24, 0.4)",
+  },
+  secondaryButtonText: { color: SpaceTheme.accentGold, fontSize: 15, fontWeight: "700" },
+  countdownText: {
+    textAlign: "center",
+    color: SpaceTheme.mutedOrbit,
+    fontSize: 12,
+    marginTop: 16,
+    fontVariant: ["tabular-nums"],
+  },
   footnote: { textAlign: "center", color: SpaceTheme.mutedOrbit, fontSize: 11, marginTop: 14 },
   bigTitle: { fontSize: 15, color: SpaceTheme.mutedOrbit, textAlign: "center", fontWeight: "700" },
   scoreLine: {

@@ -30,7 +30,7 @@ namespace Backend.Services
         // is how Wordle-style numbering stays consistent for everyone.
         private static readonly DateOnly PuzzleEpoch = new(2026, 1, 1);
 
-        private const int PointsPerChallenge = 100;
+        public const int PointsPerChallenge = 100;
         public const int MaxScore = 300;
 
         // Distractor count for multiple choice (answer + 3 wrong = 4 options).

@@ -40,6 +40,19 @@ namespace Backend.Models
         [Column("completed_at")]
         public DateTime CompletedAt { get; set; } = DateTime.UtcNow;
 
+        // Denormalized display name, captured at submit time.
+        //
+        // The global leaderboard spans every player, not just people who share
+        // a Space, so there's no GroupMembers row to read a name from. Names
+        // live on Supabase's `profiles` table, which this backend deliberately
+        // never queries (the client owns that read everywhere else in the app)
+        // — so the client sends it and it's stored here. Denormalizing also
+        // keeps the leaderboard a single-table read instead of a per-row
+        // cross-database lookup.
+        [Column("display_name")]
+        [MaxLength(60)]
+        public string? DisplayName { get; set; }
+
         // Denormalized streak as of THIS completion. Kept per-row rather than
         // on a user record so the value is a historical fact ("you were on 12
         // when you played #42") instead of something that silently changes
