@@ -17,20 +17,18 @@ import { supabase } from "../frontend/config/supabase";
 import { useRouter } from "expo-router";
 import { Starfield } from "@/frontend/components/starfield";
 import { SpaceTheme, SpaceStyles } from "@/frontend/constants/theme";
-import { consumePendingRedirect } from "@/frontend/services/pending-redirect";
 import { signInWithGoogle, signInWithApple, isAppleSignInAvailable } from "@/frontend/services/sso";
+import { hasOnboardedInterests, completeOnboarding } from "@/frontend/services/onboarding";
 
-// Routes to the one-time genre-picker onboarding screen instead of straight
-// into the app, unless this device has already been through it — checked via
-// AsyncStorage rather than a server-side "is this a new user" flag, since
-// there's no Users table this app owns to put that on (auth is Supabase's).
-// onboarding-interests.tsx itself consumes the pending redirect once it's
-// done, so a deep-link invite that triggered a fresh sign-up is still
-// honored, just after this one extra step instead of before it.
+// Routes to the one-time genre-picker onboarding flow instead of straight
+// into the app, unless this device has already been through it. Both branches
+// converge on the same eventual outcome (land in the app, honoring a pending
+// deep-link redirect) via completeOnboarding — the picker screen calls it
+// once its own flow finishes, this just calls it directly when there's
+// nothing to onboard.
 async function afterAuthSuccess(router: ReturnType<typeof useRouter>) {
-  const hasOnboarded = await AsyncStorage.getItem("hasOnboardedInterests");
-  if (hasOnboarded) {
-    router.replace(consumePendingRedirect() ?? "/");
+  if (await hasOnboardedInterests()) {
+    await completeOnboarding();
   } else {
     router.replace("/onboarding-interests");
   }
