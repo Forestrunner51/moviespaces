@@ -126,6 +126,15 @@ export default function HomeScreen() {
           <Ionicons name="chevron-forward" size={20} color={SpaceTheme.mutedOrbit} />
         </TouchableOpacity>
 
+        <TouchableOpacity
+          activeOpacity={0.7}
+          style={styles.codeEntryLink}
+          onPress={() => router.push("/join-by-code")}
+        >
+          <Ionicons name="key-outline" size={15} color={SpaceTheme.mutedOrbit} />
+          <Text style={styles.codeEntryLinkText}>Have a Space code?</Text>
+        </TouchableOpacity>
+
         <Text style={styles.sectionTitle}>Upcoming Spaces</Text>
         {spacesLoading ? (
           <ActivityIndicator color={SpaceTheme.glowCyan} style={styles.sectionLoading} />
@@ -245,6 +254,15 @@ const styles = StyleSheet.create({
     backgroundColor: "rgba(245, 197, 24, 0.07)",
   },
   cineMindEmoji: { fontSize: 26, width: 28, textAlign: "center" },
+  codeEntryLink: {
+    flexDirection: "row",
+    alignItems: "center",
+    justifyContent: "center",
+    gap: 6,
+    paddingVertical: 10,
+    marginBottom: 6,
+  },
+  codeEntryLinkText: { color: SpaceTheme.mutedOrbit, fontSize: 13, fontWeight: "600" },
   chooseCardTitle: {
     fontSize: 17,
     fontWeight: "700",

@@ -40,6 +40,17 @@ public class AppDbContext : DbContext
             .HasIndex(g => g.Slug)
             .IsUnique();
 
+        // Same nullable-unique reasoning as Slug — legacy rows have none.
+        // Length matches SpaceCodeAlphabet's fixed 6-char codes with room for
+        // the (extremely unlikely) 8-char fallback in GenerateUniqueSpaceCodeAsync.
+        builder.Entity<Group>()
+            .Property(g => g.SpaceCode)
+            .HasMaxLength(10);
+
+        builder.Entity<Group>()
+            .HasIndex(g => g.SpaceCode)
+            .IsUnique();
+
         // ── CineMind ───────────────────────────────────────────────────────
 
         // One catalog row per film; the seed is idempotent and re-runs upsert

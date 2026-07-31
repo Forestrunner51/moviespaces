@@ -17,6 +17,13 @@ namespace Backend.Models
         [Column("slug")]
         public string? Slug { get; set; }
 
+        // Short, typeable invite code (e.g. "K7XPQ2") — for a host reading it
+        // aloud or texting it, where Slug's full "friday-movie-night-a8f1" is
+        // too long to say or type reliably. Nullable for the same reason as
+        // Slug: legacy rows predate the column and aren't backfilled.
+        [Column("space_code")]
+        public string? SpaceCode { get; set; }
+
         public string HostName { get; set; } = "";
 
         // 2. Map this property directly to lowercase snake_case

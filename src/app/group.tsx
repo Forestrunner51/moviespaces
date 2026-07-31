@@ -39,6 +39,7 @@ interface Member {
 interface Group {
   id: string;
   slug: string | null;
+  spaceCode: string | null;
   userId: string;
   hostName: string;
   cinemaId: number | null;
@@ -159,9 +160,11 @@ export default function GroupScreen() {
     }
 
     const shareId = group?.slug || groupId;
+    // Legacy Spaces predate SpaceCode — the link alone still works for them.
+    const codeLine = group?.spaceCode ? `\nOr enter code: ${group.spaceCode}` : "";
 
     await Share.share({
-      message: `Join my movie group! Open this link: ${process.env.EXPO_PUBLIC_API_URL}/space/${shareId}`,
+      message: `Join my movie group! Open this link: ${process.env.EXPO_PUBLIC_API_URL}/space/${shareId}${codeLine}`,
     });
   };
 
@@ -681,6 +684,14 @@ export default function GroupScreen() {
           />
         )}
 
+        {!!group?.spaceCode && !hasPassed && (
+          <TouchableOpacity activeOpacity={0.85} style={styles.spaceCodeRow} onPress={shareLink}>
+            <Ionicons name="key-outline" size={16} color={SpaceTheme.accentGold} />
+            <Text style={styles.spaceCodeLabel}>Space code</Text>
+            <Text style={styles.spaceCodeValue}>{group.spaceCode}</Text>
+          </TouchableOpacity>
+        )}
+
         <View style={styles.quickActionsRow}>
           {!hasPassed && (
             <QuickAction icon="share-social-outline" label="Invite" onPress={shareLink} />
@@ -991,6 +1002,24 @@ const styles = StyleSheet.create({
     marginBottom: 12,
   },
   confirmedButtonText: { color: SpaceTheme.mutedOrbit, fontWeight: "600", fontSize: 14 },
+  spaceCodeRow: {
+    ...SpaceStyles.glassCard,
+    flexDirection: "row",
+    alignItems: "center",
+    gap: 8,
+    alignSelf: "flex-start",
+    paddingVertical: 8,
+    paddingHorizontal: 14,
+    marginBottom: 14,
+    borderColor: "rgba(245, 197, 24, 0.35)",
+  },
+  spaceCodeLabel: { color: SpaceTheme.mutedOrbit, fontSize: 12, fontWeight: "600" },
+  spaceCodeValue: {
+    color: SpaceTheme.accentGold,
+    fontSize: 15,
+    fontWeight: "800",
+    letterSpacing: 1.5,
+  },
   quickActionsRow: {
     flexDirection: "row",
     flexWrap: "wrap",
