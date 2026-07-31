@@ -3,8 +3,18 @@
 // Uses authFetch (not plain fetch) because every endpoint is per-user: the
 // once-per-day lock, streaks and leaderboards all key off the Supabase JWT.
 
-import { authFetch } from "@/frontend/services/api";
+import { authFetch, authFetchWithTimeout } from "@/frontend/services/api";
 import { supabase } from "@/frontend/config/supabase";
+
+// Render's free tier sleeps after inactivity, and the request that wakes it
+// can take the better part of a minute. That's why these are generous rather
+// than snappy: a short timeout would turn a normal cold start into a failure.
+// The point is a bounded wait with a retry, not a fast one — without it the
+// screen spins forever, since authFetch awaits getSession() (which can hang
+// refreshing a token) before fetch() even starts, so an AbortController on
+// the fetch alone wouldn't help.
+const COLD_START_TIMEOUT_MS = 45000;
+const SUBMIT_TIMEOUT_MS = 30000;
 
 export interface PuzzleMovie {
   imdbId: string;
@@ -119,7 +129,7 @@ export interface SpaceLeaderboard {
 const BASE = `${process.env.EXPO_PUBLIC_API_URL}/api/game`;
 
 export async function fetchTodayPuzzle(): Promise<TodayResponse> {
-  const res = await authFetch(`${BASE}/puzzles/today`);
+  const res = await authFetchWithTimeout(`${BASE}/puzzles/today`, {}, COLD_START_TIMEOUT_MS);
   if (!res.ok) {
     const body = await res.json().catch(() => ({}));
     // Surfaced rather than swallowed: an unseeded catalog returns 503 here,
@@ -162,10 +172,14 @@ export async function submitPuzzle(
   timeTakenMs: number,
 ): Promise<SubmitResult> {
   const displayName = await currentDisplayName();
-  const res = await authFetch(`${BASE}/puzzles/submit`, {
-    method: "POST",
-    body: JSON.stringify({ answers, timeTakenMs, displayName }),
-  });
+  const res = await authFetchWithTimeout(
+    `${BASE}/puzzles/submit`,
+    {
+      method: "POST",
+      body: JSON.stringify({ answers, timeTakenMs, displayName }),
+    },
+    SUBMIT_TIMEOUT_MS,
+  );
   if (!res.ok) {
     const body = await res.json().catch(() => ({}));
     throw new Error(body?.error || `Couldn't submit your answers (${res.status}).`);
@@ -217,7 +231,7 @@ export interface GlobalLeaderboard {
 // whose only job is to show it, so a silent null would render an empty tab
 // that looks identical to "nobody has played".
 export async function fetchGlobalLeaderboard(): Promise<GlobalLeaderboard> {
-  const res = await authFetch(`${BASE}/leaderboard/global`);
+  const res = await authFetchWithTimeout(`${BASE}/leaderboard/global`, {}, COLD_START_TIMEOUT_MS);
   if (!res.ok) {
     const body = await res.json().catch(() => ({}));
     throw new Error(body?.error || `Couldn't load the leaderboard (${res.status}).`);

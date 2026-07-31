@@ -150,7 +150,10 @@ export default function CineMindScreen() {
   if (phase === "loading") {
     return (
       <Starfield>
-        <ActivityIndicator size="large" color={SpaceTheme.glowCyan} style={{ flex: 1 }} />
+        <View style={styles.centered}>
+          <ActivityIndicator size="large" color={SpaceTheme.glowCyan} />
+          <SlowLoadNotice />
+        </View>
       </Starfield>
     );
   }
@@ -375,6 +378,22 @@ function Header({ streak, elapsedMs }: { streak: number; elapsedMs?: number }) {
   );
 }
 
+// The backend sleeps when idle and can take ~30s to wake, which is long
+// enough that a bare spinner reads as a frozen app. Silent for the first few
+// seconds so a normal fast load never shows it.
+function SlowLoadNotice() {
+  const [slow, setSlow] = useState(false);
+
+  useEffect(() => {
+    const timer = setTimeout(() => setSlow(true), 5000);
+    return () => clearTimeout(timer);
+  }, []);
+
+  if (!slow) return null;
+
+  return <Text style={styles.slowLoadText}>Waking up the server — this can take a moment…</Text>;
+}
+
 function LeaderboardLink() {
   return (
     <TouchableOpacity
@@ -592,4 +611,10 @@ const styles = StyleSheet.create({
   resultAnswer: { color: SpaceTheme.mutedOrbit, fontSize: 12, marginTop: 2 },
   resultPoints: { color: SpaceTheme.glowCyan, fontSize: 14, fontWeight: "700" },
   errorText: { color: SpaceTheme.starWhite, fontSize: 15, textAlign: "center" },
+  slowLoadText: {
+    color: SpaceTheme.mutedOrbit,
+    fontSize: 13,
+    textAlign: "center",
+    lineHeight: 18,
+  },
 });
