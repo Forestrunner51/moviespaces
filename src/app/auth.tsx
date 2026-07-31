@@ -20,6 +20,22 @@ import { SpaceTheme, SpaceStyles } from "@/frontend/constants/theme";
 import { consumePendingRedirect } from "@/frontend/services/pending-redirect";
 import { signInWithGoogle, signInWithApple, isAppleSignInAvailable } from "@/frontend/services/sso";
 
+// Routes to the one-time genre-picker onboarding screen instead of straight
+// into the app, unless this device has already been through it — checked via
+// AsyncStorage rather than a server-side "is this a new user" flag, since
+// there's no Users table this app owns to put that on (auth is Supabase's).
+// onboarding-interests.tsx itself consumes the pending redirect once it's
+// done, so a deep-link invite that triggered a fresh sign-up is still
+// honored, just after this one extra step instead of before it.
+async function afterAuthSuccess(router: ReturnType<typeof useRouter>) {
+  const hasOnboarded = await AsyncStorage.getItem("hasOnboardedInterests");
+  if (hasOnboarded) {
+    router.replace(consumePendingRedirect() ?? "/");
+  } else {
+    router.replace("/onboarding-interests");
+  }
+}
+
 export default function AuthScreen() {
   const router = useRouter();
   const [isSignUp, setIsSignUp] = useState(false);
@@ -46,7 +62,7 @@ export default function AuthScreen() {
     if (fullName) {
       await AsyncStorage.setItem("userName", fullName);
     }
-    router.replace(consumePendingRedirect() ?? "/");
+    await afterAuthSuccess(router);
   };
 
   const handleGoogleSignIn = async () => {
@@ -99,7 +115,7 @@ export default function AuthScreen() {
         // Email confirmation is OFF in Supabase — signUp returned a live
         // session, so drop them straight into the app.
         await AsyncStorage.setItem("userName", name.trim());
-        router.replace(consumePendingRedirect() ?? "/");
+        await afterAuthSuccess(router);
       } else {
         // Email confirmation is ON — no session yet; the account isn't usable
         // until they click the link we just emailed. Without handling this,
@@ -129,7 +145,7 @@ export default function AuthScreen() {
         if (fullName) {
           await AsyncStorage.setItem("userName", fullName);
         }
-        router.replace(consumePendingRedirect() ?? "/");
+        await afterAuthSuccess(router);
       }
     }
     setLoading(false);

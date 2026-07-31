@@ -25,7 +25,12 @@ export interface ShareableResult {
 export interface ShareGridOptions {
   puzzleNumber: number;
   result: ShareableResult;
-  // Optional Space to invite people into; omitted for a solo share.
+  // Optional Space (its SpaceCode or id) to invite people into; omitted for
+  // a solo share. When given, the link uses the backend's own working
+  // web-invite page (moviespaces.onrender.com/space/{code}) — the same
+  // mechanism group.tsx's own share button already uses, and the only
+  // domain this app actually owns and serves. There's no reason to invent a
+  // second, fake one.
   spaceId?: string | null;
   shareBaseUrl?: string;
 }
@@ -40,7 +45,7 @@ export function generateShareGrid({
   puzzleNumber,
   result,
   spaceId,
-  shareBaseUrl = "https://cinemind.app",
+  shareBaseUrl = process.env.EXPO_PUBLIC_API_URL ?? "",
 }: ShareGridOptions): string {
   const lines: string[] = [];
 
@@ -62,12 +67,12 @@ export function generateShareGrid({
     lines.push("🏆 Perfect score!");
   }
 
+  // Solo shares get no link at all rather than a fabricated one — there's no
+  // real web landing page for CineMind on its own yet (pre-launch, no app
+  // store listing), and a dead URL pasted into a group chat is worse than no
+  // URL. A Space invite has a real, working link, so that case gets one.
   lines.push("");
-  lines.push(
-    spaceId
-      ? `Play today in Space: ${shareBaseUrl}/s/${spaceId}`
-      : `Play today: ${shareBaseUrl}`,
-  );
+  lines.push(spaceId ? `Play today in Space: ${shareBaseUrl}/space/${spaceId}` : "Play today on MovieSpaces 🍿");
 
   return lines.join("\n");
 }

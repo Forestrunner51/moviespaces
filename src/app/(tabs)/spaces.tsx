@@ -25,6 +25,7 @@ interface Space {
   showDate: string;
   screeningTime: string | null;
   createdAt: string;
+  isPublic: boolean;
   status: string;
   spaceType: string;
   posterPath: string | null;
@@ -135,6 +136,9 @@ export default function MySpacesScreen() {
   // Deliberately impure: needs to read the actual current time on every call
   // so a card correctly flips to "passed" while this screen stays mounted.
   const isPast = (space: Space) =>
+    // Public Community Spaces are evergreen — see the matching exemption in
+    // group.tsx's hasPassed for why a null ScreeningTime doesn't mean "past" here.
+    !space.isPublic &&
     // eslint-disable-next-line react-hooks/purity -- see comment above
     new Date(space.screeningTime ?? space.createdAt).getTime() < Date.now();
 

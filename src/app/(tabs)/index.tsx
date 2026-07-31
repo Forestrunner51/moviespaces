@@ -63,7 +63,7 @@ export default function HomeScreen() {
     getNowPlaying()
       .then(setNowPlaying)
       .catch((err) => {
-        console.warn("Failed to load surprise-me movies:", err);
+        console.warn("Failed to load now-playing movies:", err);
         setNowPlaying([]);
       })
       .finally(() => setMoviesLoading(false));
@@ -91,6 +91,25 @@ export default function HomeScreen() {
             </Text>
           </View>
           <Ionicons name="chevron-forward" size={20} color={SpaceTheme.accentGold} />
+        </TouchableOpacity>
+
+        {/* Replaces the old "Surprise Me" carousel below, which was really
+            just a plain movie list — never actually random. A real spin,
+            plus a one-off practice CineMind challenge, is what that name
+            should have meant. */}
+        <TouchableOpacity
+          activeOpacity={0.85}
+          style={[styles.chooseCard, styles.rouletteCard]}
+          onPress={() => router.push("/roulette")}
+        >
+          <Ionicons name="shuffle" size={26} color={SpaceTheme.supernovaPink} />
+          <View style={{ flex: 1 }}>
+            <Text style={styles.chooseCardTitle}>Movie Roulette</Text>
+            <Text style={styles.chooseCardSubtitle}>
+              Spin for a random film and a practice trivia challenge
+            </Text>
+          </View>
+          <Ionicons name="chevron-forward" size={20} color={SpaceTheme.supernovaPink} />
         </TouchableOpacity>
 
         <TouchableOpacity
@@ -181,7 +200,7 @@ export default function HomeScreen() {
           />
         )}
 
-        <Text style={styles.sectionTitle}>Surprise Me</Text>
+        <Text style={styles.sectionTitle}>Now Playing</Text>
         {moviesLoading ? (
           <ActivityIndicator color={SpaceTheme.glowCyan} style={styles.sectionLoading} />
         ) : nowPlaying.length === 0 ? (
@@ -254,6 +273,10 @@ const styles = StyleSheet.create({
     backgroundColor: "rgba(245, 197, 24, 0.07)",
   },
   cineMindEmoji: { fontSize: 26, width: 28, textAlign: "center" },
+  rouletteCard: {
+    borderColor: "rgba(236, 72, 153, 0.4)",
+    backgroundColor: "rgba(236, 72, 153, 0.06)",
+  },
   codeEntryLink: {
     flexDirection: "row",
     alignItems: "center",

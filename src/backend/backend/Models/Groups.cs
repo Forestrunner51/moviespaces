@@ -24,6 +24,27 @@ namespace Backend.Models
         [Column("space_code")]
         public string? SpaceCode { get; set; }
 
+        // Public Community Spaces (e.g. "Horror Night Den") — evergreen,
+        // genre-themed Spaces new users auto-join during onboarding so a
+        // solo player has an active CineMind leaderboard on day one instead
+        // of an empty one waiting for real-life friends to install the app.
+        //
+        // Deliberately its own bool rather than inferred from SpaceType or a
+        // null ScreeningTime: those already mean other things (private
+        // rental vs. public gathering; "no exact time set yet" for a real
+        // one-off event), and conflating either with "this is a permanent
+        // themed club" would misclassify real spaces that happen to share
+        // the same incidental state.
+        [Column("is_public")]
+        public bool IsPublic { get; set; } = false;
+
+        // e.g. "Horror", "Sci-Fi", "Blockbusters", "General" — only set for
+        // IsPublic Spaces; drives which onboarding genre picks auto-join
+        // which club. Free text rather than an enum: new theme clubs should
+        // be addable by seeding a row, not by shipping a code change.
+        [Column("genre_category")]
+        public string? GenreCategory { get; set; }
+
         public string HostName { get; set; } = "";
 
         // 2. Map this property directly to lowercase snake_case

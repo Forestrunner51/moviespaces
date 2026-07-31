@@ -28,6 +28,32 @@ namespace Backend.Services
         ChronosChallenge Chronos,
         CastDeductChallenge CastDeduct);
 
+    // ── Roulette (practice, single ad-hoc challenge) ──
+    //
+    // Deliberately reuses ConnectionChallenge/ChronosChallenge/CastDeductChallenge
+    // and their *View counterparts below rather than inventing parallel types —
+    // a practice challenge is structurally identical to a daily one, just built
+    // around a chosen movie instead of a seeded date, and graded once instead
+    // of stored per-user.
+
+    // No ReleaseYear, unlike PuzzleMovie — deliberately, and for the same
+    // reason ChronosMovie has none: when the spin's challenge type happens to
+    // be Chronos, this movie IS one of the four the player is ordering, so
+    // showing its year here would hand over one of the four answers before
+    // the challenge even starts. The reveal card only ever needs poster +
+    // title anyway; per-challenge views carry whatever year info is actually
+    // safe to show for that challenge type.
+    public record RouletteMovie(string ImdbId, string Title, string? PosterPath);
+
+    // Challenge is one of ConnectionChallenge/ChronosChallenge/CastDeductChallenge
+    // (holds the answer — server-side only, never returned to the client).
+    public record PracticeSpin(string SpinId, RouletteMovie Movie, string ChallengeType, object Challenge);
+
+    // Challenge here is the matching *View type (answer stripped).
+    public record PracticeSpinView(RouletteMovie Movie, string ChallengeType, object Challenge);
+
+    public record PracticeGradeRequest(string SpinId, SubmittedAnswers Answer);
+
     // ── Client-facing (answers stripped) ──
 
     public record ConnectionView(List<PuzzleMovie> Movies, string LinkKind, List<string> Options);

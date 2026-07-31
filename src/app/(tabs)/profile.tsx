@@ -39,6 +39,7 @@ interface MySpace {
   screeningTime: string | null;
   status: string;
   createdAt: string;
+  isPublic: boolean;
 }
 
 export default function ProfileScreen() {
@@ -249,11 +250,13 @@ export default function ProfileScreen() {
   // eventually instead of being stuck there forever just because we can't
   // pin down their real showtime.
   const effectiveTime = (s: MySpace) => new Date(s.screeningTime ?? s.createdAt).getTime();
+  // Public Community Spaces are evergreen — never "past" regardless of
+  // createdAt. Same exemption as group.tsx's hasPassed and spaces.tsx's isPast.
   const upcomingSpaces = mySpaces
-    .filter((s) => s.status !== "cancelled" && effectiveTime(s) >= now)
+    .filter((s) => s.status !== "cancelled" && (s.isPublic || effectiveTime(s) >= now))
     .sort((a, b) => effectiveTime(a) - effectiveTime(b));
   const pastSpaces = mySpaces
-    .filter((s) => s.status === "cancelled" || effectiveTime(s) < now)
+    .filter((s) => s.status === "cancelled" || (!s.isPublic && effectiveTime(s) < now))
     .sort((a, b) => effectiveTime(b) - effectiveTime(a));
 
   if (loading) {

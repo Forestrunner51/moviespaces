@@ -129,6 +129,7 @@ namespace Backend.Services
                 }
 
                 var castJson = JsonSerializer.Serialize(entry.Cast);
+                var genresJson = JsonSerializer.Serialize(entry.Genres);
 
                 if (existing.TryGetValue(imdbId, out var row))
                 {
@@ -137,6 +138,7 @@ namespace Backend.Services
                     row.PosterPath = entry.PosterUrl ?? row.PosterPath;
                     row.Director = entry.Director ?? row.Director;
                     row.CastJson = castJson;
+                    row.GenresJson = genresJson;
                     updated++;
                 }
                 else
@@ -149,6 +151,7 @@ namespace Backend.Services
                         PosterPath = entry.PosterUrl,
                         Director = entry.Director,
                         CastJson = castJson,
+                        GenresJson = genresJson,
                         CreatedAt = DateTime.UtcNow,
                     });
                     added++;
