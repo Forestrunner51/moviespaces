@@ -58,6 +58,12 @@ namespace Backend.Models
         [Column("genres_json")]
         public string GenresJson { get; set; } = "[]";
 
+        // OMDb's short logline — Mystery Movie's plot clue. Nullable: not
+        // every OMDb entry has one, and a puzzle missing this clue tier just
+        // skips it rather than failing to generate.
+        [Column("plot")]
+        public string? Plot { get; set; }
+
         [Column("created_at")]
         public DateTime CreatedAt { get; set; } = DateTime.UtcNow;
     }

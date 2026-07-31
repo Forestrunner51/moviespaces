@@ -23,10 +23,44 @@ namespace Backend.Services
         string Answer,
         List<string> Options);
 
+    // Challenge 4 — Mystery Movie. Guess the hidden film (or, for the TV
+    // track, show) from progressively revealed clues. Difficulty (chosen
+    // client-side, reported back at grading time) controls how many attempts
+    // are allowed and how many clue tiers get shown — see
+    // DailyPuzzleService.GradeMysteryItem for the actual scoring curve.
+    //
+    // Every field here except Answer and AnswerTitle is NOT secret —
+    // revealing facts about the target IS the gameplay, not a leak. The
+    // client gets every clue upfront and controls reveal timing locally; the
+    // only thing withheld until solved/failed is the target's own identity.
+    //
+    // Reused for both the movie (challenge 4) and TV (challenge 5) targets
+    // rather than two near-identical types — the only structural difference
+    // is Director, which is always null for a TV entry (OMDb's Director
+    // field is unreliable for a series — see CineMindTvShow). MediaType
+    // tells the client which catalog to search for guesses and which label
+    // to show ("🎬 Movie" vs "📺 TV Show").
+    //
+    // Tiers use only fields OMDb actually provides — no tagline field exists
+    // in its schema at all, so tiers are built from what's real: Year(+
+    // Director for movies), Genres, Plot, then Cast+Poster.
+    public record MysteryMovieChallenge(
+        string MediaType,        // "movie" | "tv"
+        string Answer,           // target ImdbId — the one thing kept hidden
+        string AnswerTitle,      // shown only after solved/failed, for the reveal
+        string? Director,        // always null when MediaType == "tv"
+        List<string> Cast,
+        List<string> Genres,
+        int ReleaseYear,
+        string? Plot,
+        string? PosterPath);
+
     public record DailyPuzzlePayload(
         ConnectionChallenge Connection,
         ChronosChallenge Chronos,
-        CastDeductChallenge CastDeduct);
+        CastDeductChallenge CastDeduct,
+        MysteryMovieChallenge MysteryMovie,
+        MysteryMovieChallenge MysteryTv);
 
     // ── Roulette (practice, single ad-hoc challenge) ──
     //
@@ -65,19 +99,47 @@ namespace Backend.Services
     public record ChronosView(List<ChronosMovie> Movies);
     public record CastDeductView(PuzzleMovie MovieA, PuzzleMovie MovieB, List<string> Options);
 
+    // No Answer/AnswerTitle — see MysteryMovieChallenge for why everything
+    // else here is safe to send whole.
+    public record MysteryMovieView(
+        string MediaType,
+        string? Director,
+        List<string> Cast,
+        List<string> Genres,
+        int ReleaseYear,
+        string? Plot,
+        string? PosterPath);
+
     public record PuzzleView(
         int PuzzleNumber,
         string PuzzleDate,
         ConnectionView Connection,
         ChronosView Chronos,
-        CastDeductView CastDeduct);
+        CastDeductView CastDeduct,
+        MysteryMovieView MysteryMovie,
+        MysteryMovieView MysteryTv);
 
     // ── Submission ──
 
     public record SubmittedAnswers(
         string? ConnectionAnswer,
         List<string>? ChronosOrder,   // ImdbIds, oldest first
-        string? CastDeductAnswer);
+        string? CastDeductAnswer,
+        // Defaulted, not required: Roulette also reuses SubmittedAnswers for
+        // its (Connection/Chronos/CastDeduct-only) practice challenges, which
+        // never populate these.
+        string? MysteryMovieGuess = null,   // final guessed ImdbId, or null if given up
+        int MysteryMovieAttemptsUsed = 0,   // 1-4
+        // "easy" | "medium" | "hard" — chosen client-side before the first
+        // guess and reported back here; unrecognized/missing values grade as
+        // easy. Every difficulty still tops out at 100 pts (see
+        // DailyPuzzleService.GradeMysteryItem) — harder means fewer attempts
+        // and fewer clue tiers shown, not a bigger prize, so the leaderboard
+        // and "perfect score" never need to know which difficulty was played.
+        string? MysteryMovieDifficulty = null,
+        // TV track is Easy-only for now, so no difficulty field for it.
+        string? MysteryTvGuess = null,
+        int MysteryTvAttemptsUsed = 0);
 
     // DisplayName is optional: an older client that doesn't send it still
     // submits fine and simply shows as "Player" on the global leaderboard.
@@ -94,6 +156,8 @@ namespace Backend.Services
         ChallengeResult Connection,
         ChallengeResult Chronos,
         ChallengeResult CastDeduct,
+        ChallengeResult MysteryMovie,
+        ChallengeResult MysteryTv,
         // The UserDailyProgress row's own id, not a separate generated
         // token — it's already an unguessable Guid and doesn't leak the
         // Supabase user id the way using UserId in a public URL would.

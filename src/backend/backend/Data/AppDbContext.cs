@@ -25,6 +25,7 @@ public class AppDbContext : DbContext
 
     // CineMind — the daily cinema puzzle game.
     public DbSet<CineMindMovie> CineMindMovies => Set<CineMindMovie>();
+    public DbSet<CineMindTvShow> CineMindTvShows => Set<CineMindTvShow>();
     public DbSet<DailyPuzzle> DailyPuzzles => Set<DailyPuzzle>();
     public DbSet<UserDailyProgress> UserDailyProgress => Set<UserDailyProgress>();
     public DbSet<CineMindReminderLog> CineMindReminderLog => Set<CineMindReminderLog>();

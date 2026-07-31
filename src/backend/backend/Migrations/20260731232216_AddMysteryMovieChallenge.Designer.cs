@@ -3,6 +3,7 @@ using System;
 using Backend.Data;
 using Microsoft.EntityFrameworkCore;
 using Microsoft.EntityFrameworkCore.Infrastructure;
+using Microsoft.EntityFrameworkCore.Migrations;
 using Microsoft.EntityFrameworkCore.Storage.ValueConversion;
 using Npgsql.EntityFrameworkCore.PostgreSQL.Metadata;
 
@@ -11,9 +12,11 @@ using Npgsql.EntityFrameworkCore.PostgreSQL.Metadata;
 namespace backend.Migrations
 {
     [DbContext(typeof(AppDbContext))]
-    partial class AppDbContextModelSnapshot : ModelSnapshot
+    [Migration("20260731232216_AddMysteryMovieChallenge")]
+    partial class AddMysteryMovieChallenge
     {
-        protected override void BuildModel(ModelBuilder modelBuilder)
+        /// <inheritdoc />
+        protected override void BuildTargetModel(ModelBuilder modelBuilder)
         {
 #pragma warning disable 612, 618
             modelBuilder
@@ -125,56 +128,6 @@ namespace backend.Migrations
                     b.HasKey("PuzzleDate");
 
                     b.ToTable("cinemind_reminder_log");
-                });
-
-            modelBuilder.Entity("Backend.Models.CineMindTvShow", b =>
-                {
-                    b.Property<Guid>("Id")
-                        .ValueGeneratedOnAdd()
-                        .HasColumnType("uuid")
-                        .HasColumnName("id");
-
-                    b.Property<string>("CastJson")
-                        .IsRequired()
-                        .HasColumnType("text")
-                        .HasColumnName("cast_json");
-
-                    b.Property<DateTime>("CreatedAt")
-                        .HasColumnType("timestamp with time zone")
-                        .HasColumnName("created_at");
-
-                    b.Property<string>("GenresJson")
-                        .IsRequired()
-                        .HasColumnType("text")
-                        .HasColumnName("genres_json");
-
-                    b.Property<string>("ImdbId")
-                        .IsRequired()
-                        .HasMaxLength(20)
-                        .HasColumnType("character varying(20)")
-                        .HasColumnName("imdb_id");
-
-                    b.Property<string>("Plot")
-                        .HasColumnType("text")
-                        .HasColumnName("plot");
-
-                    b.Property<string>("PosterPath")
-                        .HasColumnType("text")
-                        .HasColumnName("poster_path");
-
-                    b.Property<int>("ReleaseYear")
-                        .HasColumnType("integer")
-                        .HasColumnName("release_year");
-
-                    b.Property<string>("Title")
-                        .IsRequired()
-                        .HasMaxLength(255)
-                        .HasColumnType("character varying(255)")
-                        .HasColumnName("title");
-
-                    b.HasKey("Id");
-
-                    b.ToTable("cinemind_tv_shows");
                 });
 
             modelBuilder.Entity("Backend.Models.DailyPuzzle", b =>

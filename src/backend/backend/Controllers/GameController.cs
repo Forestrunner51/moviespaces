@@ -96,6 +96,8 @@ namespace Backend.Controllers
                         connection = regraded.Connection.Correct,
                         chronos = regraded.Chronos.Correct,
                         castDeduct = regraded.CastDeduct.Correct,
+                        mysteryMovie = regraded.MysteryMovie.Correct,
+                        mysteryTv = regraded.MysteryTv.Correct,
                     },
                 });
             }
@@ -145,6 +147,11 @@ namespace Backend.Controllers
                 CompletedAt = DateTime.UtcNow,
                 StreakCount = streak,
                 DisplayName = CleanDisplayName(request.DisplayName),
+                ChallengesSolvedCount = new[]
+                {
+                    graded.Connection.Correct, graded.Chronos.Correct, graded.CastDeduct.Correct,
+                    graded.MysteryMovie.Correct, graded.MysteryTv.Correct,
+                }.Count(c => c),
             };
 
             try
@@ -182,7 +189,7 @@ namespace Backend.Controllers
 
             var rows = await _db.UserDailyProgress
                 .Where(p => p.UserId == userId)
-                .Select(p => new { p.PuzzleDate, p.Score })
+                .Select(p => new { p.PuzzleDate, p.Score, p.ChallengesSolvedCount })
                 .ToListAsync();
 
             if (rows.Count == 0)
@@ -195,7 +202,7 @@ namespace Backend.Controllers
                     perfectCount = 0,
                     averageScore = 0,
                     playedToday = false,
-                    distribution = new { perfect = 0, twoOfThree = 0, oneOfThree = 0, blank = 0 },
+                    distribution = new { solved5 = 0, solved4 = 0, solved3 = 0, solved2 = 0, solved1 = 0, solved0 = 0 },
                 });
             }
 
@@ -232,14 +239,17 @@ namespace Backend.Controllers
                 perfectCount = rows.Count(r => r.Score == DailyPuzzleService.MaxScore),
                 averageScore = (int)Math.Round(rows.Average(r => r.Score)),
                 playedToday,
-                // Bucketed by challenges solved rather than raw score, since
-                // every challenge is worth the same 100 points.
+                // Bucketed by ChallengesSolvedCount, not Score: Mystery
+                // Movie/TV's attempt- and difficulty-scaled points mean Score
+                // no longer maps cleanly to "how many of the 5 did you solve."
                 distribution = new
                 {
-                    perfect = rows.Count(r => r.Score == DailyPuzzleService.MaxScore),
-                    twoOfThree = rows.Count(r => r.Score == DailyPuzzleService.PointsPerChallenge * 2),
-                    oneOfThree = rows.Count(r => r.Score == DailyPuzzleService.PointsPerChallenge),
-                    blank = rows.Count(r => r.Score == 0),
+                    solved5 = rows.Count(r => r.ChallengesSolvedCount == 5),
+                    solved4 = rows.Count(r => r.ChallengesSolvedCount == 4),
+                    solved3 = rows.Count(r => r.ChallengesSolvedCount == 3),
+                    solved2 = rows.Count(r => r.ChallengesSolvedCount == 2),
+                    solved1 = rows.Count(r => r.ChallengesSolvedCount == 1),
+                    solved0 = rows.Count(r => r.ChallengesSolvedCount == 0),
                 },
             });
         }
@@ -393,6 +403,69 @@ namespace Backend.Controllers
             });
         }
 
+        // GET /api/game/catalog/browse
+        //
+        // Every catalog film's identifying info (title/year/director/cast),
+        // for Mystery Movie's guess autocomplete — searched and matched
+        // entirely client-side. Deliberately not a live per-keystroke OMDb
+        // search: OMDb's free tier has a daily request cap already flagged
+        // as a real constraint elsewhere in this project, and a guess has to
+        // resolve to a catalog film anyway (it needs Director/Cast/Year to
+        // compare against for near-miss feedback, and to possibly BE the
+        // answer) — a search that could return non-catalog films would just
+        // be guesses that can never be right.
+        //
+        // Handing over the full catalog list this way doesn't weaken
+        // anything: Connection and Chronos already show real posters/titles
+        // from this same catalog in their own un-redacted views every day.
+        // This isn't hiding "which movies are possible," only which one is
+        // today's answer.
+        // mediaType=tv returns the (separate, smaller, Director-less) TV
+        // catalog instead — Mystery Movie's TV track needs its own
+        // autocomplete list, same reasoning as the movie one above.
+        [HttpGet("catalog/browse")]
+        public async Task<IActionResult> BrowseCatalog([FromQuery] string? mediaType)
+        {
+            var userId = GetUserId();
+            if (string.IsNullOrEmpty(userId)) return Unauthorized(new { error = "Unauthorized" });
+
+            if (string.Equals(mediaType, "tv", StringComparison.OrdinalIgnoreCase))
+            {
+                var shows = await _db.CineMindTvShows.OrderBy(m => m.Title).ToListAsync();
+                return Ok(new
+                {
+                    movies = shows.Select(m => new
+                    {
+                        imdbId = m.ImdbId,
+                        title = m.Title,
+                        releaseYear = m.ReleaseYear,
+                        director = (string?)null,
+                        cast = SafeParseStringList(m.CastJson),
+                        posterPath = m.PosterPath,
+                    }),
+                });
+            }
+
+            var movies = await _db.CineMindMovies.OrderBy(m => m.Title).ToListAsync();
+            var result = movies.Select(m => new
+            {
+                imdbId = m.ImdbId,
+                title = m.Title,
+                releaseYear = m.ReleaseYear,
+                director = m.Director,
+                cast = SafeParseStringList(m.CastJson),
+                posterPath = m.PosterPath,
+            });
+
+            return Ok(new { movies = result });
+        }
+
+        private static List<string> SafeParseStringList(string json)
+        {
+            try { return JsonSerializer.Deserialize<List<string>>(json) ?? new(); }
+            catch (JsonException) { return new(); }
+        }
+
         // POST /api/game/catalog/seed
         //
         // One-shot admin action, gated on a shared secret — there's no admin
@@ -407,6 +480,28 @@ namespace Backend.Controllers
         [AllowAnonymous]
         public async Task<IActionResult> SeedCatalog()
         {
+            var authError = CheckAdminSecret();
+            if (authError != null) return authError;
+
+            var (added, updated, failed) = await _catalog.SeedAsync(_db);
+            return Ok(new { added, updated, failed, total = await _db.CineMindMovies.CountAsync() });
+        }
+
+        // POST /api/game/catalog/seed-tv — same admin-gated one-shot pattern,
+        // separate endpoint since it's a genuinely separate catalog/table.
+        [HttpPost("catalog/seed-tv")]
+        [AllowAnonymous]
+        public async Task<IActionResult> SeedTvCatalog()
+        {
+            var authError = CheckAdminSecret();
+            if (authError != null) return authError;
+
+            var (added, updated, failed) = await _catalog.SeedTvAsync(_db);
+            return Ok(new { added, updated, failed, total = await _db.CineMindTvShows.CountAsync() });
+        }
+
+        private IActionResult? CheckAdminSecret()
+        {
             var expected = _configuration["CineMind:AdminSecret"];
             if (string.IsNullOrWhiteSpace(expected))
             {
@@ -418,12 +513,11 @@ namespace Backend.Controllers
                     System.Text.Encoding.UTF8.GetBytes(provided.ToString()),
                     System.Text.Encoding.UTF8.GetBytes(expected)))
             {
-                _logger.LogWarning("Rejected catalog/seed: bad or missing x-admin-secret.");
+                _logger.LogWarning("Rejected admin-gated catalog endpoint: bad or missing x-admin-secret.");
                 return Unauthorized(new { error = "Unauthorized" });
             }
 
-            var (added, updated, failed) = await _catalog.SeedAsync(_db);
-            return Ok(new { added, updated, failed, total = await _db.CineMindMovies.CountAsync() });
+            return null;
         }
 
         // ── Helpers ────────────────────────────────────────────────────────
@@ -534,6 +628,8 @@ namespace Backend.Controllers
                     {Row("The Connection", regraded?.Connection.Correct)}
                     {Row("Chronos", regraded?.Chronos.Correct)}
                     {Row("Cast Deduct", regraded?.CastDeduct.Correct)}
+                    {Row("Mystery Movie", regraded?.MysteryMovie.Correct)}
+                    {Row("Mystery TV", regraded?.MysteryTv.Correct)}
                 </div>
 
                 <a href='moviespaces://cinemind' class='cta'>Play Today's CineMind</a>

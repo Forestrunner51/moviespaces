@@ -42,7 +42,12 @@ namespace Backend.Services
         private static readonly DateOnly PuzzleEpoch = new(2026, 1, 1);
 
         public const int PointsPerChallenge = 100;
-        public const int MaxScore = 300;
+        // 5 challenges now — Connection + Chronos + CastDeduct + Mystery
+        // Movie + Mystery TV, each worth 100 at best regardless of
+        // difficulty (see GradeMysteryItem — harder difficulty means fewer
+        // attempts/clues, never a bigger prize, specifically so this stays a
+        // fixed number the leaderboard/percentile/stats can keep assuming).
+        public const int MaxScore = 500;
 
         // Distractor count for multiple choice (answer + 3 wrong = 4 options).
         private const int WrongOptionCount = 3;
@@ -70,12 +75,14 @@ namespace Backend.Services
             }
 
             var catalog = await LoadCatalogAsync(db);
-            var generated = Generate(today, catalog);
+            var tvCatalog = await LoadTvCatalogAsync(db);
+            var generated = Generate(today, catalog, tvCatalog);
             if (generated == null)
             {
                 _logger.LogError(
-                    "Cannot generate puzzle for {Date}: catalog has {Count} usable films. "
-                    + "Seed the catalog via POST /api/game/catalog/seed.", today, catalog.Count);
+                    "Cannot generate puzzle for {Date}: catalog has {MovieCount} usable films, "
+                    + "{TvCount} usable shows. Seed via POST /api/game/catalog/seed and "
+                    + "POST /api/game/catalog/seed-tv.", today, catalog.Count, tvCatalog.Count);
                 return null;
             }
 
@@ -109,6 +116,7 @@ namespace Backend.Services
         // ── Generation ─────────────────────────────────────────────────────
 
         private sealed record CatalogEntry(CineMindMovie Movie, List<string> Cast, List<string> Genres);
+        private sealed record TvCatalogEntry(CineMindTvShow Show, List<string> Cast, List<string> Genres);
 
         private static async Task<List<CatalogEntry>> LoadCatalogAsync(AppDbContext db)
         {
@@ -119,11 +127,21 @@ namespace Backend.Services
                 .ToList();
         }
 
-        private DailyPuzzlePayload? Generate(DateOnly date, List<CatalogEntry> catalog)
+        private static async Task<List<TvCatalogEntry>> LoadTvCatalogAsync(AppDbContext db)
+        {
+            var shows = await db.CineMindTvShows.OrderBy(m => m.ImdbId).ToListAsync();
+            return shows
+                .Select(m => new TvCatalogEntry(m, ParseStringList(m.CastJson), ParseStringList(m.GenresJson)))
+                .Where(e => e.Show.ReleaseYear > 0)
+                .ToList();
+        }
+
+        private DailyPuzzlePayload? Generate(DateOnly date, List<CatalogEntry> catalog, List<TvCatalogEntry> tvCatalog)
         {
             // 4 (Connection) + 4 (Chronos, distinct years, unused) + 2
-            // (Cast Deduct, unused) = 10 distinct films minimum.
-            if (catalog.Count < 10) return null;
+            // (Cast Deduct, unused) + 1 (Mystery Movie, unused) = 11 distinct
+            // films minimum, plus 1 distinct show in the separate TV catalog.
+            if (catalog.Count < 11 || tvCatalog.Count < 1) return null;
 
             var rng = SeededRandom(date);
 
@@ -140,8 +158,60 @@ namespace Backend.Services
 
             var castDeduct = BuildCastDeduct(rng, catalog, used);
             if (castDeduct == null) return null;
+            used.Add(castDeduct.MovieA.ImdbId);
+            used.Add(castDeduct.MovieB.ImdbId);
 
-            return new DailyPuzzlePayload(connection, chronos, castDeduct);
+            var mysteryMovie = BuildMysteryMovie(rng, catalog, used);
+            if (mysteryMovie == null) return null;
+
+            // Separate catalog/pool, so no "used" exclusion needed against
+            // the movie challenges above.
+            var mysteryTv = BuildMysteryTv(rng, tvCatalog);
+            if (mysteryTv == null) return null;
+
+            return new DailyPuzzlePayload(connection, chronos, castDeduct, mysteryMovie, mysteryTv);
+        }
+
+        // Picks one unused film as the hidden target — no distractor logic
+        // needed, unlike the other three challenges: the "options" here are
+        // effectively the whole catalog, narrowed by clues rather than a
+        // fixed multiple-choice list.
+        private static MysteryMovieChallenge? BuildMysteryMovie(Random rng, List<CatalogEntry> catalog, HashSet<string> used)
+        {
+            var available = catalog.Where(e => !used.Contains(e.Movie.ImdbId)).ToList();
+            if (available.Count == 0) return null;
+
+            var target = available[rng.Next(available.Count)];
+            return new MysteryMovieChallenge(
+                "movie",
+                target.Movie.ImdbId,
+                target.Movie.Title,
+                target.Movie.Director,
+                target.Cast,
+                target.Genres,
+                target.Movie.ReleaseYear,
+                target.Movie.Plot,
+                target.Movie.PosterPath);
+        }
+
+        // Same shape, TV catalog — no Director (see CineMindTvShow) and no
+        // "used" exclusion since this pool is entirely separate from the
+        // movie challenges' catalog.
+        private static MysteryMovieChallenge? BuildMysteryTv(Random rng, List<TvCatalogEntry> tvCatalog)
+        {
+            if (tvCatalog.Count == 0) return null;
+
+            var target = tvCatalog[rng.Next(tvCatalog.Count)];
+            return new MysteryMovieChallenge(
+                "tv",
+                target.Show.ImdbId,
+                target.Show.Title,
+                null,
+                target.Cast,
+                target.Genres,
+                target.Show.ReleaseYear,
+                target.Show.Plot,
+                target.Show.PosterPath);
         }
 
         // Four films sharing one person. Prefers an actor link (more
@@ -473,15 +543,22 @@ namespace Backend.Services
             var connection = GradeText(answers.ConnectionAnswer, payload.Connection.Answer);
             var castDeduct = GradeText(answers.CastDeductAnswer, payload.CastDeduct.Answer);
             var chronos = GradeChronos(payload.Chronos, answers.ChronosOrder);
+            var mysteryMovie = GradeMysteryItem(
+                payload.MysteryMovie, answers.MysteryMovieGuess, answers.MysteryMovieAttemptsUsed,
+                answers.MysteryMovieDifficulty);
+            // TV track is Easy-only for now — no difficulty param to pass.
+            var mysteryTv = GradeMysteryItem(
+                payload.MysteryTv, answers.MysteryTvGuess, answers.MysteryTvAttemptsUsed, difficulty: null);
 
-            var score = connection.Points + chronos.Points + castDeduct.Points;
+            var score = connection.Points + chronos.Points + castDeduct.Points
+                + mysteryMovie.Points + mysteryTv.Points;
 
             // Streak and percentile are filled in by the controller, which
             // owns the database — the service stays pure so it's testable.
             return new SubmitResult(
                 score, MaxScore, timeTakenMs,
                 StreakCount: 0, PercentileRank: 0,
-                connection, chronos, castDeduct);
+                connection, chronos, castDeduct, mysteryMovie, mysteryTv);
         }
 
         // Case- and whitespace-insensitive, because the player types a name.
@@ -504,6 +581,36 @@ namespace Backend.Services
                 correct ? null : string.Join(" → ", OrderedTitles(chronos)));
         }
 
+        // Points scale down with attempts used — the same "you got it, but it
+        // cost you clues" tradeoff the tiered-reveal format is built around.
+        // AttemptsUsed is client-reported (how many guesses it took), not
+        // independently tracked server-side, since the whole clue-reveal
+        // interaction happens client-side against data already sent — see
+        // MysteryMovieChallenge's own comment for why that's safe here.
+        //
+        // Every difficulty tops out at 100 — harder means fewer attempts and
+        // fewer clue tiers shown (enforced client-side; nothing here needs to
+        // know which clues were actually visible), never a bigger prize.
+        // That's deliberate: a variable ceiling would mean two players'
+        // "max possible today" differ, which breaks the leaderboard's
+        // percentile math and the stats endpoint's "perfect score" concept —
+        // both assume a single fixed MaxScore for everyone.
+        private static ChallengeResult GradeMysteryItem(
+            MysteryMovieChallenge challenge, string? guess, int attemptsUsed, string? difficulty)
+        {
+            var correct = !string.IsNullOrWhiteSpace(guess)
+                && string.Equals(guess.Trim(), challenge.Answer, StringComparison.OrdinalIgnoreCase);
+
+            var points = !correct ? 0 : difficulty?.Trim().ToLowerInvariant() switch
+            {
+                "medium" => attemptsUsed switch { <= 1 => 100, 2 => 60, _ => 30 },
+                "hard" => attemptsUsed switch { <= 1 => 100, _ => 40 },
+                _ => attemptsUsed switch { <= 1 => 100, 2 => 75, 3 => 50, _ => 25 }, // easy / unrecognized
+            };
+
+            return new ChallengeResult(correct, points, correct ? null : challenge.AnswerTitle);
+        }
+
         private static IEnumerable<string> OrderedTitles(ChronosChallenge chronos) =>
             chronos.CorrectOrder.Select(id =>
                 chronos.Movies.FirstOrDefault(m => m.ImdbId == id)?.Title ?? id);
@@ -518,7 +625,9 @@ namespace Backend.Services
             // Chronos additionally drops the release year, which IS its answer.
             ToConnectionView(p.Connection),
             ToChronosView(p.Chronos),
-            ToCastDeductView(p.CastDeduct));
+            ToCastDeductView(p.CastDeduct),
+            ToMysteryMovieView(p.MysteryMovie),
+            ToMysteryMovieView(p.MysteryTv));
 
         private static ConnectionView ToConnectionView(ConnectionChallenge c) =>
             new(c.Movies, c.LinkKind, c.Options);
@@ -528,6 +637,12 @@ namespace Backend.Services
 
         private static CastDeductView ToCastDeductView(CastDeductChallenge c) =>
             new(c.MovieA, c.MovieB, c.Options);
+
+        // Drops only Answer/AnswerTitle — every clue field carries straight
+        // through, per MysteryMovieChallenge's own comment. Shared by both
+        // the movie and TV challenge, same as the type itself.
+        private static MysteryMovieView ToMysteryMovieView(MysteryMovieChallenge c) =>
+            new(c.MediaType, c.Director, c.Cast, c.Genres, c.ReleaseYear, c.Plot, c.PosterPath);
 
         // ── Helpers ────────────────────────────────────────────────────────
 

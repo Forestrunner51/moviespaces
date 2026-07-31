@@ -8,6 +8,7 @@ import {
   ActivityIndicator,
   Alert,
   Share,
+  TextInput,
 } from "react-native";
 import { router } from "expo-router";
 import { Ionicons } from "@expo/vector-icons";
@@ -20,9 +21,13 @@ import {
   fetchTodayPuzzle,
   fetchStats,
   submitPuzzle,
+  browseCatalog,
   formatCountdown,
   formatDuration,
+  CatalogMovie,
   CineMindStats,
+  MysteryDifficulty,
+  MysteryMovieView,
   PuzzleMovie,
   PuzzleView,
   SubmitResult,
@@ -51,6 +56,26 @@ export default function CineMindScreen() {
   const [chronosOrder, setChronosOrder] = useState<string[]>([]);
   const [castDeductAnswer, setCastDeductAnswer] = useState<string | null>(null);
 
+  // Mystery Movie/TV's whole interaction (search, guesses, near-miss
+  // feedback, tier reveal) happens client-side against data already sent
+  // with the puzzle — see MysteryMovieChallenge's own comment on the backend
+  // for why that's safe. Each catalog is fetched once, lazily, only once the
+  // player actually reaches that challenge (not on load — a player who never
+  // gets there shouldn't pay for a request they don't need).
+  const [catalog, setCatalog] = useState<CatalogMovie[] | null>(null);
+  const [catalogLoading, setCatalogLoading] = useState(false);
+  const [mysteryGuess, setMysteryGuess] = useState<string | null>(null);
+  const [mysteryAttemptsUsed, setMysteryAttemptsUsed] = useState(0);
+  const [mysteryResolved, setMysteryResolved] = useState(false);
+  // Locked once the first guess is made — see the difficulty picker below.
+  const [mysteryDifficulty, setMysteryDifficulty] = useState<MysteryDifficulty>("easy");
+
+  const [tvCatalog, setTvCatalog] = useState<CatalogMovie[] | null>(null);
+  const [tvCatalogLoading, setTvCatalogLoading] = useState(false);
+  const [mysteryTvGuess, setMysteryTvGuess] = useState<string | null>(null);
+  const [mysteryTvAttemptsUsed, setMysteryTvAttemptsUsed] = useState(0);
+  const [mysteryTvResolved, setMysteryTvResolved] = useState(false);
+
   const [elapsedMs, setElapsedMs] = useState(0);
   // Wall-clock start, not an accumulating counter — a throttled JS timer in
   // the background would otherwise under-count the player's real time.
@@ -76,6 +101,13 @@ export default function CineMindScreen() {
       setConnectionAnswer(null);
       setChronosOrder([]);
       setCastDeductAnswer(null);
+      setMysteryGuess(null);
+      setMysteryAttemptsUsed(0);
+      setMysteryResolved(false);
+      setMysteryDifficulty("easy");
+      setMysteryTvGuess(null);
+      setMysteryTvAttemptsUsed(0);
+      setMysteryTvResolved(false);
       startedAt.current = Date.now();
       setElapsedMs(0);
       setPhase("playing");
@@ -98,6 +130,25 @@ export default function CineMindScreen() {
     return () => clearInterval(interval);
   }, [phase]);
 
+  // Lazy: only once the player actually reaches each Mystery challenge.
+  useEffect(() => {
+    if (challengeIndex !== 3 || catalog != null || catalogLoading) return;
+    setCatalogLoading(true);
+    browseCatalog("movie")
+      .then(setCatalog)
+      .catch((err) => console.warn("Couldn't load movie catalog for Mystery Movie:", err))
+      .finally(() => setCatalogLoading(false));
+  }, [challengeIndex, catalog, catalogLoading]);
+
+  useEffect(() => {
+    if (challengeIndex !== 4 || tvCatalog != null || tvCatalogLoading) return;
+    setTvCatalogLoading(true);
+    browseCatalog("tv")
+      .then(setTvCatalog)
+      .catch((err) => console.warn("Couldn't load TV catalog for Mystery TV:", err))
+      .finally(() => setTvCatalogLoading(false));
+  }, [challengeIndex, tvCatalog, tvCatalogLoading]);
+
   const handleSubmit = async () => {
     // Ref, not state: a double-tap fires both handlers before React re-renders,
     // and the server rejects the second submit as a duplicate — which would
@@ -113,6 +164,11 @@ export default function CineMindScreen() {
           connectionAnswer,
           chronosOrder: chronosOrder.length > 0 ? chronosOrder : null,
           castDeductAnswer,
+          mysteryMovieGuess: mysteryGuess,
+          mysteryMovieAttemptsUsed: mysteryAttemptsUsed,
+          mysteryMovieDifficulty: mysteryDifficulty,
+          mysteryTvGuess: mysteryTvGuess,
+          mysteryTvAttemptsUsed: mysteryTvAttemptsUsed,
         },
         timeTakenMs,
       );
@@ -227,6 +283,8 @@ export default function CineMindScreen() {
             <ResultRow label="The Connection" res={result.connection} />
             <ResultRow label="Chronos" res={result.chronos} />
             <ResultRow label="Cast Deduct" res={result.castDeduct} />
+            <ResultRow label="Mystery Movie" res={result.mysteryMovie} />
+            <ResultRow label="Mystery TV" res={result.mysteryTv} />
           </View>
 
           <TouchableOpacity activeOpacity={0.85} style={styles.primaryButton} onPress={handleShare}>
@@ -247,7 +305,9 @@ export default function CineMindScreen() {
   const canAdvance =
     (challengeIndex === 0 && connectionAnswer != null) ||
     (challengeIndex === 1 && chronosOrder.length === puzzle.chronos.movies.length) ||
-    (challengeIndex === 2 && castDeductAnswer != null);
+    (challengeIndex === 2 && castDeductAnswer != null) ||
+    (challengeIndex === 3 && mysteryResolved) ||
+    (challengeIndex === 4 && mysteryTvResolved);
 
   return (
     <Starfield>
@@ -256,7 +316,7 @@ export default function CineMindScreen() {
 
         <Text style={styles.puzzleNumber}>CineMind #{puzzle.puzzleNumber}</Text>
         <View style={styles.progressRow}>
-          {[0, 1, 2].map((i) => (
+          {[0, 1, 2, 3, 4].map((i) => (
             <View
               key={i}
               style={[
@@ -270,7 +330,7 @@ export default function CineMindScreen() {
 
         {challengeIndex === 0 && (
           <View style={styles.card}>
-            <Text style={styles.challengeLabel}>Challenge 1 of 3</Text>
+            <Text style={styles.challengeLabel}>Challenge 1 of 5</Text>
             <Text style={styles.challengeTitle}>The Connection</Text>
             <Text style={styles.challengeHint}>
               Which {puzzle.connection.linkKind} links all four of these films?
@@ -289,7 +349,7 @@ export default function CineMindScreen() {
 
         {challengeIndex === 1 && (
           <View style={styles.card}>
-            <Text style={styles.challengeLabel}>Challenge 2 of 3</Text>
+            <Text style={styles.challengeLabel}>Challenge 2 of 5</Text>
             <Text style={styles.challengeTitle}>Chronos</Text>
             <Text style={styles.challengeHint}>
               Tap these in order of release — oldest first. Tap again to remove.
@@ -324,7 +384,7 @@ export default function CineMindScreen() {
 
         {challengeIndex === 2 && (
           <View style={styles.card}>
-            <Text style={styles.challengeLabel}>Challenge 3 of 3</Text>
+            <Text style={styles.challengeLabel}>Challenge 3 of 5</Text>
             <Text style={styles.challengeTitle}>Cast Deduct</Text>
             <Text style={styles.challengeHint}>Which actor appears in both of these films?</Text>
             <PosterRow movies={[puzzle.castDeduct.movieA, puzzle.castDeduct.movieB]} showTitles />
@@ -339,17 +399,59 @@ export default function CineMindScreen() {
           </View>
         )}
 
+        {challengeIndex === 3 && (
+          <MysteryChallenge
+            challengeNumber={4}
+            clues={puzzle.mysteryMovie}
+            catalog={catalog}
+            catalogLoading={catalogLoading}
+            attemptsUsed={mysteryAttemptsUsed}
+            resolved={mysteryResolved}
+            solvedGuess={mysteryGuess}
+            difficulty={mysteryDifficulty}
+            onDifficultyChange={setMysteryDifficulty}
+            onGuess={(imdbId, correct, newAttemptsUsed, maxAttempts) => {
+              setMysteryAttemptsUsed(newAttemptsUsed);
+              if (correct || newAttemptsUsed >= maxAttempts) {
+                setMysteryGuess(correct ? imdbId : null);
+                setMysteryResolved(true);
+              }
+            }}
+          />
+        )}
+
+        {challengeIndex === 4 && (
+          <MysteryChallenge
+            challengeNumber={5}
+            clues={puzzle.mysteryTv}
+            catalog={tvCatalog}
+            catalogLoading={tvCatalogLoading}
+            attemptsUsed={mysteryTvAttemptsUsed}
+            resolved={mysteryTvResolved}
+            solvedGuess={mysteryTvGuess}
+            difficulty="easy"
+            onDifficultyChange={undefined}
+            onGuess={(imdbId, correct, newAttemptsUsed, maxAttempts) => {
+              setMysteryTvAttemptsUsed(newAttemptsUsed);
+              if (correct || newAttemptsUsed >= maxAttempts) {
+                setMysteryTvGuess(correct ? imdbId : null);
+                setMysteryTvResolved(true);
+              }
+            }}
+          />
+        )}
+
         <TouchableOpacity
           activeOpacity={0.85}
           style={[styles.primaryButton, !canAdvance && styles.primaryButtonDisabled]}
           disabled={!canAdvance}
           onPress={() => {
-            if (challengeIndex < 2) setChallengeIndex(challengeIndex + 1);
+            if (challengeIndex < 4) setChallengeIndex(challengeIndex + 1);
             else handleSubmit();
           }}
         >
           <Text style={styles.primaryButtonText}>
-            {challengeIndex < 2 ? "Next Challenge" : "Submit & See Score"}
+            {challengeIndex < 4 ? "Next Challenge" : "Submit & See Score"}
           </Text>
         </TouchableOpacity>
 
@@ -467,6 +569,255 @@ function Option({
       />
       <Text style={[styles.optionText, selected && styles.optionTextSelected]}>{label}</Text>
     </TouchableOpacity>
+  );
+}
+
+interface MysteryGuessLogEntry {
+  title: string;
+  correct: boolean;
+  feedback: string[];
+}
+
+const MAX_ATTEMPTS_BY_DIFFICULTY: Record<MysteryDifficulty, number> = {
+  easy: 4,
+  medium: 3,
+  hard: 2,
+};
+
+type ClueField = "year" | "decade" | "director" | "genre" | "plot" | "cast" | "poster";
+
+// Which fields are visible at a given tier, per difficulty. Every difficulty
+// still tops out at 100 pts (see GradeMysteryItem on the backend) — the
+// difference is entirely how much you're shown and how many tries you get,
+// never a bigger prize.
+function cluesForTier(difficulty: MysteryDifficulty, tier: number): Set<ClueField> {
+  if (difficulty === "hard") {
+    // 2 attempts: decade + vague plot, then + genre. No director/cast/poster
+    // ever — Hard means genuinely minimal information.
+    return new Set(tier >= 2 ? ["decade", "plot", "genre"] : ["decade", "plot"]);
+  }
+  if (difficulty === "medium") {
+    // 3 attempts: year + genre, then + cast, then + plot. No poster, no
+    // director — a deliberately harder set than Easy at every tier.
+    if (tier >= 3) return new Set(["year", "genre", "cast", "plot"]);
+    if (tier === 2) return new Set(["year", "genre", "cast"]);
+    return new Set(["year", "genre"]);
+  }
+  // Easy: 4 attempts, the full clue set.
+  if (tier >= 4) return new Set(["year", "director", "genre", "plot", "cast", "poster"]);
+  if (tier === 3) return new Set(["year", "director", "genre", "plot"]);
+  if (tier === 2) return new Set(["year", "director", "genre"]);
+  return new Set(["year", "director"]);
+}
+
+// Challenges 4 & 5 (movie and TV). Unlike the other three, this is a live
+// multi-attempt loop rather than a single pick — search, guess, get
+// near-miss feedback, repeat. Everything here runs against `clues` (already
+// fully sent with the puzzle) and `catalog` (fetched once) — no network call
+// per guess. See MysteryMovieChallenge's comment in CineMindContracts.cs for
+// why that's safe: only the target's own identity is secret, and correctness
+// here is determined by an exact match on year + full cast (+ director, for
+// movies) against a small hand-curated catalog, which is reliable enough in
+// practice without ever needing the server to confirm a specific guess.
+function MysteryChallenge({
+  challengeNumber,
+  clues,
+  catalog,
+  catalogLoading,
+  attemptsUsed,
+  resolved,
+  solvedGuess,
+  difficulty,
+  onDifficultyChange,
+  onGuess,
+}: {
+  challengeNumber: 4 | 5;
+  clues: MysteryMovieView;
+  catalog: CatalogMovie[] | null;
+  catalogLoading: boolean;
+  attemptsUsed: number;
+  resolved: boolean;
+  solvedGuess: string | null;
+  difficulty: MysteryDifficulty;
+  // undefined for the TV track — no difficulty picker there (Easy only, for now).
+  onDifficultyChange: ((difficulty: MysteryDifficulty) => void) | undefined;
+  onGuess: (imdbId: string, correct: boolean, newAttemptsUsed: number, maxAttempts: number) => void;
+}) {
+  const [search, setSearch] = useState("");
+  const [history, setHistory] = useState<MysteryGuessLogEntry[]>([]);
+
+  const isTv = clues.mediaType === "tv";
+  const maxAttempts = MAX_ATTEMPTS_BY_DIFFICULTY[difficulty];
+  const tier = Math.min(attemptsUsed + 1, maxAttempts);
+  const visibleClues = cluesForTier(difficulty, tier);
+  const decade = `${Math.floor(clues.releaseYear / 10) * 10}s`;
+
+  const query = search.trim().toLowerCase();
+  const matches =
+    catalog && query.length > 0
+      ? catalog.filter((m) => m.title.toLowerCase().includes(query)).slice(0, 6)
+      : [];
+
+  // Director only factors in for movies — clues.director (and every catalog
+  // TV entry's director) is always null for the TV track, so comparing it
+  // there would be vacuously true and wouldn't help discriminate anything.
+  const isMatch = (m: CatalogMovie) => {
+    const directorOk = isTv || (!!m.director && m.director === clues.director);
+    return (
+      directorOk &&
+      m.releaseYear === clues.releaseYear &&
+      m.cast.length === clues.cast.length &&
+      m.cast.every((actor) => clues.cast.includes(actor))
+    );
+  };
+
+  const nearMissFeedback = (m: CatalogMovie): string[] => {
+    const feedback: string[] = [];
+    if (!isTv && clues.director && m.director === clues.director) feedback.push("🎬 Same director");
+    if (m.cast.some((actor) => clues.cast.includes(actor))) feedback.push("🎭 Shares cast");
+    if (m.releaseYear !== clues.releaseYear && Math.abs(m.releaseYear - clues.releaseYear) <= 2) {
+      feedback.push("📅 Close year");
+    }
+    return feedback.length > 0 ? feedback : ["❄️ Cold — no strong connection"];
+  };
+
+  const handlePick = (m: CatalogMovie) => {
+    if (resolved) return;
+    const correct = isMatch(m);
+    setHistory((prev) => [...prev, { title: m.title, correct, feedback: correct ? [] : nearMissFeedback(m) }]);
+    setSearch("");
+    onGuess(m.imdbId, correct, attemptsUsed + 1, maxAttempts);
+  };
+
+  return (
+    <View style={styles.card}>
+      <Text style={styles.challengeLabel}>Challenge {challengeNumber} of 5</Text>
+      <Text style={styles.challengeTitle}>{isTv ? "📺 Mystery TV Show" : "🎬 Mystery Movie"}</Text>
+      <Text style={styles.challengeHint}>
+        Guess the {isTv ? "show" : "film"} from the clues below. Fewer guesses, more points.
+      </Text>
+
+      {onDifficultyChange && (
+        <DifficultySelector
+          selected={difficulty}
+          locked={attemptsUsed > 0}
+          onSelect={onDifficultyChange}
+        />
+      )}
+
+      {visibleClues.has("poster") && clues.posterPath && (
+        <View style={styles.mysteryPosterWrap}>
+          <MoviePoster uri={clues.posterPath} width={100} />
+        </View>
+      )}
+
+      <View style={styles.clueList}>
+        {visibleClues.has("year") && <ClueRow label="Year" value={String(clues.releaseYear)} />}
+        {visibleClues.has("decade") && <ClueRow label="Decade" value={decade} />}
+        {visibleClues.has("director") && !!clues.director && (
+          <ClueRow label="Director" value={clues.director} />
+        )}
+        {visibleClues.has("genre") && <ClueRow label="Genre" value={clues.genres.join(", ") || "—"} />}
+        {visibleClues.has("plot") && !!clues.plot && <ClueRow label="Plot" value={clues.plot} />}
+        {visibleClues.has("cast") && <ClueRow label="Cast" value={clues.cast.join(", ") || "—"} />}
+      </View>
+
+      {history.map((entry, i) => (
+        <View key={i} style={styles.guessRow}>
+          <Text style={styles.guessRowMarker}>{entry.correct ? "🟩" : "🟥"}</Text>
+          <View style={{ flex: 1 }}>
+            <Text style={styles.guessRowTitle}>{entry.title}</Text>
+            {!entry.correct && (
+              <Text style={styles.guessRowFeedback}>{entry.feedback.join(" · ")}</Text>
+            )}
+          </View>
+        </View>
+      ))}
+
+      {resolved ? (
+        <Text style={styles.mysteryResolvedText}>
+          {solvedGuess ? "🏆 Solved!" : "Out of attempts — the answer reveals when you submit."}
+        </Text>
+      ) : (
+        <>
+          <TextInput
+            style={styles.mysteryInput}
+            value={search}
+            onChangeText={setSearch}
+            placeholder={catalogLoading ? "Loading list…" : `Type a ${isTv ? "show" : "movie"} title…`}
+            placeholderTextColor={SpaceTheme.mutedOrbit}
+            editable={!catalogLoading}
+            autoCorrect={false}
+          />
+          {matches.map((m) => (
+            <TouchableOpacity
+              key={m.imdbId}
+              activeOpacity={0.8}
+              style={styles.mysteryMatchRow}
+              onPress={() => handlePick(m)}
+            >
+              <Text style={styles.mysteryMatchText}>
+                {m.title} ({m.releaseYear})
+              </Text>
+            </TouchableOpacity>
+          ))}
+          <Text style={styles.mysteryAttemptsText}>
+            Attempt {attemptsUsed + 1} of {maxAttempts}
+          </Text>
+        </>
+      )}
+    </View>
+  );
+}
+
+function DifficultySelector({
+  selected,
+  locked,
+  onSelect,
+}: {
+  selected: MysteryDifficulty;
+  locked: boolean;
+  onSelect: (difficulty: MysteryDifficulty) => void;
+}) {
+  const options: { key: MysteryDifficulty; emoji: string; label: string; blurb: string }[] = [
+    { key: "easy", emoji: "🟢", label: "Easy", blurb: "4 tries, full clues" },
+    { key: "medium", emoji: "🟡", label: "Medium", blurb: "3 tries, fewer clues" },
+    { key: "hard", emoji: "🔴", label: "Hard", blurb: "2 tries, decade + plot only" },
+  ];
+
+  return (
+    <View style={styles.difficultyRow}>
+      {options.map((opt) => {
+        const active = selected === opt.key;
+        // Once locked, only the chosen tier stays visible/enabled — the rest
+        // are just hidden rather than shown-disabled, so the row doesn't
+        // read as "you could still switch" once a guess has been made.
+        if (locked && !active) return null;
+        return (
+          <TouchableOpacity
+            key={opt.key}
+            activeOpacity={0.8}
+            disabled={locked}
+            style={[styles.difficultyPill, active && styles.difficultyPillActive]}
+            onPress={() => onSelect(opt.key)}
+          >
+            <Text style={styles.difficultyPillLabel}>
+              {opt.emoji} {opt.label}
+            </Text>
+            <Text style={styles.difficultyPillBlurb}>{opt.blurb}</Text>
+          </TouchableOpacity>
+        );
+      })}
+    </View>
+  );
+}
+
+function ClueRow({ label, value }: { label: string; value: string }) {
+  return (
+    <View style={styles.clueRow}>
+      <Text style={styles.clueLabel}>{label}</Text>
+      <Text style={styles.clueValue}>{value}</Text>
+    </View>
   );
 }
 
@@ -615,5 +966,72 @@ const styles = StyleSheet.create({
     fontSize: 13,
     textAlign: "center",
     lineHeight: 18,
+  },
+  difficultyRow: { flexDirection: "row", gap: 8, marginBottom: 16 },
+  difficultyPill: {
+    ...SpaceStyles.glassCard,
+    flex: 1,
+    alignItems: "center",
+    paddingVertical: 10,
+    paddingHorizontal: 6,
+  },
+  difficultyPillActive: { borderColor: SpaceTheme.glowCyan, backgroundColor: "rgba(56,189,248,0.14)" },
+  difficultyPillLabel: { color: SpaceTheme.starWhite, fontSize: 13, fontWeight: "700" },
+  difficultyPillBlurb: {
+    color: SpaceTheme.mutedOrbit,
+    fontSize: 10,
+    textAlign: "center",
+    marginTop: 3,
+  },
+  mysteryPosterWrap: { alignItems: "center", marginBottom: 14 },
+  clueList: { marginBottom: 10 },
+  clueRow: { flexDirection: "row", marginBottom: 8, gap: 10 },
+  clueLabel: {
+    width: 62,
+    fontSize: 11,
+    color: SpaceTheme.mutedOrbit,
+    textTransform: "uppercase",
+    fontWeight: "700",
+    paddingTop: 1,
+  },
+  clueValue: { flex: 1, color: SpaceTheme.starWhite, fontSize: 14, lineHeight: 19 },
+  guessRow: {
+    flexDirection: "row",
+    alignItems: "flex-start",
+    gap: 8,
+    paddingVertical: 6,
+    borderTopWidth: 1,
+    borderTopColor: "rgba(255,255,255,0.06)",
+  },
+  guessRowMarker: { fontSize: 14, marginTop: 1 },
+  guessRowTitle: { color: SpaceTheme.starWhite, fontSize: 13, fontWeight: "600" },
+  guessRowFeedback: { color: SpaceTheme.mutedOrbit, fontSize: 12, marginTop: 1 },
+  mysteryInput: {
+    ...SpaceStyles.glassCard,
+    color: SpaceTheme.starWhite,
+    fontSize: 15,
+    paddingVertical: 12,
+    paddingHorizontal: 14,
+    marginTop: 12,
+  },
+  mysteryMatchRow: {
+    paddingVertical: 10,
+    paddingHorizontal: 14,
+    borderBottomWidth: 1,
+    borderBottomColor: "rgba(255,255,255,0.06)",
+  },
+  mysteryMatchText: { color: SpaceTheme.starWhite, fontSize: 14 },
+  mysteryAttemptsText: {
+    color: SpaceTheme.mutedOrbit,
+    fontSize: 11,
+    textAlign: "center",
+    marginTop: 10,
+  },
+  mysteryResolvedText: {
+    color: SpaceTheme.accentGold,
+    fontSize: 14,
+    fontWeight: "700",
+    textAlign: "center",
+    marginTop: 12,
   },
 });
