@@ -221,6 +221,8 @@ namespace Backend.Controllers
                 ("Blockbuster Film Society", "BLOCKB", "Blockbusters"),
                 ("Horror Night Den", "HORROR", "Horror"),
                 ("Sci-Fi Projectors", "SCIFI9", "Sci-Fi"),
+                ("Action Junkies", "ACTION", "Action"),
+                ("Arthouse & Indie Circle", "INDIE1", "Indie"),
                 ("Pop Culture Cinephiles", "POPCOR", "General"),
             };
 
@@ -259,57 +261,81 @@ namespace Backend.Controllers
             return Ok(new { added, total = defaults.Length });
         }
 
-        // POST /api/group/community-spaces/auto-join
+        // GET /api/group/community-spaces/discover?genres=Horror,Sci-Fi
         //
-        // Called once, right after onboarding's genre picker. Joining is
-        // idempotent (skips a genre's club if the user's already a member)
-        // so re-running this — a retry after a dropped connection, a user who
-        // revisits onboarding — never double-joins or errors.
-        [HttpPost("community-spaces/auto-join")]
-        public async Task<IActionResult> AutoJoinCommunitySpaces([FromBody] AutoJoinRequest req)
+        // Browse-before-joining: onboarding shows these as preview cards and
+        // joining is an explicit tap (POST /{id}/join, already built —
+        // there's no reason for this to duplicate that logic). No genres
+        // querystring means "show every public club," which is what a
+        // general Discover entry point outside onboarding would want.
+        [HttpGet("community-spaces/discover")]
+        public async Task<IActionResult> DiscoverCommunitySpaces([FromQuery] string? genres)
         {
             var userId = GetUserId();
             if (string.IsNullOrEmpty(userId)) return Unauthorized(new { error = "Unauthorized" });
 
-            // "General" always joins alongside whatever genres were picked —
-            // it's the one club with no genre-specific content to age out of
-            // relevance for someone who skips or picks something niche.
-            var wanted = (req.Genres ?? new List<string>())
-                .Append("General")
+            var requested = (genres ?? "")
+                .Split(',', StringSplitOptions.RemoveEmptyEntries | StringSplitOptions.TrimEntries)
                 .ToHashSet(StringComparer.OrdinalIgnoreCase);
 
-            // Filtered in memory, not in the query: EF translates
-            // HashSet<T>.Contains to a plain SQL IN (...), which drops the
-            // OrdinalIgnoreCase comparer entirely and falls back to whatever
-            // the column's collation happens to do — silently reintroducing
-            // case sensitivity this line looks like it's guarding against.
-            // The public-club table is a handful of rows, so materializing
-            // it first costs nothing.
+            // Filtered in memory, not in the query — see the same
+            // OrdinalIgnoreCase/SQL-translation note on the join endpoint.
             var allPublicClubs = await _db.Groups.Include(g => g.Members)
                 .Where(g => g.IsPublic)
                 .ToListAsync();
-            var clubs = allPublicClubs
-                .Where(g => g.GenreCategory != null && wanted.Contains(g.GenreCategory))
+            var clubs = requested.Count == 0
+                ? allPublicClubs
+                : allPublicClubs.Where(g => g.GenreCategory != null && requested.Contains(g.GenreCategory)).ToList();
+
+            var today = DateOnly.FromDateTime(DateTime.UtcNow);
+            var allMemberIds = clubs
+                .SelectMany(c => c.Members.Select(m => m.UserId))
+                .Where(id => !string.IsNullOrEmpty(id))
+                .Distinct()
                 .ToList();
 
-            var joined = new List<object>();
-            foreach (var club in clubs)
-            {
-                if (!club.Members.Any(m => m.UserId == userId))
-                {
-                    club.Members.Add(new GroupMember
-                    {
-                        GroupId = club.Id,
-                        Name = _profanityFilter.CleanOrFallback(req.DisplayName, "A Movie Fan"),
-                        UserId = userId,
-                        Confirmed = true,
-                    });
-                }
-                joined.Add(new { id = club.Id, filmName = club.FilmName, spaceCode = club.SpaceCode, genreCategory = club.GenreCategory });
-            }
+            // One query across every club's members rather than one query per
+            // club — cheap either way at this scale (a handful of clubs), but
+            // free to avoid.
+            var todayScores = await _db.UserDailyProgress
+                .Where(p => p.PuzzleDate == today && allMemberIds.Contains(p.UserId))
+                .Select(p => new { p.UserId, p.Score })
+                .ToListAsync();
+            var scoresByUser = todayScores.ToLookup(s => s.UserId, s => s.Score);
 
-            await _db.SaveChangesAsync();
-            return Ok(new { joined });
+            var ranked = clubs
+                .Select(club =>
+                {
+                    var memberIds = club.Members.Select(m => m.UserId).Where(id => !string.IsNullOrEmpty(id));
+                    var clubScores = memberIds.SelectMany(id => scoresByUser[id]).ToList();
+                    return new
+                    {
+                        club,
+                        memberCount = club.Members.Count,
+                        playedTodayCount = clubScores.Count,
+                        todayAvgScore = clubScores.Count > 0 ? (int?)Math.Round(clubScores.Average()) : null,
+                        isJoined = club.Members.Any(m => m.UserId == userId),
+                    };
+                })
+                // Most active today first, then biggest — a quiet club with
+                // more total members but nobody active today isn't actually
+                // the more "alive" pick to lead with.
+                .OrderByDescending(r => r.playedTodayCount)
+                .ThenByDescending(r => r.memberCount)
+                .Select(r => new
+                {
+                    id = r.club.Id,
+                    displayName = r.club.FilmName,
+                    spaceCode = r.club.SpaceCode,
+                    genreCategory = r.club.GenreCategory,
+                    memberCount = r.memberCount,
+                    playedTodayCount = r.playedTodayCount,
+                    todayAvgScore = r.todayAvgScore,
+                    isJoined = r.isJoined,
+                })
+                .ToList();
+
+            return Ok(new { spaces = ranked });
         }
 
         [HttpGet("{id}")]
@@ -847,7 +873,6 @@ namespace Backend.Controllers
     );
 
     public record JoinGroupRequest(string Name);
-    public record AutoJoinRequest(List<string>? Genres, string DisplayName);
     public record UpdateBookingUrlRequest(string? BookingUrl);
     public record NotifyMessageRequest(string SenderName, string Preview);
     public record TransferOwnershipRequest(string NewHostUserId);
