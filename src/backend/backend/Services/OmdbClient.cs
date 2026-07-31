@@ -20,7 +20,8 @@ namespace Backend.Services
         int ReleaseYear,
         string? PosterUrl,
         string? Director,
-        List<string> Cast);
+        List<string> Cast,
+        List<string> Genres);
 
     // Title -> metadata lookups against OMDb, used by the nightly showtime
     // ingest to enrich scraped titles.
@@ -164,6 +165,10 @@ namespace Backend.Services
                     .Split(',', StringSplitOptions.RemoveEmptyEntries | StringSplitOptions.TrimEntries)
                     .ToList();
 
+                var genres = (Clean(GetString(root, "Genre")) ?? "")
+                    .Split(',', StringSplitOptions.RemoveEmptyEntries | StringSplitOptions.TrimEntries)
+                    .ToList();
+
                 var year = 0;
                 var rawYear = Clean(GetString(root, "Year")) ?? "";
                 if (rawYear.Length >= 4) int.TryParse(rawYear[..4], out year);
@@ -174,7 +179,8 @@ namespace Backend.Services
                     ReleaseYear: year,
                     PosterUrl: Clean(GetString(root, "Poster")),
                     Director: Clean(GetString(root, "Director")),
-                    Cast: cast);
+                    Cast: cast,
+                    Genres: genres);
 
                 _cache.Set(cacheKey, entry, TimeSpan.FromHours(24));
                 return entry;

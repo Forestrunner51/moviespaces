@@ -40,6 +40,8 @@ interface Group {
   id: string;
   slug: string | null;
   spaceCode: string | null;
+  isPublic: boolean;
+  genreCategory: string | null;
   userId: string;
   hostName: string;
   cinemaId: number | null;
@@ -446,8 +448,14 @@ export default function GroupScreen() {
   // forever just because we can't pin down their real showtime.
   // Deliberately impure: needs the actual current time on every render so
   // this screen correctly locks down while it stays mounted past the event.
+  // Public Community Spaces (e.g. "Horror Night Den") are evergreen by
+  // design — they have no ScreeningTime because there's no single event to
+  // pin down, not because the data is missing. Without this exemption the
+  // createdAt fallback above would mark one "past" the instant it's created,
+  // hiding the Join button and every other action on a club that's supposed
+  // to stay open forever.
   // eslint-disable-next-line react-hooks/purity -- see comment above
-  const hasPassed = new Date(group.screeningTime ?? group.createdAt).getTime() < Date.now();
+  const hasPassed = !group.isPublic && new Date(group.screeningTime ?? group.createdAt).getTime() < Date.now();
 
   return (
     <Starfield>

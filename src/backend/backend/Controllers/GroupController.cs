@@ -176,15 +176,136 @@ namespace Backend.Controllers
             return Ok(new { groupId = group.Id, filmName = group.FilmName, hostName = group.HostName });
         }
 
+        // Guid (every programmatic caller), Slug (the friendlier deep-link
+        // form), or SpaceCode (a share/onboarding link using the short code,
+        // e.g. moviespaces.onrender.com/space/HORROR) — in that order, so a
+        // 6-char SpaceCode can never accidentally shadow a real Guid or Slug.
+        private async Task<Group?> ResolveGroupAsync(string id)
+        {
+            if (Guid.TryParse(id, out var groupId))
+                return await _db.Groups.Include(g => g.Members).FirstOrDefaultAsync(g => g.Id == groupId);
+
+            var bySlug = await _db.Groups.Include(g => g.Members).FirstOrDefaultAsync(g => g.Slug == id);
+            if (bySlug != null) return bySlug;
+
+            var normalizedCode = id.Trim().ToUpperInvariant();
+            return await _db.Groups.Include(g => g.Members).FirstOrDefaultAsync(g => g.SpaceCode == normalizedCode);
+        }
+
+        // POST /api/group/community-spaces/seed
+        //
+        // One-shot admin action, same gating pattern (and same shared secret)
+        // as CineMind's catalog/seed — an unauthenticated endpoint that
+        // creates rows would let anyone spam the community list.
+        [HttpPost("community-spaces/seed")]
+        [AllowAnonymous]
+        public async Task<IActionResult> SeedCommunitySpaces([FromServices] IConfiguration configuration)
+        {
+            var expected = configuration["CineMind:AdminSecret"];
+            if (string.IsNullOrWhiteSpace(expected))
+                return StatusCode(500, new { error = "CineMind:AdminSecret is not configured." });
+
+            Request.Headers.TryGetValue("x-admin-secret", out var provided);
+            if (!System.Security.Cryptography.CryptographicOperations.FixedTimeEquals(
+                    System.Text.Encoding.UTF8.GetBytes(provided.ToString()),
+                    System.Text.Encoding.UTF8.GetBytes(expected)))
+                return Unauthorized(new { error = "Unauthorized" });
+
+            // (DisplayName, SpaceCode, GenreCategory). Built through the
+            // normal Group entity rather than raw SQL specifically so every
+            // NOT NULL column gets its real C# default (HostName, Status,
+            // MaxCapacity, ...) instead of this list having to enumerate and
+            // stay in sync with the full Groups schema by hand.
+            var defaults = new[]
+            {
+                ("Blockbuster Film Society", "BLOCKB", "Blockbusters"),
+                ("Horror Night Den", "HORROR", "Horror"),
+                ("Sci-Fi Projectors", "SCIFI9", "Sci-Fi"),
+                ("Pop Culture Cinephiles", "POPCOR", "General"),
+            };
+
+            var existingCodes = await _db.Groups
+                .Where(g => g.IsPublic)
+                .Select(g => g.SpaceCode)
+                .ToListAsync();
+
+            int added = 0;
+            foreach (var (name, code, genreCategory) in defaults)
+            {
+                if (existingCodes.Contains(code)) continue;
+
+                var group = new Group
+                {
+                    HostName = "MovieSpaces",
+                    FilmName = name,
+                    Slug = GenerateSlug(name),
+                    SpaceCode = code,
+                    IsPublic = true,
+                    GenreCategory = genreCategory,
+                    SpaceType = "public_gathering",
+                    // High enough that "full" never realistically blocks
+                    // onboarding auto-join for a themed community club.
+                    MaxCapacity = 5000,
+                    // Left null deliberately — see the hasPassed/isPast
+                    // exemption for IsPublic Spaces in the client, which
+                    // treats an evergreen club as never "past" regardless.
+                    ScreeningTime = null,
+                };
+                _db.Groups.Add(group);
+                added++;
+            }
+
+            if (added > 0) await _db.SaveChangesAsync();
+            return Ok(new { added, total = defaults.Length });
+        }
+
+        // POST /api/group/community-spaces/auto-join
+        //
+        // Called once, right after onboarding's genre picker. Joining is
+        // idempotent (skips a genre's club if the user's already a member)
+        // so re-running this — a retry after a dropped connection, a user who
+        // revisits onboarding — never double-joins or errors.
+        [HttpPost("community-spaces/auto-join")]
+        public async Task<IActionResult> AutoJoinCommunitySpaces([FromBody] AutoJoinRequest req)
+        {
+            var userId = GetUserId();
+            if (string.IsNullOrEmpty(userId)) return Unauthorized(new { error = "Unauthorized" });
+
+            // "General" always joins alongside whatever genres were picked —
+            // it's the one club with no genre-specific content to age out of
+            // relevance for someone who skips or picks something niche.
+            var wanted = (req.Genres ?? new List<string>())
+                .Append("General")
+                .ToHashSet(StringComparer.OrdinalIgnoreCase);
+
+            var clubs = await _db.Groups.Include(g => g.Members)
+                .Where(g => g.IsPublic && g.GenreCategory != null && wanted.Contains(g.GenreCategory))
+                .ToListAsync();
+
+            var joined = new List<object>();
+            foreach (var club in clubs)
+            {
+                if (!club.Members.Any(m => m.UserId == userId))
+                {
+                    club.Members.Add(new GroupMember
+                    {
+                        GroupId = club.Id,
+                        Name = _profanityFilter.CleanOrFallback(req.DisplayName, "A Movie Fan"),
+                        UserId = userId,
+                        Confirmed = true,
+                    });
+                }
+                joined.Add(new { id = club.Id, filmName = club.FilmName, spaceCode = club.SpaceCode, genreCategory = club.GenreCategory });
+            }
+
+            await _db.SaveChangesAsync();
+            return Ok(new { joined });
+        }
+
         [HttpGet("{id}")]
         public async Task<IActionResult> GetGroup(string id)
         {
-            // id is either the raw Guid (every existing caller) or the friendlier
-            // Slug (incoming deep links resolving via the /space/{id} route).
-            var group = Guid.TryParse(id, out var groupId)
-                ? await _db.Groups.Include(g => g.Members).FirstOrDefaultAsync(g => g.Id == groupId)
-                : await _db.Groups.Include(g => g.Members).FirstOrDefaultAsync(g => g.Slug == id);
-
+            var group = await ResolveGroupAsync(id);
             if (group == null) return NotFound();
             return Ok(group);
         }
@@ -193,11 +314,7 @@ namespace Backend.Controllers
         [AllowAnonymous]
         public async Task<IActionResult> SpaceInvitePage(string id)
         {
-            // id is either the raw Guid (legacy links) or the friendlier Slug.
-            var group = Guid.TryParse(id, out var groupId)
-                ? await _db.Groups.Include(g => g.Members).FirstOrDefaultAsync(g => g.Id == groupId)
-                : await _db.Groups.Include(g => g.Members).FirstOrDefaultAsync(g => g.Slug == id);
-
+            var group = await ResolveGroupAsync(id);
             if (group == null) return NotFound();
 
             // SECURITY: HTML-encode all user-controlled strings before interpolating into
@@ -715,6 +832,7 @@ namespace Backend.Controllers
     );
 
     public record JoinGroupRequest(string Name);
+    public record AutoJoinRequest(List<string>? Genres, string DisplayName);
     public record UpdateBookingUrlRequest(string? BookingUrl);
     public record NotifyMessageRequest(string SenderName, string Preview);
     public record TransferOwnershipRequest(string NewHostUserId);

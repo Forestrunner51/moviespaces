@@ -52,6 +52,12 @@ namespace Backend.Models
         [Column("cast_json")]
         public string CastJson { get; set; } = "[]";
 
+        // JSON array of genres, e.g. ["Action","Sci-Fi"] — same reasoning as
+        // CastJson. Used by Roulette's genre filter; the daily puzzle engine
+        // doesn't touch this at all.
+        [Column("genres_json")]
+        public string GenresJson { get; set; } = "[]";
+
         [Column("created_at")]
         public DateTime CreatedAt { get; set; } = DateTime.UtcNow;
     }

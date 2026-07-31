@@ -12,6 +12,11 @@ namespace Backend.Services
         Task<(DailyPuzzle Puzzle, DailyPuzzlePayload Payload)?> GetOrCreateTodayAsync(AppDbContext db);
         PuzzleView ToClientView(DailyPuzzle puzzle, DailyPuzzlePayload payload);
         SubmitResult Grade(DailyPuzzlePayload payload, SubmittedAnswers answers, int timeTakenMs);
+
+        // ── Roulette (practice challenges) ──
+        Task<PracticeSpin?> BuildPracticeSpinAsync(AppDbContext db, string? genre);
+        PracticeSpinView ToPracticeView(PracticeSpin spin);
+        ChallengeResult GradePracticeChallenge(string challengeType, object challenge, SubmittedAnswers answer);
     }
 
     // Generates and grades the one shared daily puzzle.
@@ -97,13 +102,13 @@ namespace Backend.Services
 
         // ── Generation ─────────────────────────────────────────────────────
 
-        private sealed record CatalogEntry(CineMindMovie Movie, List<string> Cast);
+        private sealed record CatalogEntry(CineMindMovie Movie, List<string> Cast, List<string> Genres);
 
         private static async Task<List<CatalogEntry>> LoadCatalogAsync(AppDbContext db)
         {
             var movies = await db.CineMindMovies.OrderBy(m => m.ImdbId).ToListAsync();
             return movies
-                .Select(m => new CatalogEntry(m, ParseCast(m.CastJson)))
+                .Select(m => new CatalogEntry(m, ParseStringList(m.CastJson), ParseStringList(m.GenresJson)))
                 .Where(e => e.Movie.ReleaseYear > 0)
                 .ToList();
         }
@@ -273,21 +278,195 @@ namespace Backend.Services
             return null;
         }
 
+        // ── Roulette (practice challenges) ────────────────────────────────────
+        //
+        // Same shape as the daily generators above, but seeded with
+        // Random.Shared (no reason for determinism — a practice spin isn't
+        // shared between players) and constrained to always include one
+        // specific movie, since the whole point of a spin is "here's a
+        // challenge about THIS film."
+
+        public async Task<PracticeSpin?> BuildPracticeSpinAsync(AppDbContext db, string? genre)
+        {
+            var catalog = await LoadCatalogAsync(db);
+            if (catalog.Count < 2) return null;
+
+            var pool = string.IsNullOrWhiteSpace(genre)
+                ? catalog
+                : catalog.Where(e => e.Genres.Any(g => string.Equals(g, genre, StringComparison.OrdinalIgnoreCase))).ToList();
+            if (pool.Count == 0) return null;
+
+            var rng = Random.Shared;
+            var target = pool[rng.Next(pool.Count)];
+
+            // Random order so a low-connectivity movie doesn't always fail (or
+            // succeed) on the same challenge type every time it's spun.
+            var challengeTypes = Shuffle(rng, new[] { "connection", "chronos", "castDeduct" });
+            foreach (var type in challengeTypes)
+            {
+                object? challenge = type switch
+                {
+                    "connection" => BuildConnectionForMovie(rng, catalog, target),
+                    "chronos" => BuildChronosForMovie(rng, catalog, target),
+                    "castDeduct" => BuildCastDeductForMovie(rng, catalog, target),
+                    _ => null,
+                };
+                if (challenge != null)
+                {
+                    var movie = new RouletteMovie(target.Movie.ImdbId, target.Movie.Title, target.Movie.PosterPath);
+                    return new PracticeSpin(Guid.NewGuid().ToString("N"), movie, type, challenge);
+                }
+            }
+
+            // This particular movie doesn't share enough cast/director/year
+            // overlap with anything else in the catalog for any challenge type
+            // — genuinely possible with a small, curated catalog. The caller
+            // spins again rather than treating this as an error.
+            return null;
+        }
+
+        // Same linking logic as BuildConnection, but the pool of candidate
+        // people is restricted to target's own cast/director — anyone who
+        // doesn't appear in target's film can't be the answer to a challenge
+        // that's supposed to be about target.
+        private ConnectionChallenge? BuildConnectionForMovie(Random rng, List<CatalogEntry> catalog, CatalogEntry target)
+        {
+            var byActor = new Dictionary<string, List<CatalogEntry>>(StringComparer.OrdinalIgnoreCase);
+            foreach (var entry in catalog)
+                foreach (var actor in entry.Cast)
+                {
+                    if (!byActor.TryGetValue(actor, out var list)) byActor[actor] = list = new();
+                    list.Add(entry);
+                }
+
+            var byDirector = catalog
+                .Where(e => !string.IsNullOrWhiteSpace(e.Movie.Director))
+                .GroupBy(e => e.Movie.Director!, StringComparer.OrdinalIgnoreCase)
+                .ToDictionary(g => g.Key, g => g.ToList(), StringComparer.OrdinalIgnoreCase);
+
+            var actorCandidates = target.Cast
+                .Where(a => byActor.TryGetValue(a, out var list) && list.Count >= 4)
+                .OrderBy(a => a, StringComparer.Ordinal)
+                .ToList();
+
+            var useActor = actorCandidates.Count > 0;
+            string? personKey = null;
+            List<CatalogEntry>? films = null;
+
+            if (useActor)
+            {
+                personKey = actorCandidates[rng.Next(actorCandidates.Count)];
+                films = byActor[personKey];
+            }
+            else if (!string.IsNullOrWhiteSpace(target.Movie.Director)
+                && byDirector.TryGetValue(target.Movie.Director!, out var directorFilms)
+                && directorFilms.Count >= 4)
+            {
+                personKey = target.Movie.Director;
+                films = directorFilms;
+            }
+
+            if (personKey == null || films == null) return null;
+
+            // target is guaranteed a member of `films` (that's how personKey
+            // was chosen), so pin it in and fill the rest randomly.
+            var others = Shuffle(rng, films.Where(e => e.Movie.ImdbId != target.Movie.ImdbId)).Take(3).ToList();
+            var chosen = new List<CatalogEntry> { target }.Concat(others).ToList();
+            var movies = Shuffle(rng, chosen).Select(ToPuzzleMovie).ToList();
+
+            var alsoLinksAll = useActor
+                ? chosen
+                    .Select(e => (IEnumerable<string>)e.Cast)
+                    .Aggregate((a, b) => a.Intersect(b, StringComparer.OrdinalIgnoreCase))
+                    .ToHashSet(StringComparer.OrdinalIgnoreCase)
+                : new HashSet<string>(StringComparer.OrdinalIgnoreCase);
+
+            var allPeople = (useActor ? byActor.Keys.AsEnumerable() : byDirector.Keys.AsEnumerable())
+                .Where(p => !string.Equals(p, personKey, StringComparison.OrdinalIgnoreCase) && !alsoLinksAll.Contains(p))
+                .OrderBy(p => p, StringComparer.Ordinal)
+                .ToList();
+
+            var options = Shuffle(rng, allPeople).Take(WrongOptionCount).Append(personKey).ToList();
+
+            return new ConnectionChallenge(movies, personKey, useActor ? "actor" : "director", Shuffle(rng, options));
+        }
+
+        private ChronosChallenge? BuildChronosForMovie(Random rng, List<CatalogEntry> catalog, CatalogEntry target)
+        {
+            var others = catalog
+                .Where(e => e.Movie.ImdbId != target.Movie.ImdbId && e.Movie.ReleaseYear != target.Movie.ReleaseYear)
+                .GroupBy(e => e.Movie.ReleaseYear)
+                .Select(g => g.First())
+                .ToList();
+            if (others.Count < 3) return null;
+
+            var chosen = new List<CatalogEntry> { target }.Concat(Shuffle(rng, others).Take(3)).ToList();
+            var correctOrder = chosen.OrderBy(e => e.Movie.ReleaseYear).Select(e => e.Movie.ImdbId).ToList();
+
+            var presented = Shuffle(rng, chosen).Select(ToPuzzleMovie).ToList();
+            if (presented.Select(m => m.ImdbId).SequenceEqual(correctOrder)) presented.Reverse();
+
+            return new ChronosChallenge(presented, correctOrder);
+        }
+
+        private CastDeductChallenge? BuildCastDeductForMovie(Random rng, List<CatalogEntry> catalog, CatalogEntry target)
+        {
+            if (target.Cast.Count == 0) return null;
+
+            var candidates = catalog
+                .Where(e => e.Movie.ImdbId != target.Movie.ImdbId
+                    && e.Cast.Intersect(target.Cast, StringComparer.OrdinalIgnoreCase).Any())
+                .ToList();
+            if (candidates.Count == 0) return null;
+
+            var other = candidates[rng.Next(candidates.Count)];
+            var shared = target.Cast.Intersect(other.Cast, StringComparer.OrdinalIgnoreCase)
+                .OrderBy(a => a, StringComparer.Ordinal)
+                .ToList();
+            var answer = shared[rng.Next(shared.Count)];
+
+            var distractors = catalog
+                .SelectMany(e => e.Cast)
+                .Distinct(StringComparer.OrdinalIgnoreCase)
+                .Where(a => !shared.Contains(a, StringComparer.OrdinalIgnoreCase))
+                .OrderBy(a => a, StringComparer.Ordinal)
+                .ToList();
+            var options = Shuffle(rng, distractors).Take(WrongOptionCount).Append(answer).ToList();
+
+            // Order is cosmetic here (unlike the daily puzzle there's no
+            // "used" set to break ties on) — target first just reads more
+            // naturally as "here's the film you spun, plus one that shares
+            // an actor with it."
+            return new CastDeductChallenge(ToPuzzleMovie(target), ToPuzzleMovie(other), answer, Shuffle(rng, options));
+        }
+
+        public PracticeSpinView ToPracticeView(PracticeSpin spin) => new(
+            spin.Movie,
+            spin.ChallengeType,
+            spin.ChallengeType switch
+            {
+                "connection" => ToConnectionView((ConnectionChallenge)spin.Challenge),
+                "chronos" => ToChronosView((ChronosChallenge)spin.Challenge),
+                "castDeduct" => ToCastDeductView((CastDeductChallenge)spin.Challenge),
+                _ => throw new ArgumentOutOfRangeException(nameof(spin), spin.ChallengeType, "Unknown challenge type"),
+            });
+
+        public ChallengeResult GradePracticeChallenge(string challengeType, object challenge, SubmittedAnswers answer) =>
+            challengeType switch
+            {
+                "connection" => GradeText(answer.ConnectionAnswer, ((ConnectionChallenge)challenge).Answer),
+                "castDeduct" => GradeText(answer.CastDeductAnswer, ((CastDeductChallenge)challenge).Answer),
+                "chronos" => GradeChronos((ChronosChallenge)challenge, answer.ChronosOrder),
+                _ => throw new ArgumentOutOfRangeException(nameof(challengeType), challengeType, "Unknown challenge type"),
+            };
+
         // ── Grading ────────────────────────────────────────────────────────
 
         public SubmitResult Grade(DailyPuzzlePayload payload, SubmittedAnswers answers, int timeTakenMs)
         {
             var connection = GradeText(answers.ConnectionAnswer, payload.Connection.Answer);
             var castDeduct = GradeText(answers.CastDeductAnswer, payload.CastDeduct.Answer);
-
-            var chronosCorrect = answers.ChronosOrder != null
-                && answers.ChronosOrder.Count == payload.Chronos.CorrectOrder.Count
-                && answers.ChronosOrder.SequenceEqual(payload.Chronos.CorrectOrder, StringComparer.OrdinalIgnoreCase);
-
-            var chronos = new ChallengeResult(
-                chronosCorrect,
-                chronosCorrect ? PointsPerChallenge : 0,
-                chronosCorrect ? null : string.Join(" → ", OrderedTitles(payload.Chronos)));
+            var chronos = GradeChronos(payload.Chronos, answers.ChronosOrder);
 
             var score = connection.Points + chronos.Points + castDeduct.Points;
 
@@ -307,6 +486,18 @@ namespace Backend.Services
             return new ChallengeResult(ok, ok ? PointsPerChallenge : 0, ok ? null : expected);
         }
 
+        private static ChallengeResult GradeChronos(ChronosChallenge chronos, List<string>? order)
+        {
+            var correct = order != null
+                && order.Count == chronos.CorrectOrder.Count
+                && order.SequenceEqual(chronos.CorrectOrder, StringComparer.OrdinalIgnoreCase);
+
+            return new ChallengeResult(
+                correct,
+                correct ? PointsPerChallenge : 0,
+                correct ? null : string.Join(" → ", OrderedTitles(chronos)));
+        }
+
         private static IEnumerable<string> OrderedTitles(ChronosChallenge chronos) =>
             chronos.CorrectOrder.Select(id =>
                 chronos.Movies.FirstOrDefault(m => m.ImdbId == id)?.Title ?? id);
@@ -316,14 +507,21 @@ namespace Backend.Services
         public PuzzleView ToClientView(DailyPuzzle puzzle, DailyPuzzlePayload p) => new(
             puzzle.PuzzleNumber,
             puzzle.PuzzleDate.ToString("yyyy-MM-dd"),
-            new ConnectionView(p.Connection.Movies, p.Connection.LinkKind, p.Connection.Options),
             // Answers are omitted here, not merely unused — the payload holds
             // every solution, so returning it whole would ship the answer key.
             // Chronos additionally drops the release year, which IS its answer.
-            new ChronosView(p.Chronos.Movies
-                .Select(m => new ChronosMovie(m.ImdbId, m.Title, m.PosterPath))
-                .ToList()),
-            new CastDeductView(p.CastDeduct.MovieA, p.CastDeduct.MovieB, p.CastDeduct.Options));
+            ToConnectionView(p.Connection),
+            ToChronosView(p.Chronos),
+            ToCastDeductView(p.CastDeduct));
+
+        private static ConnectionView ToConnectionView(ConnectionChallenge c) =>
+            new(c.Movies, c.LinkKind, c.Options);
+
+        private static ChronosView ToChronosView(ChronosChallenge c) =>
+            new(c.Movies.Select(m => new ChronosMovie(m.ImdbId, m.Title, m.PosterPath)).ToList());
+
+        private static CastDeductView ToCastDeductView(CastDeductChallenge c) =>
+            new(c.MovieA, c.MovieB, c.Options);
 
         // ── Helpers ────────────────────────────────────────────────────────
 
@@ -358,7 +556,7 @@ namespace Backend.Services
         private static PuzzleMovie ToPuzzleMovie(CatalogEntry e) =>
             new(e.Movie.ImdbId, e.Movie.Title, e.Movie.ReleaseYear, e.Movie.PosterPath);
 
-        private static List<string> ParseCast(string json)
+        private static List<string> ParseStringList(string json)
         {
             try
             {
