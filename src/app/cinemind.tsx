@@ -9,6 +9,8 @@ import {
   Alert,
   Share,
   TextInput,
+  KeyboardAvoidingView,
+  Platform,
 } from "react-native";
 import { router } from "expo-router";
 import { Ionicons } from "@expo/vector-icons";
@@ -64,6 +66,7 @@ export default function CineMindScreen() {
   // gets there shouldn't pay for a request they don't need).
   const [catalog, setCatalog] = useState<CatalogMovie[] | null>(null);
   const [catalogLoading, setCatalogLoading] = useState(false);
+  const [catalogError, setCatalogError] = useState<string | null>(null);
   const [mysteryGuess, setMysteryGuess] = useState<string | null>(null);
   const [mysteryAttemptsUsed, setMysteryAttemptsUsed] = useState(0);
   const [mysteryResolved, setMysteryResolved] = useState(false);
@@ -72,6 +75,7 @@ export default function CineMindScreen() {
 
   const [tvCatalog, setTvCatalog] = useState<CatalogMovie[] | null>(null);
   const [tvCatalogLoading, setTvCatalogLoading] = useState(false);
+  const [tvCatalogError, setTvCatalogError] = useState<string | null>(null);
   const [mysteryTvGuess, setMysteryTvGuess] = useState<string | null>(null);
   const [mysteryTvAttemptsUsed, setMysteryTvAttemptsUsed] = useState(0);
   const [mysteryTvResolved, setMysteryTvResolved] = useState(false);
@@ -131,23 +135,43 @@ export default function CineMindScreen() {
   }, [phase]);
 
   // Lazy: only once the player actually reaches each Mystery challenge.
-  useEffect(() => {
-    if (challengeIndex !== 3 || catalog != null || catalogLoading) return;
+  // Failure was previously silent (console.warn only) — the search box would
+  // just sit there returning zero results forever with no indication
+  // anything was wrong, indistinguishable from "broken." Now it's a visible,
+  // retryable error instead.
+  const loadCatalog = useCallback(() => {
     setCatalogLoading(true);
+    setCatalogError(null);
     browseCatalog("movie")
       .then(setCatalog)
-      .catch((err) => console.warn("Couldn't load movie catalog for Mystery Movie:", err))
+      .catch((err) => {
+        console.warn("Couldn't load movie catalog for Mystery Movie:", err);
+        setCatalogError(err?.message || "Couldn't load the movie list.");
+      })
       .finally(() => setCatalogLoading(false));
-  }, [challengeIndex, catalog, catalogLoading]);
+  }, []);
 
   useEffect(() => {
-    if (challengeIndex !== 4 || tvCatalog != null || tvCatalogLoading) return;
+    if (challengeIndex !== 3 || catalog != null || catalogLoading || catalogError) return;
+    loadCatalog();
+  }, [challengeIndex, catalog, catalogLoading, catalogError, loadCatalog]);
+
+  const loadTvCatalog = useCallback(() => {
     setTvCatalogLoading(true);
+    setTvCatalogError(null);
     browseCatalog("tv")
       .then(setTvCatalog)
-      .catch((err) => console.warn("Couldn't load TV catalog for Mystery TV:", err))
+      .catch((err) => {
+        console.warn("Couldn't load TV catalog for Mystery TV:", err);
+        setTvCatalogError(err?.message || "Couldn't load the show list.");
+      })
       .finally(() => setTvCatalogLoading(false));
-  }, [challengeIndex, tvCatalog, tvCatalogLoading]);
+  }, []);
+
+  useEffect(() => {
+    if (challengeIndex !== 4 || tvCatalog != null || tvCatalogLoading || tvCatalogError) return;
+    loadTvCatalog();
+  }, [challengeIndex, tvCatalog, tvCatalogLoading, tvCatalogError, loadTvCatalog]);
 
   const handleSubmit = async () => {
     // Ref, not state: a double-tap fires both handlers before React re-renders,
@@ -311,152 +335,158 @@ export default function CineMindScreen() {
 
   return (
     <Starfield>
-      <ScrollView contentContainerStyle={styles.content} keyboardShouldPersistTaps="handled">
-        <Header streak={today && !today.isLocked ? today.streakCount : 0} elapsedMs={elapsedMs} />
-
-        <Text style={styles.puzzleNumber}>CineMind #{puzzle.puzzleNumber}</Text>
-        <View style={styles.progressRow}>
-          {[0, 1, 2, 3, 4].map((i) => (
-            <View
-              key={i}
-              style={[
-                styles.progressDot,
-                i === challengeIndex && styles.progressDotActive,
-                i < challengeIndex && styles.progressDotDone,
-              ]}
-            />
-          ))}
-        </View>
-
-        {challengeIndex === 0 && (
-          <View style={styles.card}>
-            <Text style={styles.challengeLabel}>Challenge 1 of 5</Text>
-            <Text style={styles.challengeTitle}>The Connection</Text>
-            <Text style={styles.challengeHint}>
-              Which {puzzle.connection.linkKind} links all four of these films?
-            </Text>
-            <PosterRow movies={puzzle.connection.movies} />
-            {puzzle.connection.options.map((option) => (
-              <Option
-                key={option}
-                label={option}
-                selected={connectionAnswer === option}
-                onPress={() => setConnectionAnswer(option)}
+      <KeyboardAvoidingView style={styles.flex} behavior={Platform.OS === "ios" ? "padding" : undefined}>
+        <ScrollView contentContainerStyle={styles.content} keyboardShouldPersistTaps="handled">
+          <Header streak={today && !today.isLocked ? today.streakCount : 0} elapsedMs={elapsedMs} />
+  
+          <Text style={styles.puzzleNumber}>CineMind #{puzzle.puzzleNumber}</Text>
+          <View style={styles.progressRow}>
+            {[0, 1, 2, 3, 4].map((i) => (
+              <View
+                key={i}
+                style={[
+                  styles.progressDot,
+                  i === challengeIndex && styles.progressDotActive,
+                  i < challengeIndex && styles.progressDotDone,
+                ]}
               />
             ))}
           </View>
-        )}
-
-        {challengeIndex === 1 && (
-          <View style={styles.card}>
-            <Text style={styles.challengeLabel}>Challenge 2 of 5</Text>
-            <Text style={styles.challengeTitle}>Chronos</Text>
-            <Text style={styles.challengeHint}>
-              Tap these in order of release — oldest first. Tap again to remove.
-            </Text>
-            {puzzle.chronos.movies.map((movie) => {
-              const position = chronosOrder.indexOf(movie.imdbId);
-              return (
-                <TouchableOpacity
-                  key={movie.imdbId}
-                  activeOpacity={0.8}
-                  style={[styles.orderRow, position >= 0 && styles.orderRowSelected]}
-                  onPress={() => toggleChronos(movie.imdbId)}
-                >
-                  <View style={[styles.orderBadge, position >= 0 && styles.orderBadgeActive]}>
-                    <Text
-                      style={[styles.orderBadgeText, position >= 0 && styles.orderBadgeTextActive]}
-                    >
-                      {position >= 0 ? position + 1 : "–"}
+  
+          {challengeIndex === 0 && (
+            <View style={styles.card}>
+              <Text style={styles.challengeLabel}>Challenge 1 of 5</Text>
+              <Text style={styles.challengeTitle}>The Connection</Text>
+              <Text style={styles.challengeHint}>
+                Which {puzzle.connection.linkKind} links all four of these films?
+              </Text>
+              <PosterRow movies={puzzle.connection.movies} />
+              {puzzle.connection.options.map((option) => (
+                <Option
+                  key={option}
+                  label={option}
+                  selected={connectionAnswer === option}
+                  onPress={() => setConnectionAnswer(option)}
+                />
+              ))}
+            </View>
+          )}
+  
+          {challengeIndex === 1 && (
+            <View style={styles.card}>
+              <Text style={styles.challengeLabel}>Challenge 2 of 5</Text>
+              <Text style={styles.challengeTitle}>Chronos</Text>
+              <Text style={styles.challengeHint}>
+                Tap these in order of release — oldest first. Tap again to remove.
+              </Text>
+              {puzzle.chronos.movies.map((movie) => {
+                const position = chronosOrder.indexOf(movie.imdbId);
+                return (
+                  <TouchableOpacity
+                    key={movie.imdbId}
+                    activeOpacity={0.8}
+                    style={[styles.orderRow, position >= 0 && styles.orderRowSelected]}
+                    onPress={() => toggleChronos(movie.imdbId)}
+                  >
+                    <View style={[styles.orderBadge, position >= 0 && styles.orderBadgeActive]}>
+                      <Text
+                        style={[styles.orderBadgeText, position >= 0 && styles.orderBadgeTextActive]}
+                      >
+                        {position >= 0 ? position + 1 : "–"}
+                      </Text>
+                    </View>
+                    <MoviePoster uri={movie.posterPath} width={38} />
+                    {/* Release year is deliberately hidden here — showing it
+                        would give the answer away. */}
+                    <Text style={styles.orderTitle} numberOfLines={2}>
+                      {movie.title}
                     </Text>
-                  </View>
-                  <MoviePoster uri={movie.posterPath} width={38} />
-                  {/* Release year is deliberately hidden here — showing it
-                      would give the answer away. */}
-                  <Text style={styles.orderTitle} numberOfLines={2}>
-                    {movie.title}
-                  </Text>
-                </TouchableOpacity>
-              );
-            })}
-          </View>
-        )}
-
-        {challengeIndex === 2 && (
-          <View style={styles.card}>
-            <Text style={styles.challengeLabel}>Challenge 3 of 5</Text>
-            <Text style={styles.challengeTitle}>Cast Deduct</Text>
-            <Text style={styles.challengeHint}>Which actor appears in both of these films?</Text>
-            <PosterRow movies={[puzzle.castDeduct.movieA, puzzle.castDeduct.movieB]} showTitles />
-            {puzzle.castDeduct.options.map((option) => (
-              <Option
-                key={option}
-                label={option}
-                selected={castDeductAnswer === option}
-                onPress={() => setCastDeductAnswer(option)}
-              />
-            ))}
-          </View>
-        )}
-
-        {challengeIndex === 3 && (
-          <MysteryChallenge
-            challengeNumber={4}
-            clues={puzzle.mysteryMovie}
-            catalog={catalog}
-            catalogLoading={catalogLoading}
-            attemptsUsed={mysteryAttemptsUsed}
-            resolved={mysteryResolved}
-            solvedGuess={mysteryGuess}
-            difficulty={mysteryDifficulty}
-            onDifficultyChange={setMysteryDifficulty}
-            onGuess={(imdbId, correct, newAttemptsUsed, maxAttempts) => {
-              setMysteryAttemptsUsed(newAttemptsUsed);
-              if (correct || newAttemptsUsed >= maxAttempts) {
-                setMysteryGuess(correct ? imdbId : null);
-                setMysteryResolved(true);
-              }
+                  </TouchableOpacity>
+                );
+              })}
+            </View>
+          )}
+  
+          {challengeIndex === 2 && (
+            <View style={styles.card}>
+              <Text style={styles.challengeLabel}>Challenge 3 of 5</Text>
+              <Text style={styles.challengeTitle}>Cast Deduct</Text>
+              <Text style={styles.challengeHint}>Which actor appears in both of these films?</Text>
+              <PosterRow movies={[puzzle.castDeduct.movieA, puzzle.castDeduct.movieB]} showTitles />
+              {puzzle.castDeduct.options.map((option) => (
+                <Option
+                  key={option}
+                  label={option}
+                  selected={castDeductAnswer === option}
+                  onPress={() => setCastDeductAnswer(option)}
+                />
+              ))}
+            </View>
+          )}
+  
+          {challengeIndex === 3 && (
+            <MysteryChallenge
+              challengeNumber={4}
+              clues={puzzle.mysteryMovie}
+              catalog={catalog}
+              catalogLoading={catalogLoading}
+              catalogError={catalogError}
+              onRetryCatalog={loadCatalog}
+              attemptsUsed={mysteryAttemptsUsed}
+              resolved={mysteryResolved}
+              solvedGuess={mysteryGuess}
+              difficulty={mysteryDifficulty}
+              onDifficultyChange={setMysteryDifficulty}
+              onGuess={(imdbId, correct, newAttemptsUsed, maxAttempts) => {
+                setMysteryAttemptsUsed(newAttemptsUsed);
+                if (correct || newAttemptsUsed >= maxAttempts) {
+                  setMysteryGuess(correct ? imdbId : null);
+                  setMysteryResolved(true);
+                }
+              }}
+            />
+          )}
+  
+          {challengeIndex === 4 && (
+            <MysteryChallenge
+              challengeNumber={5}
+              clues={puzzle.mysteryTv}
+              catalog={tvCatalog}
+              catalogLoading={tvCatalogLoading}
+              catalogError={tvCatalogError}
+              onRetryCatalog={loadTvCatalog}
+              attemptsUsed={mysteryTvAttemptsUsed}
+              resolved={mysteryTvResolved}
+              solvedGuess={mysteryTvGuess}
+              difficulty="easy"
+              onDifficultyChange={undefined}
+              onGuess={(imdbId, correct, newAttemptsUsed, maxAttempts) => {
+                setMysteryTvAttemptsUsed(newAttemptsUsed);
+                if (correct || newAttemptsUsed >= maxAttempts) {
+                  setMysteryTvGuess(correct ? imdbId : null);
+                  setMysteryTvResolved(true);
+                }
+              }}
+            />
+          )}
+  
+          <TouchableOpacity
+            activeOpacity={0.85}
+            style={[styles.primaryButton, !canAdvance && styles.primaryButtonDisabled]}
+            disabled={!canAdvance}
+            onPress={() => {
+              if (challengeIndex < 4) setChallengeIndex(challengeIndex + 1);
+              else handleSubmit();
             }}
-          />
-        )}
+          >
+            <Text style={styles.primaryButtonText}>
+              {challengeIndex < 4 ? "Next Challenge" : "Submit & See Score"}
+            </Text>
+          </TouchableOpacity>
 
-        {challengeIndex === 4 && (
-          <MysteryChallenge
-            challengeNumber={5}
-            clues={puzzle.mysteryTv}
-            catalog={tvCatalog}
-            catalogLoading={tvCatalogLoading}
-            attemptsUsed={mysteryTvAttemptsUsed}
-            resolved={mysteryTvResolved}
-            solvedGuess={mysteryTvGuess}
-            difficulty="easy"
-            onDifficultyChange={undefined}
-            onGuess={(imdbId, correct, newAttemptsUsed, maxAttempts) => {
-              setMysteryTvAttemptsUsed(newAttemptsUsed);
-              if (correct || newAttemptsUsed >= maxAttempts) {
-                setMysteryTvGuess(correct ? imdbId : null);
-                setMysteryTvResolved(true);
-              }
-            }}
-          />
-        )}
-
-        <TouchableOpacity
-          activeOpacity={0.85}
-          style={[styles.primaryButton, !canAdvance && styles.primaryButtonDisabled]}
-          disabled={!canAdvance}
-          onPress={() => {
-            if (challengeIndex < 4) setChallengeIndex(challengeIndex + 1);
-            else handleSubmit();
-          }}
-        >
-          <Text style={styles.primaryButtonText}>
-            {challengeIndex < 4 ? "Next Challenge" : "Submit & See Score"}
-          </Text>
-        </TouchableOpacity>
-
-        <Text style={styles.footnote}>One puzzle a day. No takebacks.</Text>
-      </ScrollView>
+          <Text style={styles.footnote}>One puzzle a day. No takebacks.</Text>
+        </ScrollView>
+      </KeyboardAvoidingView>
     </Starfield>
   );
 }
@@ -624,6 +654,8 @@ function MysteryChallenge({
   clues,
   catalog,
   catalogLoading,
+  catalogError,
+  onRetryCatalog,
   attemptsUsed,
   resolved,
   solvedGuess,
@@ -635,6 +667,8 @@ function MysteryChallenge({
   clues: MysteryMovieView;
   catalog: CatalogMovie[] | null;
   catalogLoading: boolean;
+  catalogError: string | null;
+  onRetryCatalog: () => void;
   attemptsUsed: number;
   resolved: boolean;
   solvedGuess: string | null;
@@ -738,6 +772,13 @@ function MysteryChallenge({
         <Text style={styles.mysteryResolvedText}>
           {solvedGuess ? "🏆 Solved!" : "Out of attempts — the answer reveals when you submit."}
         </Text>
+      ) : catalogError ? (
+        <View style={styles.mysteryErrorBox}>
+          <Text style={styles.mysteryErrorText}>{catalogError}</Text>
+          <TouchableOpacity activeOpacity={0.85} style={styles.mysteryRetryButton} onPress={onRetryCatalog}>
+            <Text style={styles.mysteryRetryButtonText}>Try Again</Text>
+          </TouchableOpacity>
+        </View>
       ) : (
         <>
           <TextInput
@@ -749,6 +790,7 @@ function MysteryChallenge({
             editable={!catalogLoading}
             autoCorrect={false}
           />
+          {catalogLoading && <ActivityIndicator style={styles.mysteryLoadingIndicator} color={SpaceTheme.glowCyan} />}
           {matches.map((m) => (
             <TouchableOpacity
               key={m.imdbId}
@@ -761,6 +803,9 @@ function MysteryChallenge({
               </Text>
             </TouchableOpacity>
           ))}
+          {!catalogLoading && catalog != null && query.length > 0 && matches.length === 0 && (
+            <Text style={styles.mysteryNoMatchesText}>No matches — check the spelling?</Text>
+          )}
           <Text style={styles.mysteryAttemptsText}>
             Attempt {attemptsUsed + 1} of {maxAttempts}
           </Text>
@@ -843,6 +888,7 @@ function ResultRow({
 }
 
 const styles = StyleSheet.create({
+  flex: { flex: 1 },
   content: { paddingTop: 20, paddingHorizontal: 16, paddingBottom: 40 },
   centered: { flex: 1, alignItems: "center", justifyContent: "center", padding: 24, gap: 14 },
   header: { flexDirection: "row", justifyContent: "space-between", marginBottom: 16 },
@@ -1021,6 +1067,27 @@ const styles = StyleSheet.create({
     borderBottomColor: "rgba(255,255,255,0.06)",
   },
   mysteryMatchText: { color: SpaceTheme.starWhite, fontSize: 14 },
+  mysteryLoadingIndicator: { marginTop: 12 },
+  mysteryNoMatchesText: {
+    color: SpaceTheme.mutedOrbit,
+    fontSize: 12,
+    textAlign: "center",
+    marginTop: 10,
+  },
+  mysteryErrorBox: { alignItems: "center", marginTop: 12 },
+  mysteryErrorText: {
+    color: SpaceTheme.danger,
+    fontSize: 13,
+    textAlign: "center",
+    marginBottom: 12,
+  },
+  mysteryRetryButton: {
+    backgroundColor: SpaceTheme.glowCyan,
+    borderRadius: 10,
+    paddingVertical: 10,
+    paddingHorizontal: 24,
+  },
+  mysteryRetryButtonText: { color: SpaceTheme.backgroundVoid, fontSize: 13, fontWeight: "700" },
   mysteryAttemptsText: {
     color: SpaceTheme.mutedOrbit,
     fontSize: 11,

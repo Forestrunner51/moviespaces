@@ -500,6 +500,48 @@ namespace Backend.Controllers
             return Ok(new { added, updated, failed, total = await _db.CineMindTvShows.CountAsync() });
         }
 
+        // POST /api/game/puzzles/today/regen
+        //
+        // Deletes today's persisted DailyPuzzle row so the next GET
+        // puzzles/today regenerates it from the current catalog. Needed
+        // because GetOrCreateTodayAsync snapshots the catalog once per day —
+        // a catalog/seed re-run (e.g. backfilling Genre/Plot onto existing
+        // rows) doesn't retroactively touch a day that already generated.
+        //
+        // Refuses once anyone has completed today's puzzle: regenerating out
+        // from under a submitted result would change the correct answers
+        // retroactively, corrupting that player's already-recorded score and
+        // share grid (see the "people already played and shared" comment on
+        // DailyPuzzle itself).
+        [HttpPost("puzzles/today/regen")]
+        [AllowAnonymous]
+        public async Task<IActionResult> RegenerateTodayPuzzle()
+        {
+            var authError = CheckAdminSecret();
+            if (authError != null) return authError;
+
+            var today = DateOnly.FromDateTime(DateTime.UtcNow);
+
+            var alreadyPlayed = await _db.UserDailyProgress.AnyAsync(p => p.PuzzleDate == today);
+            if (alreadyPlayed)
+            {
+                return Conflict(new
+                {
+                    error = "Refusing to regenerate — at least one player has already completed today's puzzle.",
+                });
+            }
+
+            var existing = await _db.DailyPuzzles.FirstOrDefaultAsync(p => p.PuzzleDate == today);
+            if (existing == null)
+            {
+                return Ok(new { regenerated = false, reason = "No puzzle existed yet for today." });
+            }
+
+            _db.DailyPuzzles.Remove(existing);
+            await _db.SaveChangesAsync();
+            return Ok(new { regenerated = true });
+        }
+
         private IActionResult? CheckAdminSecret()
         {
             var expected = _configuration["CineMind:AdminSecret"];
