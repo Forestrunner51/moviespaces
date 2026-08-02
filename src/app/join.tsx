@@ -15,7 +15,11 @@ import { Starfield } from "@/frontend/components/starfield";
 import { SpaceTheme, SpaceStyles } from "@/frontend/constants/theme";
 
 export default function JoinScreen() {
-  const { groupId } = useLocalSearchParams<{ groupId: string }>();
+  // code is only present when arriving via join-by-code.tsx or a shared link
+  // that embedded it (see group.tsx's shareLink) — required by the backend
+  // when the Space is private (see JoinGroup's IsPrivate check); harmless to
+  // send along unconditionally for a public Space, which ignores it.
+  const { groupId, code } = useLocalSearchParams<{ groupId: string; code?: string }>();
   const [name, setName] = useState("");
   const [loading, setLoading] = useState(false);
 
@@ -60,7 +64,7 @@ export default function JoinScreen() {
         `${process.env.EXPO_PUBLIC_API_URL}/api/group/${groupId}/join`,
         {
           method: "POST",
-          body: JSON.stringify({ name: name.trim() }),
+          body: JSON.stringify({ name: name.trim(), spaceCode: code ?? null }),
         },
       );
       if (!res.ok) {

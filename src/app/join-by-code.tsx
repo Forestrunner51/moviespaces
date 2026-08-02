@@ -35,7 +35,11 @@ export default function JoinByCodeScreen() {
         throw new Error(body?.error || "No Space found with that code.");
       }
       const { groupId } = await res.json();
-      router.push({ pathname: "/group", params: { groupId } });
+      // Carried through to /group (and from there to /join) so a private
+      // Space's join call can present it — resolving via this exact code is
+      // what proves the joiner is actually invited, not just the fact that
+      // they landed on the group screen.
+      router.push({ pathname: "/group", params: { groupId, code: trimmed } });
     } catch (err: any) {
       Alert.alert("Couldn't find that Space", err?.message || "Please check the code and try again.");
     } finally {

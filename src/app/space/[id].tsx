@@ -11,7 +11,10 @@ import { SpaceTheme } from "@/frontend/constants/theme";
 // (legacy links) or the friendlier Slug, so it has to be resolved to the
 // real group id before handing off to the actual group screen.
 export default function SpaceRedirectScreen() {
-  const { id } = useLocalSearchParams<{ id: string }>();
+  // code is an optional query param a shared link embeds for a private
+  // Space (see group.tsx's shareLink) — forwarded through so the eventual
+  // /join call can present it, same as the join-by-code.tsx path.
+  const { id, code } = useLocalSearchParams<{ id: string; code?: string }>();
   const [error, setError] = useState(false);
 
   useEffect(() => {
@@ -26,7 +29,7 @@ export default function SpaceRedirectScreen() {
         if (!res.ok) throw new Error("Space not found");
         const group = await res.json();
         if (cancelled) return;
-        router.replace({ pathname: "/group", params: { groupId: group.id } });
+        router.replace({ pathname: "/group", params: { groupId: group.id, code } });
       } catch (err) {
         console.error("Failed to resolve shared space link:", err);
         if (!cancelled) setError(true);
@@ -36,7 +39,7 @@ export default function SpaceRedirectScreen() {
     return () => {
       cancelled = true;
     };
-  }, [id]);
+  }, [id, code]);
 
   return (
     <Starfield>

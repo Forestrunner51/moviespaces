@@ -80,6 +80,11 @@ export default function CreateSpaceScreen() {
   const [spaceType, setSpaceType] = useState<SpaceType>(
     prefillSpaceType === "private_rental" ? "private_rental" : "public_gathering",
   );
+  // Independent of spaceType — either a real theater screening or a custom
+  // venue/watch party can be made invite-only. When true: excluded from
+  // Explore/Home's browse feed, and joining requires the SpaceCode (enforced
+  // server-side in JoinGroup/JoinGroupWeb, not just hidden from browsing).
+  const [isPrivate, setIsPrivate] = useState(false);
   // Locked when arriving from rent-a-theater.tsx's guided flow with a
   // specific theater already picked — not a blanket lock on every private
   // rental, since someone starting a rental from scratch still needs to
@@ -484,6 +489,7 @@ export default function CreateSpaceScreen() {
           hangoutNotes: hangoutNotes.trim() || null,
           seasonEpisodeInfo: searchingTv && seasonEpisodeInfo.trim() ? seasonEpisodeInfo.trim() : null,
           eventCategory: spaceType === "private_rental" ? rentalActivityType : "movie",
+          isPrivate,
         }),
       });
 
@@ -576,6 +582,24 @@ export default function CreateSpaceScreen() {
               </Text>
             </TouchableOpacity>
           </View>
+
+          {/* Independent of spaceType — a real theater screening and a
+              custom watch party can both be made invite-only. */}
+          <TouchableOpacity
+            activeOpacity={0.8}
+            style={styles.confirmRow}
+            onPress={() => setIsPrivate((prev) => !prev)}
+          >
+            <Ionicons
+              name={isPrivate ? "checkbox" : "square-outline"}
+              size={20}
+              color={isPrivate ? SpaceTheme.glowCyan : SpaceTheme.mutedOrbit}
+            />
+            <Text style={styles.confirmRowText}>
+              🔒 Make this Space private — only joinable with the invite code, hidden from Explore
+              and Home.
+            </Text>
+          </TouchableOpacity>
 
           {spaceType === "private_rental" && (
             <View style={styles.chipRow}>
