@@ -1,5 +1,6 @@
 using System.Globalization;
 using System.Text.Json;
+using Microsoft.AspNetCore.Authorization;
 using Microsoft.AspNetCore.Mvc;
 using Microsoft.Extensions.Caching.Memory;
 
@@ -14,8 +15,15 @@ namespace Backend.Controllers
     // OMDb has no "popular"/"now-playing"/list endpoint (only ?s= search and
     // ?i= lookup-by-id), so the discovery carousel is a curated set of IMDb ids
     // fetched individually — each wrapped so one failed lookup never breaks it.
+    //
+    // [Authorize]d like every other controller here that fronts a metered
+    // third-party API (RouletteController, etc.) — this was previously wide
+    // open with no auth at all, meaning anyone on the internet, not just app
+    // users, could script requests against it and exhaust OMDb's daily quota,
+    // breaking movie search for every real user.
     [ApiController]
     [Route("api/[controller]")]
+    [Authorize]
     public class MoviesController : ControllerBase
     {
         private readonly IHttpClientFactory _httpClientFactory;

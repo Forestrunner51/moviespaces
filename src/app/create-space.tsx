@@ -484,7 +484,7 @@ export default function CreateSpaceScreen() {
           bookingUrl: spaceType === "private_rental" ? bookingUrl.trim() : "",
           spaceType,
           totalCostCents,
-          maxCapacity: spaceType === "private_rental" && maxCapacity ? parseInt(maxCapacity, 10) : null,
+          maxCapacity: maxCapacity ? parseInt(maxCapacity, 10) : null,
           postActivities,
           hangoutNotes: hangoutNotes.trim() || null,
           seasonEpisodeInfo: searchingTv && seasonEpisodeInfo.trim() ? seasonEpisodeInfo.trim() : null,
@@ -1018,20 +1018,6 @@ export default function CreateSpaceScreen() {
               <TextInput
                 style={styles.input}
                 placeholder={
-                  venueMode === "home"
-                    ? "How many people fit at your place? (default 40)"
-                    : venueMode === "virtual"
-                      ? "Max attendees (optional headcount — no real limit online)"
-                      : "Max capacity (default 40)"
-                }
-                placeholderTextColor={SpaceTheme.mutedOrbit}
-                value={maxCapacity}
-                onChangeText={setMaxCapacity}
-                keyboardType="number-pad"
-              />
-              <TextInput
-                style={styles.input}
-                placeholder={
                   venueMode === "virtual"
                     ? "Streaming/watch link (e.g. https://netflix.com/watch/...)"
                     : "Event / Venue Link (Optional)"
@@ -1048,6 +1034,26 @@ export default function CreateSpaceScreen() {
               </Text>
             </View>
           )}
+
+          {/* Universal — not gated to private_rental. Used to only exist in
+              the rental section, which meant a public_gathering (a real
+              theater screening, potentially a large one — a studio premiere,
+              a corporate rental of a whole auditorium) had no way to raise
+              this past the backend's default of 40 at all. */}
+          <TextInput
+            style={styles.input}
+            placeholder={
+              venueMode === "home"
+                ? "How many people fit at your place? (default 40)"
+                : venueMode === "virtual"
+                  ? "Max attendees (optional headcount — no real limit online)"
+                  : "Max capacity (default 40)"
+            }
+            placeholderTextColor={SpaceTheme.mutedOrbit}
+            value={maxCapacity}
+            onChangeText={setMaxCapacity}
+            keyboardType="number-pad"
+          />
 
           <Text style={styles.afterSectionTitle}>Up for anything after? (optional)</Text>
           <View style={styles.chipRow}>

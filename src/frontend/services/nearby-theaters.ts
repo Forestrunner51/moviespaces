@@ -1,4 +1,5 @@
 import * as Location from "expo-location";
+import { authFetch } from "@/frontend/services/api";
 
 export interface NearbyTheater {
   placeId: string;
@@ -42,8 +43,12 @@ export async function getDeviceLocation(): Promise<Coordinates | null> {
 // GooglePlaces:ApiKey on the backend) instead of silently returning an empty
 // list — an empty list looks identical to "no theaters nearby", which made a
 // real backend misconfiguration invisible in the UI.
+//
+// authFetch, not plain fetch — LocationsController is [Authorize]d (an
+// unauthenticated proxy to a billed API would let anyone run up the Google
+// Places bill), so this needs the bearer token.
 export async function fetchNearbyTheaters(coords: Coordinates): Promise<NearbyTheater[]> {
-  const res = await fetch(
+  const res = await authFetch(
     `${process.env.EXPO_PUBLIC_API_URL}/api/locations/nearby-theaters?latitude=${coords.latitude}&longitude=${coords.longitude}`,
   );
   if (!res.ok) {

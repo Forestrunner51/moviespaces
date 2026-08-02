@@ -42,6 +42,7 @@ interface Group {
   slug: string | null;
   spaceCode: string | null;
   isPublic: boolean;
+  isPrivate: boolean;
   genreCategory: string | null;
   userId: string;
   hostName: string;
@@ -503,14 +504,26 @@ export default function GroupScreen() {
             <Text style={[styles.title, SpaceStyles.glowText, SpaceStyles.wordmark]}>
               {group.filmName}
             </Text>
-            {group.spaceType === "private_rental" && (
-              <View style={styles.categoryBadge}>
-                <Text style={styles.categoryBadgeText}>
-                  {EVENT_CATEGORIES[eventCategoryOf(group.spaceType, group.eventCategory)].emoji}{" "}
-                  {EVENT_CATEGORIES[eventCategoryOf(group.spaceType, group.eventCategory)].label}
-                </Text>
-              </View>
-            )}
+            <View style={styles.badgeRow}>
+              {group.spaceType === "private_rental" && (
+                <View style={styles.categoryBadge}>
+                  <Text style={styles.categoryBadgeText}>
+                    {EVENT_CATEGORIES[eventCategoryOf(group.spaceType, group.eventCategory)].emoji}{" "}
+                    {EVENT_CATEGORIES[eventCategoryOf(group.spaceType, group.eventCategory)].label}
+                  </Text>
+                </View>
+              )}
+              {/* Visible confirmation that the privacy toggle from creation
+                  actually took — hidden from Explore/Home and join requires
+                  the SpaceCode (see JoinGroup's IsPrivate check), but nothing
+                  on this screen said so until now. */}
+              {group.isPrivate && (
+                <View style={styles.privateBadge}>
+                  <Ionicons name="lock-closed" size={11} color={SpaceTheme.accentGold} />
+                  <Text style={styles.privateBadgeText}>Private — invite code only</Text>
+                </View>
+              )}
+            </View>
             <Text style={styles.subtitle}>
               {group.cinemaName} • {group.showTime}
             </Text>
@@ -906,15 +919,28 @@ const styles = StyleSheet.create({
   title: { fontSize: 26, color: SpaceTheme.starWhite },
   subtitle: { fontSize: 14, color: SpaceTheme.mutedOrbit, marginTop: 4 },
   heroDate: { fontSize: 13, color: SpaceTheme.glowCyan, fontWeight: "600", marginTop: 4 },
+  badgeRow: { flexDirection: "row", flexWrap: "wrap", gap: 6, marginTop: 6 },
   categoryBadge: {
     alignSelf: "flex-start",
     paddingHorizontal: 8,
     paddingVertical: 2,
     borderRadius: 6,
     backgroundColor: "rgba(255,255,255,0.06)",
-    marginTop: 6,
   },
   categoryBadgeText: { fontSize: 11, fontWeight: "600", color: SpaceTheme.mutedOrbit },
+  privateBadge: {
+    flexDirection: "row",
+    alignItems: "center",
+    gap: 4,
+    alignSelf: "flex-start",
+    paddingHorizontal: 8,
+    paddingVertical: 2,
+    borderRadius: 6,
+    backgroundColor: "rgba(245, 197, 24, 0.12)",
+    borderWidth: 1,
+    borderColor: "rgba(245, 197, 24, 0.35)",
+  },
+  privateBadgeText: { fontSize: 11, fontWeight: "700", color: SpaceTheme.accentGold },
   tvBadge: {
     flexDirection: "row",
     alignItems: "center",
