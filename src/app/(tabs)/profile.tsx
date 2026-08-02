@@ -250,13 +250,18 @@ export default function ProfileScreen() {
   // eventually instead of being stuck there forever just because we can't
   // pin down their real showtime.
   const effectiveTime = (s: MySpace) => new Date(s.screeningTime ?? s.createdAt).getTime();
-  // Public Community Spaces are evergreen — never "past" regardless of
-  // createdAt. Same exemption as group.tsx's hasPassed and spaces.tsx's isPast.
+  // Public Community Spaces (evergreen genre clubs, no real event tied to
+  // them) are excluded from both buckets entirely — not folded into
+  // "Upcoming" via a never-passes exemption like group.tsx's hasPassed and
+  // spaces.tsx's isPast still do. A permanent club showing up as an
+  // "upcoming" event you're perpetually about to attend is confusing; Home's
+  // dedicated "My Community Clubs" row is where a joined club actually
+  // belongs, and this screen isn't the only place a member can see it.
   const upcomingSpaces = mySpaces
-    .filter((s) => s.status !== "cancelled" && (s.isPublic || effectiveTime(s) >= now))
+    .filter((s) => !s.isPublic && s.status !== "cancelled" && effectiveTime(s) >= now)
     .sort((a, b) => effectiveTime(a) - effectiveTime(b));
   const pastSpaces = mySpaces
-    .filter((s) => s.status === "cancelled" || (!s.isPublic && effectiveTime(s) < now))
+    .filter((s) => !s.isPublic && (s.status === "cancelled" || effectiveTime(s) < now))
     .sort((a, b) => effectiveTime(b) - effectiveTime(a));
 
   if (loading) {

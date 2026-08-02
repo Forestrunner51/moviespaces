@@ -515,56 +515,6 @@ namespace Backend.Controllers
             return Ok(spaces);
         }
 
-        // GET /api/group/search-by-title?title=...
-        //
-        // Freeform private-rental titles (a Virtual "UFC 305" watch party,
-        // say) have no catalog id the way a real movie/TV pick does, so
-        // there's nothing today stopping two hosts from independently
-        // creating the exact same event as two disconnected Spaces. This is
-        // a nudge, not a hard block: surfaced client-side as "these already
-        // exist, join one instead?" rather than preventing creation outright
-        // — a same-named-but-different event is plausible enough (two
-        // different friend groups' "Movie Night") that blocking would be
-        // wrong more often than it'd help.
-        [HttpGet("search-by-title")]
-        [AllowAnonymous]
-        public async Task<IActionResult> SearchByTitle([FromQuery] string? title)
-        {
-            var normalized = title?.Trim() ?? "";
-            if (normalized.Length < 3) return Ok(new { spaces = Array.Empty<object>() });
-
-            // Escape ILIKE's own wildcard characters — a title that happens
-            // to contain a literal "%" or "_" (rare, but real event names do
-            // sometimes have them) shouldn't be treated as a pattern itself.
-            var escaped = normalized.Replace("\\", "\\\\").Replace("%", "\\%").Replace("_", "\\_");
-            var pattern = $"%{escaped}%";
-            var matches = await _db.Groups
-                .Include(g => g.Members)
-                .Where(g => g.Status == "pending" && !g.IsPublic)
-                // Otherwise this becomes an information leak: a private
-                // Space's host name, showtime, and a direct join link would
-                // surface to anyone who happens to type a similar title, even
-                // though they were never invited and it's excluded from
-                // Explore for exactly that reason.
-                .Where(g => !g.IsPrivate)
-                .Where(g => g.ScreeningTime == null || g.ScreeningTime >= DateTime.UtcNow)
-                .Where(g => EF.Functions.ILike(g.FilmName, pattern))
-                .OrderByDescending(g => g.CreatedAt)
-                .Take(5)
-                .Select(g => new
-                {
-                    g.Id,
-                    g.FilmName,
-                    g.HostName,
-                    g.ShowDate,
-                    g.ShowTime,
-                    memberCount = g.Members.Count,
-                })
-                .ToListAsync();
-
-            return Ok(new { spaces = matches });
-        }
-
         [HttpGet("mine")]
         [Authorize]
         public async Task<IActionResult> GetMySpaces()

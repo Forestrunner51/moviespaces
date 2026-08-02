@@ -38,18 +38,8 @@ type SpaceType = "public_gathering" | "private_rental";
 const formatDate = (d: Date) =>
   `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, "0")}-${String(d.getDate()).padStart(2, "0")}`;
 
-// includeZone is for Virtual events specifically — a same-day global stream
-// (an anime simulcast, an overseas fight card) is genuinely ambiguous as
-// "8:00 PM" with no zone attached once host and joiner aren't in the same
-// timezone, unlike an in-person venue where "8:00 PM" always means the
-// venue's own local time no matter who's asking.
-const formatTime = (d: Date, includeZone = false) =>
-  d.toLocaleTimeString(undefined, {
-    hour: "numeric",
-    minute: "2-digit",
-    hour12: true,
-    ...(includeZone ? { timeZoneName: "short" } : {}),
-  });
+const formatTime = (d: Date) =>
+  d.toLocaleTimeString(undefined, { hour: "numeric", minute: "2-digit", hour12: true });
 
 // Theaters don't run showings between roughly 2am and 10:30am — catches an
 // obvious fat-finger on the time picker (e.g. AM/PM mixup) before it's saved.
@@ -89,11 +79,11 @@ export default function CreateSpaceScreen() {
   // Locked when arriving from rent-a-theater.tsx's guided flow with a
   // specific theater already picked — not a blanket lock on every private
   // rental, since someone starting a rental from scratch still needs to
-  // choose one. State, not a plain const: once the Home/Virtual venue chips
-  // exist, a locked user can switch away from "theater" entirely (clearing
-  // the pre-picked place) and then back — the lock has to actually release
-  // at that point, or the picker would stay permanently disabled with
-  // nothing left in it to unlock.
+  // choose one. State, not a plain const: once the Home venue chip exists, a
+  // locked user can switch away from "theater" entirely (clearing the
+  // pre-picked place) and then back — the lock has to actually release at
+  // that point, or the picker would stay permanently disabled with nothing
+  // left in it to unlock.
   const [theaterLocked, setTheaterLocked] = useState(!!prefillPlaceId);
   const [hostName, setHostName] = useState("");
   const [theaterName, setTheaterName] = useState(prefillTheaterName ?? "");
@@ -120,11 +110,10 @@ export default function CreateSpaceScreen() {
   const [rentalActivityType, setRentalActivityType] = useState<RentalActivityType>("movie");
   const [seasonEpisodeInfo, setSeasonEpisodeInfo] = useState("");
   // Private rental only — where the party actually happens. Reuses the same
-  // theaterName/bookingUrl fields a real theater venue already has (no schema
-  // change): "home" just means theaterName holds an address/description
-  // instead of a Google Places result, "virtual" means it holds a platform
-  // name and bookingUrl holds the stream/watch link.
-  type VenueMode = "theater" | "home" | "virtual";
+  // theaterName field a real theater venue already has (no schema change):
+  // "home" just means theaterName holds an address/description instead of a
+  // Google Places result.
+  type VenueMode = "theater" | "home";
   const [venueMode, setVenueMode] = useState<VenueMode>("theater");
   const [totalCost, setTotalCost] = useState("");
   const [maxCapacity, setMaxCapacity] = useState("");
@@ -158,6 +147,11 @@ export default function CreateSpaceScreen() {
   };
 
   const [creating, setCreating] = useState(false);
+  // Collapsed by default — cost/link details, after-movie activities, and
+  // friend invites are all genuinely optional and were previously flat on
+  // the page at the same visual weight as required fields (venue, title,
+  // date/time), which is what made the form feel crowded.
+  const [moreOptionsOpen, setMoreOptionsOpen] = useState(false);
 
   // Invite friends already on the app — after the Space is created we DM each
   // selected friend the invite link (reuses the friends-only messages table).
@@ -230,31 +224,12 @@ export default function CreateSpaceScreen() {
   const [showtimeConfirmed, setShowtimeConfirmed] = useState(false);
   const [nowPlaying, setNowPlaying] = useState<Movie[]>([]);
 
-  // Nudge, not a hard block — see the search-by-title endpoint's own
-  // comment for why this only informs rather than prevents creation.
-  interface SimilarSpace {
-    id: string;
-    filmName: string;
-    hostName: string;
-    showDate: string;
-    showTime: string;
-    memberCount: number;
-  }
-  const [similarSpaces, setSimilarSpaces] = useState<SimilarSpace[]>([]);
-  // Tracks which title the banner was dismissed for, rather than a plain
-  // boolean — so it naturally "un-dismisses" the moment the title changes
-  // again instead of needing an effect to explicitly reset a separate flag.
-  const [similarSpacesDismissedFor, setSimilarSpacesDismissedFor] = useState<string | null>(null);
-
   const [datePickerVisible, setDatePickerVisible] = useState(false);
   const [dateValue, setDateValue] = useState<Date | null>(null);
   const [timePickerVisible, setTimePickerVisible] = useState(false);
   const [timeValue, setTimeValue] = useState<Date | null>(null);
-  // Derived, not stored — a plain computed value naturally stays in sync
-  // with venueMode (Virtual gets a timezone suffix) with no effect/cascading
-  // render needed, unlike re-deriving it via setState whenever either
-  // timeValue or venueMode changes.
-  const showTime = timeValue ? formatTime(timeValue, venueMode === "virtual") : "";
+  // Derived, not stored — no effect/cascading render needed.
+  const showTime = timeValue ? formatTime(timeValue) : "";
 
   // Host name is the creator's own profile name — there's no name input on
   // this screen anymore (you don't rename yourself while creating a Space), so
@@ -402,27 +377,6 @@ export default function CreateSpaceScreen() {
     return () => clearTimeout(handle);
   }, [movieSearch, nowPlaying, searchingTv]);
 
-  // Only for Virtual private rentals — a real theater's Google Place ID
-  // already gives public gatherings natural dedup, and Home/in-person
-  // rentals are inherently distinct locations anyway. Virtual is the one
-  // case where two hosts can trivially create the identical event ("UFC
-  // 305") with nothing to tell them apart.
-  useEffect(() => {
-    if (venueMode !== "virtual" || movieName.trim().length < 3) {
-      setSimilarSpaces([]);
-      return;
-    }
-    const handle = setTimeout(() => {
-      fetch(
-        `${process.env.EXPO_PUBLIC_API_URL}/api/group/search-by-title?title=${encodeURIComponent(movieName.trim())}`,
-      )
-        .then((res) => (res.ok ? res.json() : { spaces: [] }))
-        .then((data: { spaces: SimilarSpace[] }) => setSimilarSpaces(data.spaces || []))
-        .catch((err) => console.warn("Similar-space lookup failed:", err));
-    }, 500);
-    return () => clearTimeout(handle);
-  }, [movieName, venueMode]);
-
   // Text Search's results are already query-relevant (Google did the
   // matching server-side) — a client-side substring re-filter on top would
   // just drop legitimate fuzzy matches (e.g. Google returning "AMC
@@ -469,16 +423,16 @@ export default function CreateSpaceScreen() {
     const isFreeformActivity =
       spaceType === "private_rental" && rentalActivityType !== "movie" && rentalActivityType !== "tv";
     const mediaLabel = isFreeformActivity ? "event" : searchingTv ? "show" : "movie";
-    const venueLabel = venueMode === "home" ? "address" : venueMode === "virtual" ? "platform" : "theater";
+    const venueLabel = venueMode === "home" ? "address" : "theater";
     if (!theaterName.trim() || !movieName.trim() || !showDate.trim() || !showTime.trim()) {
       Alert.alert("Missing info", `Please fill in your ${venueLabel}, ${mediaLabel}, date, and time.`);
       return;
     }
 
-    // Theater hours only make sense for an actual theater — a Home or
-    // Virtual watch party legitimately might start at 3am (an overseas UFC
-    // card, a same-day anime simulcast), so this check would otherwise block
-    // a perfectly real submission for those venue modes.
+    // Theater hours only make sense for an actual theater — a Home watch
+    // party legitimately might start at 3am (a fight card airing overseas, a
+    // same-day anime simulcast), so this check would otherwise block a
+    // perfectly real submission for that venue mode.
     if (venueMode === "theater" && timeValue && isOutsideBusinessHours(timeValue)) {
       Alert.alert(
         "Check your showtime",
@@ -586,7 +540,7 @@ export default function CreateSpaceScreen() {
                 // and "Find Showtimes Near Me" depend on real coordinates) —
                 // venueMode is private-rental-only UI, but its state
                 // otherwise survives switching spaceType, so force it back
-                // and drop whatever freeform Home/Virtual text was typed.
+                // and drop whatever freeform Home text was typed.
                 if (venueMode !== "theater") {
                   setVenueMode("theater");
                   setTheaterName("");
@@ -635,24 +589,6 @@ export default function CreateSpaceScreen() {
             </TouchableOpacity>
           </View>
 
-          {/* Independent of spaceType — a real theater screening and a
-              custom watch party can both be made invite-only. */}
-          <TouchableOpacity
-            activeOpacity={0.8}
-            style={styles.confirmRow}
-            onPress={() => setIsPrivate((prev) => !prev)}
-          >
-            <Ionicons
-              name={isPrivate ? "checkbox" : "square-outline"}
-              size={20}
-              color={isPrivate ? SpaceTheme.glowCyan : SpaceTheme.mutedOrbit}
-            />
-            <Text style={styles.confirmRowText}>
-              🔒 Make this Space private — only joinable with the invite code, hidden from Explore
-              and Home.
-            </Text>
-          </TouchableOpacity>
-
           {spaceType === "private_rental" && (
             <View style={styles.chipRow}>
               <TouchableOpacity
@@ -682,23 +618,6 @@ export default function CreateSpaceScreen() {
                   Home / Hosted
                 </Text>
               </TouchableOpacity>
-              <TouchableOpacity
-                activeOpacity={0.8}
-                style={[styles.afterChip, venueMode === "virtual" && styles.afterChipActive]}
-                onPress={() => {
-                  setVenueMode("virtual");
-                  setTheaterLocked(false);
-                  setTheaterName("");
-                  setTheaterPlaceId(null);
-                  setTheaterLat(null);
-                  setTheaterLng(null);
-                }}
-              >
-                <Text style={styles.afterChipEmoji}>🌐</Text>
-                <Text style={[styles.afterChipText, venueMode === "virtual" && styles.afterChipTextActive]}>
-                  Virtual / Online
-                </Text>
-              </TouchableOpacity>
             </View>
           )}
 
@@ -720,18 +639,10 @@ export default function CreateSpaceScreen() {
                 color={SpaceTheme.mutedOrbit}
               />
             </TouchableOpacity>
-          ) : venueMode === "home" ? (
-            <TextInput
-              style={styles.input}
-              placeholder="Address, room, or host's place (e.g. Sarah's Apartment, Unit 4B)"
-              placeholderTextColor={SpaceTheme.mutedOrbit}
-              value={theaterName}
-              onChangeText={setTheaterName}
-            />
           ) : (
             <TextInput
               style={styles.input}
-              placeholder="Platform (e.g. Netflix Party, Twitch, Discord)"
+              placeholder="Address, room, or host's place (e.g. Sarah's Apartment, Unit 4B)"
               placeholderTextColor={SpaceTheme.mutedOrbit}
               value={theaterName}
               onChangeText={setTheaterName}
@@ -886,40 +797,6 @@ export default function CreateSpaceScreen() {
             </TouchableOpacity>
           )}
 
-          {similarSpacesDismissedFor !== movieName.trim() && similarSpaces.length > 0 && (
-            <View style={styles.similarBanner}>
-              <View style={styles.similarBannerHeader}>
-                <Ionicons name="information-circle-outline" size={16} color={SpaceTheme.accentGold} />
-                <Text style={styles.similarBannerTitle}>
-                  {similarSpaces.length === 1
-                    ? "A watch party for this already exists"
-                    : `${similarSpaces.length} watch parties for this already exist`}
-                </Text>
-                <TouchableOpacity onPress={() => setSimilarSpacesDismissedFor(movieName.trim())} hitSlop={8}>
-                  <Ionicons name="close" size={16} color={SpaceTheme.mutedOrbit} />
-                </TouchableOpacity>
-              </View>
-              {similarSpaces.map((s) => (
-                <TouchableOpacity
-                  key={s.id}
-                  activeOpacity={0.8}
-                  style={styles.similarRow}
-                  onPress={() => router.push({ pathname: "/group", params: { groupId: s.id } })}
-                >
-                  <Text style={styles.similarRowTitle} numberOfLines={1}>
-                    {s.filmName}
-                  </Text>
-                  <Text style={styles.similarRowSubtitle} numberOfLines={1}>
-                    Hosted by {s.hostName} • {s.showDate} • {s.showTime} • {s.memberCount} joined
-                  </Text>
-                </TouchableOpacity>
-              ))}
-              <Text style={styles.similarBannerFootnote}>
-                Tap one to join instead, or keep filling this out to create your own.
-              </Text>
-            </View>
-          )}
-
           {searchingTv && (
             <TextInput
               style={styles.input}
@@ -1026,26 +903,22 @@ export default function CreateSpaceScreen() {
             </TouchableOpacity>
           )}
 
-          {/* No showtimes API backs this, so the host attests that the film is
-              really playing there. Required at submit. */}
-          {spaceType === "public_gathering" && (
-            <TouchableOpacity
-              activeOpacity={0.8}
-              style={styles.confirmRow}
-              onPress={() => setShowtimeConfirmed((prev) => !prev)}
-            >
-              <Ionicons
-                name={showtimeConfirmed ? "checkbox" : "square-outline"}
-                size={20}
-                color={showtimeConfirmed ? SpaceTheme.glowCyan : SpaceTheme.mutedOrbit}
-              />
-              <Text style={styles.confirmRowText}>
-                I&apos;ve confirmed this movie is actually playing at this theater at this date/time.
-              </Text>
-            </TouchableOpacity>
-          )}
+          <TouchableOpacity
+            activeOpacity={0.8}
+            style={styles.moreOptionsToggle}
+            onPress={() => setMoreOptionsOpen((prev) => !prev)}
+          >
+            <Ionicons
+              name={moreOptionsOpen ? "chevron-up" : "chevron-down"}
+              size={16}
+              color={SpaceTheme.mutedOrbit}
+            />
+            <Text style={styles.moreOptionsToggleText}>
+              {moreOptionsOpen ? "Hide more options" : "More options"}
+            </Text>
+          </TouchableOpacity>
 
-          {spaceType === "private_rental" && (
+          {spaceType === "private_rental" && moreOptionsOpen && (
             <View style={styles.rentalSection}>
               <View style={styles.rentalSectionHeader}>
                 <Ionicons name="storefront-outline" size={16} color={SpaceTheme.supernovaPink} />
@@ -1070,11 +943,7 @@ export default function CreateSpaceScreen() {
               </Text>
               <TextInput
                 style={styles.input}
-                placeholder={
-                  venueMode === "virtual"
-                    ? "Streaming/watch link (e.g. https://netflix.com/watch/...)"
-                    : "Event / Venue Link (Optional)"
-                }
+                placeholder="Event / Venue Link (Optional)"
                 placeholderTextColor={SpaceTheme.mutedOrbit}
                 value={bookingUrl}
                 onChangeText={setBookingUrl}
@@ -1098,9 +967,7 @@ export default function CreateSpaceScreen() {
             placeholder={
               venueMode === "home"
                 ? "How many people fit at your place? (default 40)"
-                : venueMode === "virtual"
-                  ? "Max attendees (optional headcount — no real limit online)"
-                  : "Max capacity (default 40)"
+                : "Max capacity (default 40)"
             }
             placeholderTextColor={SpaceTheme.mutedOrbit}
             value={maxCapacity}
@@ -1108,6 +975,8 @@ export default function CreateSpaceScreen() {
             keyboardType="number-pad"
           />
 
+          {moreOptionsOpen && (
+            <>
           <Text style={styles.afterSectionTitle}>Up for anything after? (optional)</Text>
           <View style={styles.chipRow}>
             {POST_ACTIVITIES.map((a) => (
@@ -1211,6 +1080,52 @@ export default function CreateSpaceScreen() {
               </Text>
             </>
           )}
+            </>
+          )}
+
+          {/* No showtimes API backs this, so the host attests that the film is
+              really playing there. Required at submit. Moved down here for
+              the same reason as the private toggle below it — a final
+              confirmation right before submitting, not something to trip
+              over mid-form right after picking a date/time. */}
+          {spaceType === "public_gathering" && (
+            <TouchableOpacity
+              activeOpacity={0.8}
+              style={styles.confirmRow}
+              onPress={() => setShowtimeConfirmed((prev) => !prev)}
+            >
+              <Ionicons
+                name={showtimeConfirmed ? "checkbox" : "square-outline"}
+                size={20}
+                color={showtimeConfirmed ? SpaceTheme.glowCyan : SpaceTheme.mutedOrbit}
+              />
+              <Text style={styles.confirmRowText}>
+                I&apos;ve confirmed this movie is actually playing at this theater at this date/time.
+              </Text>
+            </TouchableOpacity>
+          )}
+
+          {/* Independent of spaceType — a real theater screening and a
+              custom watch party can both be made invite-only. Placed as the
+              last thing before submitting rather than up near the type
+              toggle — it's a final "how should this be shared" confirmation,
+              not a decision that shapes the rest of the form the way
+              spaceType/venueMode do. */}
+          <TouchableOpacity
+            activeOpacity={0.8}
+            style={styles.confirmRow}
+            onPress={() => setIsPrivate((prev) => !prev)}
+          >
+            <Ionicons
+              name={isPrivate ? "checkbox" : "square-outline"}
+              size={20}
+              color={isPrivate ? SpaceTheme.glowCyan : SpaceTheme.mutedOrbit}
+            />
+            <Text style={styles.confirmRowText}>
+              🔒 Make this Space private — only joinable with the invite code, hidden from Explore
+              and Home.
+            </Text>
+          </TouchableOpacity>
 
           <TouchableOpacity
             activeOpacity={0.8}
@@ -1582,32 +1497,6 @@ const styles = StyleSheet.create({
     lineHeight: 17,
     marginTop: -4,
   },
-  similarBanner: {
-    ...SpaceStyles.glassCard,
-    padding: 12,
-    marginBottom: 16,
-    borderColor: "rgba(245, 197, 24, 0.35)",
-  },
-  similarBannerHeader: { flexDirection: "row", alignItems: "center", gap: 6, marginBottom: 8 },
-  similarBannerTitle: {
-    flex: 1,
-    fontSize: 13,
-    fontWeight: "700",
-    color: SpaceTheme.starWhite,
-  },
-  similarRow: {
-    paddingVertical: 8,
-    borderTopWidth: 1,
-    borderTopColor: "rgba(255,255,255,0.08)",
-  },
-  similarRowTitle: { fontSize: 14, fontWeight: "600", color: SpaceTheme.glowCyan, marginBottom: 2 },
-  similarRowSubtitle: { fontSize: 12, color: SpaceTheme.mutedOrbit },
-  similarBannerFootnote: {
-    fontSize: 11,
-    color: SpaceTheme.mutedOrbit,
-    marginTop: 6,
-    fontStyle: "italic",
-  },
   submitButton: {
     backgroundColor: SpaceTheme.supernovaPink,
     padding: 18,
@@ -1656,6 +1545,15 @@ const styles = StyleSheet.create({
   pickerFieldText: { flex: 1, color: SpaceTheme.starWhite, fontSize: 16 },
   pickerFieldPlaceholder: { color: SpaceTheme.mutedOrbit },
   pickerNativeTime: { width: "100%", height: 200, marginBottom: 4 },
+  moreOptionsToggle: {
+    flexDirection: "row",
+    alignItems: "center",
+    justifyContent: "center",
+    gap: 6,
+    paddingVertical: 12,
+    marginBottom: 8,
+  },
+  moreOptionsToggleText: { color: SpaceTheme.mutedOrbit, fontSize: 14, fontWeight: "600" },
   afterSectionTitle: {
     fontSize: 14,
     fontWeight: "700",
