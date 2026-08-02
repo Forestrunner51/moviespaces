@@ -31,6 +31,7 @@ interface Space {
   screeningTime: string | null;
   createdAt: string;
   isPublic: boolean;
+  isPrivate: boolean;
   status: string;
   spaceType: string;
   posterPath: string | null;
@@ -80,14 +81,22 @@ function SpaceCard({
             </View>
           )}
         </View>
-        {item.spaceType === "private_rental" && (
-          <View style={styles.categoryBadge}>
-            <Text style={styles.categoryBadgeText}>
-              {EVENT_CATEGORIES[eventCategoryOf(item.spaceType, item.eventCategory)].emoji}{" "}
-              {EVENT_CATEGORIES[eventCategoryOf(item.spaceType, item.eventCategory)].label}
-            </Text>
-          </View>
-        )}
+        <View style={styles.badgeRow}>
+          {item.spaceType === "private_rental" && (
+            <View style={styles.categoryBadge}>
+              <Text style={styles.categoryBadgeText}>
+                {EVENT_CATEGORIES[eventCategoryOf(item.spaceType, item.eventCategory)].emoji}{" "}
+                {EVENT_CATEGORIES[eventCategoryOf(item.spaceType, item.eventCategory)].label}
+              </Text>
+            </View>
+          )}
+          {item.isPrivate && (
+            <View style={styles.privateBadge}>
+              <Ionicons name="lock-closed" size={11} color={SpaceTheme.accentGold} />
+              <Text style={styles.privateBadgeText}>Private</Text>
+            </View>
+          )}
+        </View>
         {past && (
           <View style={styles.pastBadge}>
             <Text style={styles.pastBadgeText}>⏳ This event has passed</Text>
@@ -397,15 +406,28 @@ const styles = StyleSheet.create({
     paddingHorizontal: 8,
   },
   unreadBadgeText: { color: SpaceTheme.backgroundVoid, fontSize: 11, fontWeight: "800" },
+  badgeRow: { flexDirection: "row", flexWrap: "wrap", gap: 6, marginBottom: 4 },
   categoryBadge: {
     alignSelf: "flex-start",
     paddingHorizontal: 8,
     paddingVertical: 2,
     borderRadius: 6,
     backgroundColor: "rgba(255,255,255,0.06)",
-    marginBottom: 4,
   },
   categoryBadgeText: { fontSize: 11, fontWeight: "600", color: SpaceTheme.mutedOrbit },
+  privateBadge: {
+    flexDirection: "row",
+    alignItems: "center",
+    gap: 4,
+    alignSelf: "flex-start",
+    paddingHorizontal: 8,
+    paddingVertical: 2,
+    borderRadius: 6,
+    backgroundColor: "rgba(245, 197, 24, 0.12)",
+    borderWidth: 1,
+    borderColor: "rgba(245, 197, 24, 0.35)",
+  },
+  privateBadgeText: { fontSize: 11, fontWeight: "700", color: SpaceTheme.accentGold },
   categoryFilterRow: { flexDirection: "row", flexWrap: "wrap", gap: 8, marginBottom: 12 },
   categoryChip: {
     ...SpaceStyles.glassCard,

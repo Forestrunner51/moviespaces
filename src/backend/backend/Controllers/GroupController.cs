@@ -480,16 +480,22 @@ namespace Backend.Controllers
                 // JoinGroup itself also enforces the SpaceCode for these (see
                 // its own comment), so this isn't just hiding from browse.
                 .Where(g => !g.IsPrivate)
-                // create-space.tsx (the only creation path) always sets
-                // ScreeningTime now, so a null one means this row predates
-                // that column and is guaranteed stale — hide it rather than
-                // showing an already-past Space forever. Public Community
-                // Spaces are the one deliberate exception: they have no
-                // ScreeningTime by design (there's no single event), and
-                // without this OR they'd be permanently invisible in Explore
-                // — the only place a user who skipped onboarding could ever
-                // find and join one.
-                .Where(g => g.IsPublic || (g.ScreeningTime != null && g.ScreeningTime >= DateTime.UtcNow))
+                // Community Spaces (IsPublic) are deliberately excluded here
+                // too, not just IsPrivate ones — they're evergreen genre
+                // clubs, not a real time/place gathering, and mixing them into
+                // "nearby public gatherings" was drowning out actual local
+                // screenings (a club with no ScreeningTime and effectively
+                // unlimited capacity never expires or fills up the way a real
+                // event does). They have their own discovery path instead:
+                // GET community-spaces/discover, surfaced via Home's "My
+                // Community Clubs" and Explore's "Browse Community Clubs".
+                //
+                // create-space.tsx (the only creation path for a real Space)
+                // always sets ScreeningTime now, so a null one here means this
+                // row predates that column and is guaranteed stale — hidden
+                // rather than showing an already-past Space forever.
+                .Where(g => !g.IsPublic)
+                .Where(g => g.ScreeningTime != null && g.ScreeningTime >= DateTime.UtcNow)
                 // Capacity guard — don't surface a Space nobody can actually
                 // join anymore. MaxCapacity always has a value (defaults to
                 // 40 at creation), so there's no need to special-case 0/null.

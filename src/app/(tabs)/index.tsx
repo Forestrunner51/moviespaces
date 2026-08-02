@@ -1,4 +1,4 @@
-import { useCallback, useEffect, useState } from "react";
+import { useCallback, useEffect, useMemo, useState } from "react";
 import {
   View,
   Text,
@@ -62,29 +62,43 @@ function pickRandom<T>(arr: T[], count: number): T[] {
 }
 
 export default function HomeScreen() {
-  const [nearbySpaces, setNearbySpaces] = useState<NearbySpace[]>([]);
+  // Raw, unfiltered feed — the random-2 pick and the "exclude my own"
+  // filter both need the full list to draw from, not just whatever survived
+  // an earlier pick.
+  const [openSpacesRaw, setOpenSpacesRaw] = useState<NearbySpace[]>([]);
   const [spacesLoading, setSpacesLoading] = useState(true);
   const [mySpaces, setMySpaces] = useState<MySpace[]>([]);
   const [mySpacesLoading, setMySpacesLoading] = useState(true);
   const [myClubs, setMyClubs] = useState<MyClub[]>([]);
+  // Every Space the user belongs to at all (host or member, any type/status)
+  // — deliberately broader than mySpaces' "upcoming, non-public" filter,
+  // since this is purely for excluding self-overlap from the teaser below,
+  // not for deciding what counts as "upcoming."
+  const [myGroupIds, setMyGroupIds] = useState<Set<string>>(new Set());
 
   useEffect(() => {
     fetch(`${process.env.EXPO_PUBLIC_API_URL}/api/group/open`)
       .then((res) => (res.ok ? res.json() : []))
-      .then((data: NearbySpace[]) => {
-        // Picked once here (not recomputed on every render) so the sample
-        // doesn't reshuffle every time this screen re-renders. Capped at 2 —
-        // more than that made the row look sparse/off-center with a small
-        // local feed, and this is meant as a teaser, not the full list
-        // (Explore already covers that).
-        setNearbySpaces(pickRandom(data || [], 2));
-      })
+      .then((data: NearbySpace[]) => setOpenSpacesRaw(data || []))
       .catch((err) => {
         console.warn("Failed to load open spaces for home screen:", err);
-        setNearbySpaces([]);
+        setOpenSpacesRaw([]);
       })
       .finally(() => setSpacesLoading(false));
   }, []);
+
+  // Derived, not stored — recomputes only when the raw feed or the user's
+  // own-Space set actually changes (e.g. returning to Home after
+  // joining/hosting something), not on every render. A Space the user is
+  // already part of would otherwise show up twice: once here as a "new"
+  // suggestion and again in "My Upcoming Spaces" above, which is exactly the
+  // duplication this teaser shouldn't have. Capped at 2 — more than that made
+  // the row look sparse/off-center with a small local feed, and this is
+  // meant as a teaser, not the full list (Explore already covers that).
+  const nearbySpaces = useMemo(() => {
+    const notMine = openSpacesRaw.filter((s) => !myGroupIds.has(s.id));
+    return pickRandom(notMine, 2);
+  }, [openSpacesRaw, myGroupIds]);
 
   // Refetched on focus (not just mount) so a Space created or joined
   // elsewhere shows up here the moment the user lands back on Home — this is
@@ -98,6 +112,7 @@ export default function HomeScreen() {
         .then((res) => (res.ok ? res.json() : []))
         .then((data: MySpace[]) => {
           if (cancelled) return;
+          setMyGroupIds(new Set((data || []).map((s) => s.id)));
           const now = Date.now();
           const upcoming = (data || [])
             // Community Spaces have their own row below — this section is
@@ -244,42 +259,6 @@ export default function HomeScreen() {
           </>
         )}
 
-        {/* Demoted from the app's front door: still one tap away, but no
-            longer the first card on Home — Watch Parties leads now. */}
-        <TouchableOpacity
-          activeOpacity={0.85}
-          style={[styles.chooseCard, styles.cineMindCard]}
-          onPress={() => router.push("/cinemind")}
-        >
-          <Text style={styles.cineMindEmoji}>🧠</Text>
-          <View style={{ flex: 1 }}>
-            <Text style={styles.chooseCardTitle}>CineMind</Text>
-            <Text style={styles.chooseCardSubtitle}>
-              Today&apos;s 3-minute movie puzzle — one play a day
-            </Text>
-          </View>
-          <Ionicons name="chevron-forward" size={20} color={SpaceTheme.accentGold} />
-        </TouchableOpacity>
-
-        {/* Replaces the old "Surprise Me" carousel below, which was really
-            just a plain movie list — never actually random. A real spin,
-            plus a one-off practice CineMind challenge, is what that name
-            should have meant. */}
-        <TouchableOpacity
-          activeOpacity={0.85}
-          style={[styles.chooseCard, styles.rouletteCard]}
-          onPress={() => router.push("/roulette")}
-        >
-          <Ionicons name="shuffle" size={26} color={SpaceTheme.supernovaPink} />
-          <View style={{ flex: 1 }}>
-            <Text style={styles.chooseCardTitle}>Movie Roulette</Text>
-            <Text style={styles.chooseCardSubtitle}>
-              Spin for a random film and a practice trivia challenge
-            </Text>
-          </View>
-          <Ionicons name="chevron-forward" size={20} color={SpaceTheme.supernovaPink} />
-        </TouchableOpacity>
-
         <Text style={styles.sectionTitle}>Nearby Public Gatherings</Text>
         {spacesLoading ? (
           <ActivityIndicator color={SpaceTheme.glowCyan} style={styles.sectionLoading} />
@@ -351,15 +330,6 @@ const styles = StyleSheet.create({
     gap: 14,
     padding: 18,
     marginBottom: 16,
-  },
-  cineMindCard: {
-    borderColor: "rgba(245, 197, 24, 0.45)",
-    backgroundColor: "rgba(245, 197, 24, 0.07)",
-  },
-  cineMindEmoji: { fontSize: 26, width: 28, textAlign: "center" },
-  rouletteCard: {
-    borderColor: "rgba(236, 72, 153, 0.4)",
-    backgroundColor: "rgba(236, 72, 153, 0.06)",
   },
   codeEntryLink: {
     flexDirection: "row",

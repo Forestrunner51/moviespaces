@@ -213,18 +213,36 @@ export default function ExploreScreen() {
         <Text style={[styles.title, SpaceStyles.glowText, SpaceStyles.wordmark]}>Explore Spaces</Text>
         <Text style={styles.subtitle}>Open Spaces near you, filtered your way</Text>
 
-        {/* A code still matters for a private Space (IsPrivate) — those are
-            excluded from this feed the same way private rentals used to be,
-            just on a different flag now. This is exactly the screen someone
-            lands on expecting to find one by browsing instead. */}
-        <TouchableOpacity
-          activeOpacity={0.7}
-          style={styles.codeEntryLink}
-          onPress={() => router.push("/join-by-code")}
-        >
-          <Ionicons name="key-outline" size={15} color={SpaceTheme.mutedOrbit} />
-          <Text style={styles.codeEntryLinkText}>Have a Space code?</Text>
-        </TouchableOpacity>
+        <View style={styles.linkRow}>
+          {/* A code still matters for a private Space (IsPrivate) — those are
+              excluded from this feed the same way private rentals used to be,
+              just on a different flag now. This is exactly the screen someone
+              lands on expecting to find one by browsing instead. */}
+          <TouchableOpacity
+            activeOpacity={0.7}
+            style={styles.codeEntryLink}
+            onPress={() => router.push("/join-by-code")}
+          >
+            <Ionicons name="key-outline" size={15} color={SpaceTheme.mutedOrbit} />
+            <Text style={styles.codeEntryLinkText}>Have a Space code?</Text>
+          </TouchableOpacity>
+
+          {/* Community Spaces (evergreen genre clubs) are deliberately
+              excluded from GetOpenSpaces now — mixing a permanent club with
+              no real ScreeningTime into "nearby gatherings" was drowning out
+              actual local screenings. space-discovery.tsx is otherwise
+              onboarding-only, so this is the general entry point for anyone
+              past that (or who skipped it) to still find one. No genres
+              param means "show every public club." */}
+          <TouchableOpacity
+            activeOpacity={0.7}
+            style={styles.codeEntryLink}
+            onPress={() => router.push("/space-discovery")}
+          >
+            <Ionicons name="people-outline" size={15} color={SpaceTheme.mutedOrbit} />
+            <Text style={styles.codeEntryLinkText}>Browse Community Clubs</Text>
+          </TouchableOpacity>
+        </View>
 
         <FlatList
           data={filteredSpaces}
@@ -597,13 +615,13 @@ const styles = StyleSheet.create({
   },
   title: { fontSize: 28, fontWeight: "bold", color: SpaceTheme.starWhite },
   subtitle: { fontSize: 14, color: SpaceTheme.mutedOrbit, marginBottom: 16 },
+  linkRow: { flexDirection: "row", justifyContent: "center", gap: 20, marginBottom: 8 },
   codeEntryLink: {
     flexDirection: "row",
     alignItems: "center",
     justifyContent: "center",
     gap: 6,
     paddingVertical: 4,
-    marginBottom: 12,
   },
   codeEntryLinkText: { color: SpaceTheme.mutedOrbit, fontSize: 13, fontWeight: "600" },
   filters: { marginBottom: 8 },

@@ -12,6 +12,7 @@ import {
   KeyboardAvoidingView,
   Platform,
 } from "react-native";
+import { router } from "expo-router";
 import { Ionicons } from "@expo/vector-icons";
 import { Starfield } from "@/frontend/components/starfield";
 import { MoviePoster } from "@/frontend/components/movie-poster";
@@ -292,6 +293,7 @@ export default function CineMindScreen() {
           />
           {stats && <CineMindStatsCard stats={stats} />}
           <LeaderboardLink onPress={() => setViewMode("leaderboard")} />
+          <RouletteLink />
         </ScrollView>
       </Starfield>
     );
@@ -326,6 +328,7 @@ export default function CineMindScreen() {
 
           {stats && <CineMindStatsCard stats={stats} />}
           <LeaderboardLink onPress={() => setViewMode("leaderboard")} />
+          <RouletteLink />
           <NextPuzzleCountdown deadline={nextPuzzleAt} />
         </ScrollView>
       </Starfield>
@@ -538,6 +541,23 @@ function LeaderboardLink({ onPress }: { onPress: () => void }) {
     <TouchableOpacity activeOpacity={0.85} style={styles.secondaryButton} onPress={onPress}>
       <Ionicons name="trophy-outline" size={18} color={SpaceTheme.accentGold} />
       <Text style={styles.secondaryButtonText}>See Today&apos;s Leaderboard</Text>
+    </TouchableOpacity>
+  );
+}
+
+// Moved here from Home — Roulette is a one-off practice CineMind challenge
+// (never touches the streak/leaderboard, see RouletteController's own
+// comment), so it belongs alongside the daily puzzle rather than on the
+// watch-party-first Home screen.
+function RouletteLink() {
+  return (
+    <TouchableOpacity
+      activeOpacity={0.85}
+      style={styles.secondaryButton}
+      onPress={() => router.push("/roulette")}
+    >
+      <Ionicons name="shuffle" size={18} color={SpaceTheme.supernovaPink} />
+      <Text style={styles.secondaryButtonText}>Practice: Movie Roulette</Text>
     </TouchableOpacity>
   );
 }

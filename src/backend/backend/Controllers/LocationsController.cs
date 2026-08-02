@@ -1,3 +1,4 @@
+using Microsoft.AspNetCore.Authorization;
 using Microsoft.AspNetCore.Mvc;
 using System.Linq;
 using System.Text;
@@ -5,8 +6,13 @@ using System.Text.Json;
 
 namespace Backend.Controllers
 {
+    // [Authorize]d like every other controller here that fronts a billed
+    // third-party API — this was previously wide open with no auth at all,
+    // meaning anyone on the internet, not just app users, could script
+    // requests against it and run up the Google Places bill.
     [ApiController]
     [Route("api/[controller]")]
+    [Authorize]
     public class LocationsController : ControllerBase
     {
         private readonly IHttpClientFactory _httpClientFactory;
