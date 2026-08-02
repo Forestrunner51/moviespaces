@@ -1,5 +1,18 @@
 import { useEffect, useState } from "react";
-import { View, Text, StyleSheet, TouchableOpacity, Switch, Alert, ScrollView } from "react-native";
+import {
+  View,
+  Text,
+  StyleSheet,
+  TouchableOpacity,
+  Switch,
+  Alert,
+  ScrollView,
+  Modal,
+  TextInput,
+  KeyboardAvoidingView,
+  Platform,
+  ActivityIndicator,
+} from "react-native";
 import { router } from "expo-router";
 import Constants from "expo-constants";
 import { supabase } from "@/frontend/config/supabase";
@@ -13,6 +26,10 @@ export default function SettingsScreen() {
   const [notifLoading, setNotifLoading] = useState(true);
   const [togglingNotif, setTogglingNotif] = useState(false);
   const [deletingAccount, setDeletingAccount] = useState(false);
+  const [passwordModalVisible, setPasswordModalVisible] = useState(false);
+  const [newPassword, setNewPassword] = useState("");
+  const [confirmPassword, setConfirmPassword] = useState("");
+  const [changingPassword, setChangingPassword] = useState(false);
 
   useEffect(() => {
     areNotificationsEnabled().then((enabled) => {
@@ -28,6 +45,40 @@ export default function SettingsScreen() {
       await setNotificationsEnabled(value);
     } finally {
       setTogglingNotif(false);
+    }
+  };
+
+  const openPasswordModal = () => {
+    setNewPassword("");
+    setConfirmPassword("");
+    setPasswordModalVisible(true);
+  };
+
+  // Direct supabase.auth.updateUser, not the reset-password.tsx email-code
+  // flow — that flow exists for someone who's signed out and doesn't know
+  // their current password. Here the user already has a live session, so
+  // Supabase lets the password be updated straight away with no extra
+  // verification step.
+  const handleChangePassword = async () => {
+    if (newPassword.length < 6) {
+      Alert.alert("Password too short", "Use at least 6 characters.");
+      return;
+    }
+    if (newPassword !== confirmPassword) {
+      Alert.alert("Passwords don't match", "Double-check both fields match.");
+      return;
+    }
+
+    setChangingPassword(true);
+    try {
+      const { error } = await supabase.auth.updateUser({ password: newPassword });
+      if (error) throw error;
+      setPasswordModalVisible(false);
+      Alert.alert("Password updated", "Your password has been changed.");
+    } catch (err: any) {
+      Alert.alert("Couldn't update password", err.message || "Please try again.");
+    } finally {
+      setChangingPassword(false);
     }
   };
 
@@ -134,6 +185,10 @@ export default function SettingsScreen() {
 
         <Text style={styles.sectionLabel}>ACCOUNT</Text>
         <View style={styles.card}>
+          <TouchableOpacity activeOpacity={0.7} style={styles.linkRow} onPress={openPasswordModal}>
+            <Text style={styles.linkText}>Change Password</Text>
+          </TouchableOpacity>
+          <View style={styles.divider} />
           <TouchableOpacity activeOpacity={0.7} style={styles.linkRow} onPress={handleSignOut}>
             <Text style={styles.linkText}>Sign Out</Text>
           </TouchableOpacity>
@@ -152,6 +207,60 @@ export default function SettingsScreen() {
 
         {appVersion && <Text style={styles.versionText}>Version {appVersion}</Text>}
       </ScrollView>
+
+      <Modal
+        visible={passwordModalVisible}
+        transparent
+        animationType="slide"
+        onRequestClose={() => setPasswordModalVisible(false)}
+      >
+        <KeyboardAvoidingView
+          style={styles.modalOverlay}
+          behavior={Platform.OS === "ios" ? "padding" : undefined}
+        >
+          <View style={styles.modal}>
+            <Text style={styles.modalTitle}>Change Password</Text>
+            <TextInput
+              style={styles.modalInput}
+              placeholder="New password"
+              placeholderTextColor={SpaceTheme.mutedOrbit}
+              value={newPassword}
+              onChangeText={setNewPassword}
+              secureTextEntry
+              autoCapitalize="none"
+            />
+            <TextInput
+              style={styles.modalInput}
+              placeholder="Confirm new password"
+              placeholderTextColor={SpaceTheme.mutedOrbit}
+              value={confirmPassword}
+              onChangeText={setConfirmPassword}
+              secureTextEntry
+              autoCapitalize="none"
+            />
+            <TouchableOpacity
+              activeOpacity={0.8}
+              style={styles.modalSaveButton}
+              onPress={handleChangePassword}
+              disabled={changingPassword}
+            >
+              {changingPassword ? (
+                <ActivityIndicator color={SpaceTheme.backgroundVoid} />
+              ) : (
+                <Text style={styles.modalSaveButtonText}>Update Password</Text>
+              )}
+            </TouchableOpacity>
+            <TouchableOpacity
+              activeOpacity={0.8}
+              style={styles.modalCancelButton}
+              onPress={() => setPasswordModalVisible(false)}
+              disabled={changingPassword}
+            >
+              <Text style={styles.modalCancelButtonText}>Cancel</Text>
+            </TouchableOpacity>
+          </View>
+        </KeyboardAvoidingView>
+      </Modal>
     </Starfield>
   );
 }
@@ -190,4 +299,38 @@ const styles = StyleSheet.create({
     color: SpaceTheme.mutedOrbit,
     marginTop: 28,
   },
+  modalOverlay: {
+    flex: 1,
+    backgroundColor: "rgba(3, 7, 18, 0.85)",
+    justifyContent: "flex-end",
+  },
+  modal: {
+    backgroundColor: SpaceTheme.deepSpace,
+    padding: 24,
+    borderTopLeftRadius: 20,
+    borderTopRightRadius: 20,
+    borderWidth: 1,
+    borderColor: "rgba(255, 255, 255, 0.08)",
+  },
+  modalTitle: { fontSize: 20, fontWeight: "bold", color: SpaceTheme.starWhite, marginBottom: 20 },
+  modalInput: {
+    borderWidth: 1,
+    borderColor: "rgba(255, 255, 255, 0.12)",
+    borderRadius: 8,
+    padding: 12,
+    fontSize: 16,
+    backgroundColor: "rgba(255, 255, 255, 0.05)",
+    marginBottom: 12,
+    color: SpaceTheme.starWhite,
+  },
+  modalSaveButton: {
+    backgroundColor: SpaceTheme.glowCyan,
+    padding: 14,
+    borderRadius: 12,
+    alignItems: "center",
+    marginTop: 4,
+  },
+  modalSaveButtonText: { color: SpaceTheme.backgroundVoid, fontWeight: "700", fontSize: 16 },
+  modalCancelButton: { alignItems: "center", padding: 12 },
+  modalCancelButtonText: { color: SpaceTheme.mutedOrbit, fontSize: 15 },
 });

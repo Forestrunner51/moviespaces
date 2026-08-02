@@ -55,6 +55,24 @@ export function useChat(chatTargetId: string) {
     }
   }, [currentUserId, chatTargetId]);
 
+  // Marks this DM as read as of now, once per screen visit — mirrors
+  // use-group-chat.ts's read marker so friends-panel.tsx's "N new" badge
+  // clears once you've actually opened the conversation. group_id here is
+  // the other person's user id (there's no separate DM/thread id), group_type
+  // "dm" distinguishes this row from a real group/Space with the same uuid.
+  useEffect(() => {
+    if (!currentUserId || !chatTargetId) return;
+    supabase
+      .from("group_message_reads")
+      .upsert(
+        { user_id: currentUserId, group_type: "dm", group_id: chatTargetId, last_read_at: new Date().toISOString() },
+        { onConflict: "user_id,group_type,group_id" },
+      )
+      .then(({ error }) => {
+        if (error) console.warn("Failed to mark DM as read:", error);
+      });
+  }, [currentUserId, chatTargetId]);
+
   const notifyRecipient = async (preview: string) => {
     if (!currentUserId || !chatTargetId) return;
     const { data: profile } = await supabase

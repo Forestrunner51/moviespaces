@@ -12,6 +12,7 @@ import {
 import { router } from "expo-router";
 import { SpaceTheme, SpaceStyles } from "@/frontend/constants/theme";
 import { useFriends, Profile } from "@/frontend/hooks/use-friends";
+import { useDmUnreadCounts } from "@/frontend/hooks/use-dm-unread-counts";
 import { blockUser } from "@/frontend/services/moderation";
 
 export function FriendsPanel() {
@@ -32,6 +33,7 @@ export function FriendsPanel() {
   const [results, setResults] = useState<Profile[]>([]);
   const [searching, setSearching] = useState(false);
 
+  const unreadCounts = useDmUnreadCounts(friends.map((f) => f.id));
   const friendIds = new Set(friends.map((f) => f.id));
   const sentRequestByUserId = new Map(sentRequests.map((r) => [r.receiver.id, r.id]));
 
@@ -245,9 +247,18 @@ export function FriendsPanel() {
                 }
               >
                 <View style={styles.rowTextBlock}>
-                  <Text style={styles.rowText} numberOfLines={1}>
-                    {item.display_name}
-                  </Text>
+                  <View style={styles.rowNameLine}>
+                    <Text style={styles.rowText} numberOfLines={1}>
+                      {item.display_name}
+                    </Text>
+                    {!!unreadCounts[item.id] && (
+                      <View style={styles.unreadBadge}>
+                        <Text style={styles.unreadBadgeText}>
+                          {unreadCounts[item.id] > 9 ? "9+" : unreadCounts[item.id]}
+                        </Text>
+                      </View>
+                    )}
+                  </View>
                   {item.username && (
                     <Text style={styles.rowUsername} numberOfLines={1}>
                       @{item.username}
@@ -297,8 +308,16 @@ const styles = StyleSheet.create({
   // Names are user-supplied and can be long — let the name block take the
   // slack and truncate, so the action side never gets pushed off the row.
   rowTextBlock: { flex: 1, marginRight: 12 },
-  rowText: { color: SpaceTheme.starWhite, fontSize: 16 },
+  rowNameLine: { flexDirection: "row", alignItems: "center", gap: 8 },
+  rowText: { color: SpaceTheme.starWhite, fontSize: 16, flexShrink: 1 },
   rowUsername: { color: SpaceTheme.mutedOrbit, fontSize: 12, marginTop: 1 },
+  unreadBadge: {
+    backgroundColor: SpaceTheme.supernovaPink,
+    borderRadius: 10,
+    paddingVertical: 2,
+    paddingHorizontal: 7,
+  },
+  unreadBadgeText: { color: SpaceTheme.backgroundVoid, fontSize: 11, fontWeight: "800" },
   rowSubtext: { color: SpaceTheme.mutedOrbit, fontSize: 13 },
   friendActions: { flexDirection: "row", alignItems: "center", gap: 14, flexShrink: 0 },
   optionsLink: { color: SpaceTheme.mutedOrbit, fontSize: 20, fontWeight: "700", lineHeight: 22 },
