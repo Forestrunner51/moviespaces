@@ -14,6 +14,7 @@ import {
   TextInput,
   KeyboardAvoidingView,
   Platform,
+  Linking,
 } from "react-native";
 import { useLocalSearchParams, router } from "expo-router";
 import * as WebBrowser from "expo-web-browser";
@@ -30,6 +31,7 @@ import { activityLabel, activityEmoji } from "@/frontend/constants/activities";
 import { useFriends } from "@/frontend/hooks/use-friends";
 import { CineMindLeaderboard } from "@/frontend/components/cinemind-leaderboard";
 import { EVENT_CATEGORIES, eventCategoryOf } from "@/frontend/constants/event-categories";
+import { reportContent } from "@/frontend/services/moderation";
 
 interface Member {
   id: string;
@@ -186,6 +188,45 @@ export default function GroupScreen() {
   const handleGetTickets = async () => {
     if (!group) return;
     await WebBrowser.openBrowserAsync(buildTicketUrl(group.filmName, group.bookingUrl));
+  };
+
+  // cinemaName is often free-typed (a Home/Hosted address, "Sarah's
+  // Apartment, Unit 4B") rather than a verified place, so there's no
+  // Google Place ID to deep-link to reliably — a plain text query against
+  // each platform's native maps app/URL scheme is the only thing that works
+  // for both a real theater name and a hand-typed address.
+  const handleOpenMaps = () => {
+    if (!group) return;
+    const query = encodeURIComponent(group.cinemaName);
+    const url =
+      Platform.OS === "ios" ? `maps:0,0?q=${query}` : `geo:0,0?q=${query}`;
+    Linking.openURL(url).catch(() => {
+      Linking.openURL(`https://www.google.com/maps/search/?api=1&query=${query}`);
+    });
+  };
+
+  const handleReportSpace = () => {
+    if (!groupId) return;
+    Alert.alert(
+      "Report this Space?",
+      "Let us know if the title, cover photo, or anything else about this Space looks wrong or inappropriate.",
+      [
+        { text: "Cancel", style: "cancel" },
+        {
+          text: "Report",
+          style: "destructive",
+          onPress: async () => {
+            const result = await reportContent("space", groupId);
+            Alert.alert(
+              result.success ? "Reported" : "Couldn't report",
+              result.success
+                ? "Thanks — our team will review this Space."
+                : result.error || "Please try again.",
+            );
+          },
+        },
+      ],
+    );
   };
 
   const [addingToCalendar, setAddingToCalendar] = useState(false);
@@ -609,6 +650,10 @@ export default function GroupScreen() {
                     iconColor={SpaceTheme.backgroundVoid}
                   />
                 )}
+                <Text style={styles.linkDisclaimer}>
+                  ⚠️ Added by the host — verify it&apos;s legit before entering any personal or
+                  payment info.
+                </Text>
                 <View style={styles.rentalSecuredBadge}>
                   <Text style={styles.rentalSecuredBadgeText}>🔒 Venue Secured & Confirmed</Text>
                 </View>
@@ -742,6 +787,10 @@ export default function GroupScreen() {
             <QuickAction icon="share-social-outline" label="Invite" onPress={shareLink} />
           )}
 
+          {!hasPassed && !!group.cinemaName && (
+            <QuickAction icon="navigate-outline" label="Directions" onPress={handleOpenMaps} />
+          )}
+
           {(isHost || isMember) && (
             <QuickAction
               icon="chatbubbles-outline"
@@ -773,6 +822,10 @@ export default function GroupScreen() {
               onPress={handleAddToCalendar}
               loading={addingToCalendar}
             />
+          )}
+
+          {!isHost && (
+            <QuickAction icon="flag-outline" label="Report" onPress={handleReportSpace} />
           )}
         </View>
 
@@ -1151,6 +1204,13 @@ const styles = StyleSheet.create({
     color: SpaceTheme.backgroundVoid,
     fontWeight: "700",
     fontSize: 15,
+  },
+  linkDisclaimer: {
+    color: SpaceTheme.mutedOrbit,
+    fontSize: 11,
+    lineHeight: 15,
+    textAlign: "center",
+    marginTop: 8,
   },
   rentalSecuredBadge: {
     alignSelf: "center",

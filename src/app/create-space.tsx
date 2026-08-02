@@ -12,14 +12,18 @@ import {
   Alert,
   Modal,
   FlatList,
+  InputAccessoryView,
+  Keyboard,
 } from "react-native";
 import { router, useLocalSearchParams } from "expo-router";
 import AsyncStorage from "@react-native-async-storage/async-storage";
 import DateTimePicker from "@react-native-community/datetimepicker";
+import * as ImagePicker from "expo-image-picker";
 import { Ionicons } from "@expo/vector-icons";
 import { authFetch } from "@/frontend/services/api";
 import { supabase } from "@/frontend/config/supabase";
 import { Starfield } from "@/frontend/components/starfield";
+import { MoviePoster } from "@/frontend/components/movie-poster";
 import { SpaceTheme, SpaceStyles } from "@/frontend/constants/theme";
 import { POST_ACTIVITIES } from "@/frontend/constants/activities";
 import { useFriends } from "@/frontend/hooks/use-friends";
@@ -34,6 +38,8 @@ import {
 } from "@/frontend/services/nearby-theaters";
 
 type SpaceType = "public_gathering" | "private_rental";
+
+const NUMERIC_ACCESSORY_ID = "create-space-numeric-done";
 
 const formatDate = (d: Date) =>
   `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, "0")}-${String(d.getDate()).padStart(2, "0")}`;
@@ -316,6 +322,57 @@ export default function CreateSpaceScreen() {
   // since that's literally what the TMDb search underneath is finding.
   const isCustomVenueShowing = spaceType === "private_rental" && rentalActivityType === "movie";
 
+  // Sports/gaming/awards/other events have no OMDb catalog to draw a poster
+  // from (unlike movie/tv, which get one automatically) — this is the only
+  // category that gets the upload-a-cover-photo affordance below.
+  const isFreeformActivity =
+    spaceType === "private_rental" && rentalActivityType !== "movie" && rentalActivityType !== "tv";
+  const [uploadingEventPhoto, setUploadingEventPhoto] = useState(false);
+
+  const handlePickEventPhoto = async () => {
+    const permission = await ImagePicker.requestMediaLibraryPermissionsAsync();
+    if (!permission.granted) {
+      Alert.alert("Permission needed", "Allow photo access to add a cover photo.");
+      return;
+    }
+
+    const result = await ImagePicker.launchImageLibraryAsync({
+      mediaTypes: ImagePicker.MediaTypeOptions.Images,
+      allowsEditing: true,
+      aspect: [2, 3],
+      quality: 0.7,
+    });
+    if (result.canceled || !result.assets[0]) return;
+
+    setUploadingEventPhoto(true);
+    try {
+      const {
+        data: { user },
+      } = await supabase.auth.getUser();
+      if (!user) throw new Error("You need to be signed in to upload a photo.");
+
+      const response = await fetch(result.assets[0].uri);
+      const blob = await response.blob();
+      // Namespaced under the uploader's own folder (not a groupId — the
+      // Space doesn't exist yet at this point in the form) so Storage RLS
+      // can scope write access to "your own folder" without needing a
+      // groupId to check against. See 20260802_space_photo_storage.sql.
+      const path = `${user.id}/${Date.now()}.jpg`;
+
+      const { error: uploadError } = await supabase.storage
+        .from("space-photos")
+        .upload(path, blob, { contentType: "image/jpeg" });
+      if (uploadError) throw uploadError;
+
+      const { data: publicUrlData } = supabase.storage.from("space-photos").getPublicUrl(path);
+      setPosterPath(publicUrlData.publicUrl);
+    } catch (err: any) {
+      Alert.alert("Couldn't upload photo", err.message || "Please try again.");
+    } finally {
+      setUploadingEventPhoto(false);
+    }
+  };
+
   // Placeholder copy per non-catalog preset — the only thing that actually
   // differs between them, since they all just set a freeform title.
   const FREEFORM_TITLE_PLACEHOLDER: Record<"sports" | "gaming" | "awards" | "other", string> = {
@@ -420,8 +477,10 @@ export default function CreateSpaceScreen() {
   };
 
   const handleSubmit = async () => {
-    const isFreeformActivity =
-      spaceType === "private_rental" && rentalActivityType !== "movie" && rentalActivityType !== "tv";
+    if (uploadingEventPhoto) {
+      Alert.alert("Still uploading", "Give the cover photo a moment to finish uploading.");
+      return;
+    }
     const mediaLabel = isFreeformActivity ? "event" : searchingTv ? "show" : "movie";
     const venueLabel = venueMode === "home" ? "address" : "theater";
     if (!theaterName.trim() || !movieName.trim() || !showDate.trim() || !showTime.trim()) {
@@ -771,13 +830,32 @@ export default function CreateSpaceScreen() {
           {spaceType === "private_rental" &&
           rentalActivityType !== "movie" &&
           rentalActivityType !== "tv" ? (
-            <TextInput
-              style={styles.input}
-              placeholder={FREEFORM_TITLE_PLACEHOLDER[rentalActivityType]}
-              placeholderTextColor={SpaceTheme.mutedOrbit}
-              value={movieName}
-              onChangeText={setMovieName}
-            />
+            <>
+              <TextInput
+                style={styles.input}
+                placeholder={FREEFORM_TITLE_PLACEHOLDER[rentalActivityType]}
+                placeholderTextColor={SpaceTheme.mutedOrbit}
+                value={movieName}
+                onChangeText={setMovieName}
+              />
+              <TouchableOpacity
+                activeOpacity={0.8}
+                style={styles.eventPhotoRow}
+                onPress={handlePickEventPhoto}
+                disabled={uploadingEventPhoto}
+              >
+                <MoviePoster uri={posterPath} width={56} fallbackEmoji="📷" />
+                <View style={styles.eventPhotoInfo}>
+                  <Text style={styles.eventPhotoLabel}>
+                    {posterPath ? "Change cover photo" : "Add a cover photo (optional)"}
+                  </Text>
+                  <Text style={styles.eventPhotoHint}>
+                    Shown on your Space instead of the default icon.
+                  </Text>
+                </View>
+                {uploadingEventPhoto && <ActivityIndicator color={SpaceTheme.glowCyan} />}
+              </TouchableOpacity>
+            </>
           ) : (
             <TouchableOpacity
               activeOpacity={0.8}
@@ -937,6 +1015,7 @@ export default function CreateSpaceScreen() {
                 value={totalCost}
                 onChangeText={setTotalCost}
                 keyboardType="decimal-pad"
+                inputAccessoryViewID={NUMERIC_ACCESSORY_ID}
               />
               <Text style={styles.rentalHintText}>
                 💡 Leave at $0 if this event is free for attendees.
@@ -953,6 +1032,10 @@ export default function CreateSpaceScreen() {
               <Text style={styles.rentalHintText}>
                 💡 Paste a reservation link, invite URL, or chip-in link — or leave it blank to
                 gauge interest before spending money out of pocket!
+              </Text>
+              <Text style={styles.rentalHintText}>
+                ⚠️ This link opens for every guest in the Space. Only add links you trust, and
+                never one that asks for a password or payment card directly.
               </Text>
             </View>
           )}
@@ -973,6 +1056,7 @@ export default function CreateSpaceScreen() {
             value={maxCapacity}
             onChangeText={setMaxCapacity}
             keyboardType="number-pad"
+            inputAccessoryViewID={NUMERIC_ACCESSORY_ID}
           />
 
           {moreOptionsOpen && (
@@ -1141,6 +1225,20 @@ export default function CreateSpaceScreen() {
           </TouchableOpacity>
         </ScrollView>
       </KeyboardAvoidingView>
+
+      {/* iOS gives number-pad/decimal-pad keyboards no Return/Done key at
+          all, so without this, totalCost and maxCapacity trap the user with
+          no way to dismiss the keyboard. Android's numeric keyboard already
+          has a dismiss affordance, so this is iOS-only. */}
+      {Platform.OS === "ios" && (
+        <InputAccessoryView nativeID={NUMERIC_ACCESSORY_ID}>
+          <View style={styles.keyboardDoneBar}>
+            <TouchableOpacity activeOpacity={0.8} onPress={() => Keyboard.dismiss()} hitSlop={8}>
+              <Text style={styles.keyboardDoneBarText}>Done</Text>
+            </TouchableOpacity>
+          </View>
+        </InputAccessoryView>
+      )}
 
       <Modal
         visible={theaterModalVisible}
@@ -1497,6 +1595,17 @@ const styles = StyleSheet.create({
     lineHeight: 17,
     marginTop: -4,
   },
+  eventPhotoRow: {
+    ...SpaceStyles.glassCard,
+    flexDirection: "row",
+    alignItems: "center",
+    gap: 12,
+    padding: 12,
+    marginBottom: 16,
+  },
+  eventPhotoInfo: { flex: 1 },
+  eventPhotoLabel: { fontSize: 14, fontWeight: "700", color: SpaceTheme.starWhite, marginBottom: 2 },
+  eventPhotoHint: { fontSize: 12, color: SpaceTheme.mutedOrbit, lineHeight: 16 },
   submitButton: {
     backgroundColor: SpaceTheme.supernovaPink,
     padding: 18,
@@ -1596,6 +1705,14 @@ const styles = StyleSheet.create({
     marginBottom: 12,
   },
   pickerDoneButtonText: { color: SpaceTheme.glowCyan, fontWeight: "700", fontSize: 15 },
+  keyboardDoneBar: {
+    backgroundColor: SpaceTheme.deepSpace,
+    borderTopWidth: 1,
+    borderTopColor: "rgba(255, 255, 255, 0.08)",
+    alignItems: "flex-end",
+    padding: 10,
+  },
+  keyboardDoneBarText: { color: SpaceTheme.glowCyan, fontWeight: "700", fontSize: 15 },
   modalBackdrop: {
     flex: 1,
     justifyContent: "flex-end",
