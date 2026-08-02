@@ -47,9 +47,21 @@ export async function getDeviceLocation(): Promise<Coordinates | null> {
 // authFetch, not plain fetch — LocationsController is [Authorize]d (an
 // unauthenticated proxy to a billed API would let anyone run up the Google
 // Places bill), so this needs the bearer token.
-export async function fetchNearbyTheaters(coords: Coordinates): Promise<NearbyTheater[]> {
+// query: optional — switches the backend from Nearby Search (New) (capped
+// at 20 results, no pagination, "what's physically closest") to Text Search
+// (New) (searches by name, location only used as a bias). Without this, a
+// specific venue that isn't among the nearest 20 generic hits is never
+// findable no matter what's typed into a client-side filter over that fixed
+// list — which is what this replaces.
+export async function fetchNearbyTheaters(
+  coords: Coordinates,
+  radiusMeters?: number,
+  query?: string,
+): Promise<NearbyTheater[]> {
+  const radiusParam = radiusMeters != null ? `&radiusMeters=${radiusMeters}` : "";
+  const queryParam = query?.trim() ? `&query=${encodeURIComponent(query.trim())}` : "";
   const res = await authFetch(
-    `${process.env.EXPO_PUBLIC_API_URL}/api/locations/nearby-theaters?latitude=${coords.latitude}&longitude=${coords.longitude}`,
+    `${process.env.EXPO_PUBLIC_API_URL}/api/locations/nearby-theaters?latitude=${coords.latitude}&longitude=${coords.longitude}${radiusParam}${queryParam}`,
   );
   if (!res.ok) {
     const body = await res.json().catch(() => null);

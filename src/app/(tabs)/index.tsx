@@ -152,43 +152,6 @@ export default function HomeScreen() {
         <Text style={[styles.title, SpaceStyles.glowText, SpaceStyles.wordmark, styles.titleSpacing]}>MovieSpaces</Text>
         <Text style={styles.chooseSubtitle}>What do you want to do?</Text>
 
-        <Text style={styles.sectionTitle}>My Upcoming Spaces</Text>
-        {mySpacesLoading ? (
-          <ActivityIndicator color={SpaceTheme.glowCyan} style={styles.sectionLoading} />
-        ) : mySpaces.length === 0 ? (
-          <View style={styles.emptySection}>
-            <Text style={styles.emptySectionText}>
-              Nothing on your calendar yet — host one below or join with a code.
-            </Text>
-          </View>
-        ) : (
-          <FlatList
-            horizontal
-            showsHorizontalScrollIndicator={false}
-            data={mySpaces}
-            keyExtractor={(item) => item.id}
-            contentContainerStyle={styles.carouselContent}
-            renderItem={({ item }) => (
-              <TouchableOpacity
-                activeOpacity={0.85}
-                style={styles.spaceCard}
-                onPress={() => router.push({ pathname: "/group", params: { groupId: item.id } })}
-              >
-                <MoviePoster uri={item.posterPath} width={132} style={styles.spaceCardPoster} />
-                <Text style={styles.spaceCardTitle} numberOfLines={1}>
-                  {item.filmName}
-                </Text>
-                <Text style={styles.spaceCardSubtitle} numberOfLines={1}>
-                  {item.cinemaName}
-                </Text>
-                <Text style={styles.spaceCardTime} numberOfLines={1}>
-                  {item.showDate} • {item.showTime}
-                </Text>
-              </TouchableOpacity>
-            )}
-          />
-        )}
-
         <TouchableOpacity
           activeOpacity={0.85}
           style={styles.chooseCard}
@@ -257,6 +220,43 @@ export default function HomeScreen() {
               )}
             />
           </>
+        )}
+
+        <Text style={styles.sectionTitle}>My Upcoming Spaces</Text>
+        {mySpacesLoading ? (
+          <ActivityIndicator color={SpaceTheme.glowCyan} style={styles.sectionLoading} />
+        ) : mySpaces.length === 0 ? (
+          <View style={styles.emptySection}>
+            <Text style={styles.emptySectionText}>
+              Nothing on your calendar yet — host one above or join with a code.
+            </Text>
+          </View>
+        ) : (
+          <FlatList
+            horizontal
+            showsHorizontalScrollIndicator={false}
+            data={mySpaces}
+            keyExtractor={(item) => item.id}
+            contentContainerStyle={styles.carouselContent}
+            renderItem={({ item }) => (
+              <TouchableOpacity
+                activeOpacity={0.85}
+                style={styles.spaceCard}
+                onPress={() => router.push({ pathname: "/group", params: { groupId: item.id } })}
+              >
+                <MoviePoster uri={item.posterPath} width={132} style={styles.spaceCardPoster} />
+                <Text style={styles.spaceCardTitle} numberOfLines={1}>
+                  {item.filmName}
+                </Text>
+                <Text style={styles.spaceCardSubtitle} numberOfLines={1}>
+                  {item.cinemaName}
+                </Text>
+                <Text style={styles.spaceCardTime} numberOfLines={1}>
+                  {item.showDate} • {item.showTime}
+                </Text>
+              </TouchableOpacity>
+            )}
+          />
         )}
 
         <Text style={styles.sectionTitle}>Nearby Public Gatherings</Text>

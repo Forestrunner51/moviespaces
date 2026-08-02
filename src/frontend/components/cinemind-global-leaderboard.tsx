@@ -88,7 +88,7 @@ export function GlobalLeaderboardView({ onBack }: GlobalLeaderboardViewProps) {
           />
         }
       >
-        <TouchableOpacity activeOpacity={0.7} style={styles.backRow} onPress={onBack}>
+        <TouchableOpacity activeOpacity={0.7} style={styles.backRow} onPress={onBack} hitSlop={10}>
           <Ionicons name="chevron-back" size={18} color={SpaceTheme.mutedOrbit} />
           <Text style={styles.backRowText}>Back to Puzzle</Text>
         </TouchableOpacity>
@@ -175,8 +175,11 @@ function medalFor(rank: number): string {
 }
 
 const styles = StyleSheet.create({
-  content: { paddingTop: 16, paddingHorizontal: 16, paddingBottom: 40 },
-  backRow: { flexDirection: "row", alignItems: "center", gap: 2, marginBottom: 12 },
+  // paddingTop matches the other full-screen Starfield layouts in this app
+  // (Explore, Home) — it was 16 before, which put "Back to Puzzle" right at
+  // the top edge/notch area and made it unreliable to tap.
+  content: { paddingTop: 60, paddingHorizontal: 16, paddingBottom: 40 },
+  backRow: { flexDirection: "row", alignItems: "center", gap: 2, marginBottom: 16, paddingVertical: 6 },
   backRowText: { fontSize: 13, color: SpaceTheme.mutedOrbit, fontWeight: "600" },
   title: { fontSize: 22, fontWeight: "700", color: SpaceTheme.starWhite, textAlign: "center" },
   subtitle: {

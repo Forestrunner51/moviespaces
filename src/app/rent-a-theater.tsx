@@ -53,7 +53,9 @@ export default function RentATheaterScreen() {
           setLocationDenied(true);
           return [];
         }
-        return fetchNearbyTheaters(coords);
+        // ~25 miles — see create-space.tsx's matching call for why this
+        // isn't the old 10mi default.
+        return fetchNearbyTheaters(coords, 40233.6);
       })
       .then(setTheaters)
       .catch((err) => {
