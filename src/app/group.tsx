@@ -68,9 +68,14 @@ interface Group {
 }
 
 export default function GroupScreen() {
-  const { groupId, hostName } = useLocalSearchParams<{
+  const { groupId, hostName, code } = useLocalSearchParams<{
     groupId: string;
     hostName: string;
+    // Present when arriving via join-by-code.tsx or a shared link that
+    // embedded it — forwarded to /join so a private Space's join call can
+    // present it. Absent for someone who found the group id some other way,
+    // which is exactly the case a private Space's join check should reject.
+    code?: string;
   }>();
   const [group, setGroup] = useState<Group | null>(null);
   const [loading, setLoading] = useState(true);
@@ -166,9 +171,14 @@ export default function GroupScreen() {
     const shareId = group?.slug || groupId;
     // Legacy Spaces predate SpaceCode — the link alone still works for them.
     const codeLine = group?.spaceCode ? `\nOr enter code: ${group.spaceCode}` : "";
+    // Embedded as a query param too (not just spelled out in the message) —
+    // for a private Space, this is what lets the link itself carry proof of
+    // invitation through the space/[id] → group → join redirect chain,
+    // instead of requiring the recipient to separately type the code.
+    const codeParam = group?.spaceCode ? `?code=${encodeURIComponent(group.spaceCode)}` : "";
 
     await Share.share({
-      message: `Join my movie group! Open this link: ${process.env.EXPO_PUBLIC_API_URL}/space/${shareId}${codeLine}`,
+      message: `Join my movie group! Open this link: ${process.env.EXPO_PUBLIC_API_URL}/space/${shareId}${codeParam}${codeLine}`,
     });
   };
 
@@ -663,7 +673,7 @@ export default function GroupScreen() {
           <ActionButton
             icon="person-add-outline"
             label="Join This Space"
-            onPress={() => router.push({ pathname: "/join", params: { groupId: group.id } })}
+            onPress={() => router.push({ pathname: "/join", params: { groupId: group.id, code } })}
             style={styles.joinButton}
             textStyle={styles.buttonText}
             iconColor={SpaceTheme.backgroundVoid}

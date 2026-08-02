@@ -24,6 +24,19 @@ namespace Backend.Models
         [Column("space_code")]
         public string? SpaceCode { get; set; }
 
+        // Host-chosen at creation, independent of SpaceType — either a real
+        // theater screening (public_gathering) or a custom venue/watch party
+        // (private_rental) can be made invite-only. When true: excluded from
+        // GetOpenSpaces (never discoverable by browsing Explore/Home) and
+        // JoinGroup/JoinGroupWeb require the correct SpaceCode to be
+        // presented, not just a known groupId — a real access check, not
+        // just hiding from the browse feed. Distinct from IsPublic (Community
+        // Spaces' evergreen-and-always-discoverable flag) — the two are
+        // opposite ends of the same discoverability axis and should never
+        // both be true on the same row.
+        [Column("is_private")]
+        public bool IsPrivate { get; set; } = false;
+
         // Public Community Spaces (e.g. "Horror Night Den") — evergreen,
         // genre-themed Spaces new users auto-join during onboarding so a
         // solo player has an active CineMind leaderboard on day one instead

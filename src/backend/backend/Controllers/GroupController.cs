@@ -148,6 +148,7 @@ namespace Backend.Controllers
                 ScreeningTime = req.ScreeningTime,
                 SeasonEpisodeInfo = string.IsNullOrWhiteSpace(req.SeasonEpisodeInfo) ? null : req.SeasonEpisodeInfo.Trim(),
                 EventCategory = eventCategory,
+                IsPrivate = req.IsPrivate ?? false,
             };
 
             group.Members.Add(new GroupMember
@@ -472,15 +473,13 @@ namespace Backend.Controllers
             var query = _db.Groups
                 .Include(g => g.Members)
                 .Where(g => g.Status == "pending")
-                // Private rentals are invite-only by design (a SpaceCode or
-                // direct link is meant to be the only way in — see
-                // join-by-code.tsx's own comment on this) — this is the
-                // enforcement of that: excluded from the one feed anyone can
-                // browse without already having been invited. JoinGroup
-                // itself still has no separate check, same trust model as
-                // sharing a link today — this only stops "found by
-                // scrolling," not "someone forwarded me the link."
-                .Where(g => g.SpaceType != "private_rental")
+                // IsPrivate is independent of SpaceType — either a real
+                // theater screening or a custom-venue watch party can be
+                // marked invite-only at creation. Excluded from the one feed
+                // anyone can browse without already having been invited;
+                // JoinGroup itself also enforces the SpaceCode for these (see
+                // its own comment), so this isn't just hiding from browse.
+                .Where(g => !g.IsPrivate)
                 // create-space.tsx (the only creation path) always sets
                 // ScreeningTime now, so a null one means this row predates
                 // that column and is guaranteed stale — hide it rather than
@@ -536,6 +535,12 @@ namespace Backend.Controllers
             var matches = await _db.Groups
                 .Include(g => g.Members)
                 .Where(g => g.Status == "pending" && !g.IsPublic)
+                // Otherwise this becomes an information leak: a private
+                // Space's host name, showtime, and a direct join link would
+                // surface to anyone who happens to type a similar title, even
+                // though they were never invited and it's excluded from
+                // Explore for exactly that reason.
+                .Where(g => !g.IsPrivate)
                 .Where(g => g.ScreeningTime == null || g.ScreeningTime >= DateTime.UtcNow)
                 .Where(g => EF.Functions.ILike(g.FilmName, pattern))
                 .OrderByDescending(g => g.CreatedAt)
@@ -597,6 +602,21 @@ namespace Backend.Controllers
                 return Ok(new { memberId = existing.Id });
             }
 
+            // Real access control, not just "hidden from Explore" — a known
+            // groupId alone (a forwarded link, a guessed guid) isn't enough
+            // for a private Space; the caller has to actually present the
+            // matching SpaceCode. In practice the host never reaches this
+            // check at all (CreateGroup adds them as a confirmed GroupMember
+            // up front, so the existing-member guard above already returns
+            // early for them) — group.UserId != userId here is just defensive
+            // redundancy, not the thing actually exempting them.
+            if (group.IsPrivate && group.UserId != userId)
+            {
+                var providedCode = (req.SpaceCode ?? "").Trim();
+                if (!string.Equals(providedCode, group.SpaceCode, StringComparison.OrdinalIgnoreCase))
+                    return StatusCode(403, new { error = "This Space is private — enter it using the invite code." });
+            }
+
             // Enforce the advertised capacity/status here — the UI shows
             // "X / Y spots filled" and hides full Spaces from Explore, but
             // nothing stopped a direct call to this endpoint from over-filling
@@ -644,6 +664,18 @@ namespace Backend.Controllers
             if (existing != null)
             {
                 return Ok(new { memberId = existing.Id });
+            }
+
+            // Same SpaceCode enforcement as the authenticated join path —
+            // web joiners have no UserId to exempt as "the host" (a host
+            // always joins through the authenticated app, never this
+            // endpoint), so this check applies unconditionally for a private
+            // Space here.
+            if (group.IsPrivate)
+            {
+                var providedCode = (req.SpaceCode ?? "").Trim();
+                if (!string.Equals(providedCode, group.SpaceCode, StringComparison.OrdinalIgnoreCase))
+                    return StatusCode(403, new { error = "This Space is private — enter it using the invite code." });
             }
 
             // Same capacity/status enforcement as the authenticated join path.
@@ -932,10 +964,13 @@ namespace Backend.Controllers
         DateTime? ScreeningTime,
         string? SeasonEpisodeInfo,
         string? PosterPath,
-        string? EventCategory
+        string? EventCategory,
+        bool? IsPrivate
     );
 
-    public record JoinGroupRequest(string Name);
+    // SpaceCode is only checked when joining a private Space (see JoinGroup)
+    // — optional so the request shape stays the same for every public join.
+    public record JoinGroupRequest(string Name, string? SpaceCode = null);
     public record UpdateBookingUrlRequest(string? BookingUrl);
     public record NotifyMessageRequest(string SenderName, string Preview);
     public record TransferOwnershipRequest(string NewHostUserId);
