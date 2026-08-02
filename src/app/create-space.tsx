@@ -590,9 +590,10 @@ export default function CreateSpaceScreen() {
         style={styles.container}
         behavior={Platform.OS === "ios" ? "padding" : undefined}
       >
+        {/* No in-screen "Create a Space" heading — this screen keeps its
+            native header (the back button matters on a long form), and the
+            heading duplicated that header's title verbatim. */}
         <ScrollView contentContainerStyle={{ paddingBottom: 40 }} keyboardShouldPersistTaps="handled">
-          <Text style={[styles.title, SpaceStyles.glowText, SpaceStyles.wordmark]}>Create a Space</Text>
-
           <View style={styles.toggleRow}>
             <TouchableOpacity
               activeOpacity={0.8}
@@ -1545,8 +1546,9 @@ export default function CreateSpaceScreen() {
 }
 
 const styles = StyleSheet.create({
-  container: { flex: 1, paddingHorizontal: 16, paddingTop: 60 },
-  title: { fontSize: 24, fontWeight: "bold", color: SpaceTheme.starWhite, marginBottom: 20 },
+  // paddingTop is small, not 60 — the native header already clears the notch
+  // on this screen (see _layout.tsx); 60 on top of it was pure dead space.
+  container: { flex: 1, paddingHorizontal: 16, paddingTop: 16 },
   toggleRow: { flexDirection: "row", gap: 10, marginBottom: 20 },
   toggleOption: {
     flex: 1,

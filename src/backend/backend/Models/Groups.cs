@@ -186,6 +186,14 @@ namespace Backend.Models
         [Column("user_id")]
         public string UserId { get; set; } = "";
 
+        // Stable per-browser identity for web joiners (UserId == ""), who have
+        // no account to key on. Without it, JoinGroupWeb could only de-dupe by
+        // lowercased Name — so two different guests both called "Alex" silently
+        // collapsed into one membership (the second got the first's memberId and
+        // never actually joined), while one guest typing "alex" then "Alex Smith"
+        // created two rows. Null for app members, who key on UserId instead.
+        public string? GuestToken { get; set; }
+
         public bool Confirmed { get; set; } = false;
         public DateTime JoinedAt { get; set; } = DateTime.UtcNow;
     }

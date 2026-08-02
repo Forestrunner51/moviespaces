@@ -17,6 +17,7 @@ import {
   Linking,
 } from "react-native";
 import { useLocalSearchParams, router } from "expo-router";
+import AsyncStorage from "@react-native-async-storage/async-storage";
 import * as WebBrowser from "expo-web-browser";
 import * as Calendar from "expo-calendar";
 import { supabase } from "@/frontend/config/supabase";
@@ -180,8 +181,20 @@ export default function GroupScreen() {
     // instead of requiring the recipient to separately type the code.
     const codeParam = group?.spaceCode ? `?code=${encodeURIComponent(group.spaceCode)}` : "";
 
+    // Leads with what/where/when rather than a bare URL — this message is the
+    // whole pitch for someone who's never heard of the app, and "Join my movie
+    // group!" was both pre-pivot wording (group, not Space) and told them
+    // nothing about the actual event.
+    const what = group?.filmName ? `"${group.filmName}"` : "a watch party";
+    const whereWhen = [group?.cinemaName, group?.showDate, group?.showTime]
+      .filter(Boolean)
+      .join(" • ");
+    const details = whereWhen ? `\n${whereWhen}` : "";
+
     await Share.share({
-      message: `Join my movie group! Open this link: ${process.env.EXPO_PUBLIC_API_URL}/space/${shareId}${codeParam}${codeLine}`,
+      message:
+        `Join my MovieSpaces watch party for ${what}!${details}\n\n` +
+        `${process.env.EXPO_PUBLIC_API_URL}/space/${shareId}${codeParam}${codeLine}`,
     });
   };
 
@@ -279,6 +292,54 @@ export default function GroupScreen() {
       Alert.alert("Couldn't add to calendar", "Please try again.");
     } finally {
       setAddingToCalendar(false);
+    }
+  };
+
+  const [joining, setJoining] = useState(false);
+
+  // Joins in place rather than navigating to the /join screen and back.
+  // That round trip pushed a whole screen (spinner, two transitions) for
+  // what is really one button press, and because it finished with
+  // router.replace("/group") the stack ended up [group, group] — pressing
+  // back after joining re-showed the same Space instead of leaving it. A
+  // failure here also used to strand the user on a dead-end error screen;
+  // now it's an alert and they stay put.
+  const handleJoin = async () => {
+    if (!group) return;
+    setJoining(true);
+    try {
+      // Same resolution order the /join screen used: profile display_name,
+      // then auth metadata, then the locally cached name. An empty name is
+      // still fine — the backend's profanity filter falls back to "A Movie
+      // Fan" rather than rejecting it.
+      const {
+        data: { user },
+      } = await supabase.auth.getUser();
+      let name = "";
+      if (user) {
+        const { data: row } = await supabase
+          .from("profiles")
+          .select("display_name")
+          .eq("id", user.id)
+          .maybeSingle();
+        name = row?.display_name || user.user_metadata?.full_name || "";
+      }
+      if (!name) name = (await AsyncStorage.getItem("userName")) || "";
+      if (name) await AsyncStorage.setItem("userName", name);
+
+      const res = await authFetch(
+        `${process.env.EXPO_PUBLIC_API_URL}/api/group/${group.id}/join`,
+        { method: "POST", body: JSON.stringify({ name, spaceCode: code ?? null }) },
+      );
+      if (!res.ok) {
+        const body = await res.json().catch(() => null);
+        throw new Error(body?.error || "Couldn't join this Space. Please try again.");
+      }
+      await fetchGroup();
+    } catch (err: any) {
+      Alert.alert("Couldn't join", err.message || "Please try again.");
+    } finally {
+      setJoining(false);
     }
   };
 
@@ -701,9 +762,19 @@ export default function GroupScreen() {
                 !!item.userId &&
                 item.userId !== currentUserId &&
                 !friendIds.has(item.userId);
+              // No Supabase userId means they RSVP'd from the web invite page
+              // without an account. Worth labelling: they're auto-confirmed
+              // (they have no way to come back and RSVP later), they can't be
+              // messaged or friended, and they still take a capacity slot — so
+              // a host counting heads needs to tell them apart from a real
+              // in-app confirmation.
+              const isWebGuest = !item.userId;
               return (
                 <View style={styles.memberRow}>
-                  <Text style={styles.memberName}>{item.name}</Text>
+                  <View style={styles.memberNameBlock}>
+                    <Text style={styles.memberName}>{item.name}</Text>
+                    {isWebGuest && <Text style={styles.guestTag}>Web guest</Text>}
+                  </View>
                   <View style={styles.memberRowRight}>
                     {canAddFriend &&
                       (requestedFriendIds.has(item.userId) ? (
@@ -731,7 +802,8 @@ export default function GroupScreen() {
           <ActionButton
             icon="person-add-outline"
             label="Join This Space"
-            onPress={() => router.push({ pathname: "/join", params: { groupId: group.id, code } })}
+            onPress={handleJoin}
+            loading={joining}
             style={styles.joinButton}
             textStyle={styles.buttonText}
             iconColor={SpaceTheme.backgroundVoid}
@@ -962,7 +1034,9 @@ const styles = StyleSheet.create({
   },
   containerContent: {
     padding: 16,
-    paddingTop: 60,
+    // Not 60 — this screen keeps its native header (see _layout.tsx), which
+    // already clears the notch; the extra 60 was dead space under it.
+    paddingTop: 16,
     paddingBottom: 40,
   },
   center: { flex: 1, justifyContent: "center", alignItems: "center" },
@@ -1087,7 +1161,9 @@ const styles = StyleSheet.create({
     borderBottomWidth: 1,
     borderBottomColor: "rgba(255,255,255,0.08)",
   },
+  memberNameBlock: { flex: 1, marginRight: 12 },
   memberName: { fontSize: 16, color: SpaceTheme.starWhite },
+  guestTag: { fontSize: 11, color: SpaceTheme.mutedOrbit, marginTop: 2 },
   memberRowRight: { flexDirection: "row", alignItems: "center", gap: 12 },
   addFriendText: { color: SpaceTheme.glowCyan, fontWeight: "700", fontSize: 13 },
   friendRequested: { color: SpaceTheme.mutedOrbit, fontSize: 13 },
