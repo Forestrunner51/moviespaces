@@ -281,7 +281,6 @@ export default function CineMindScreen() {
     return (
       <Starfield>
         <ScrollView contentContainerStyle={styles.content}>
-          <Header streak={today.streakCount} />
           <LockedStateView
             puzzleNumber={today.puzzleNumber}
             score={today.score}
@@ -303,7 +302,6 @@ export default function CineMindScreen() {
     return (
       <Starfield>
         <ScrollView contentContainerStyle={styles.content}>
-          <Header streak={result.streakCount} />
           <Text style={styles.bigTitle}>CineMind #{puzzle.puzzleNumber}</Text>
           <Text style={styles.scoreLine}>
             {result.score}
@@ -348,7 +346,7 @@ export default function CineMindScreen() {
     <Starfield>
       <KeyboardAvoidingView style={styles.flex} behavior={Platform.OS === "ios" ? "padding" : undefined}>
         <ScrollView contentContainerStyle={styles.content} keyboardShouldPersistTaps="handled">
-          <Header streak={today && !today.isLocked ? today.streakCount : 0} elapsedMs={elapsedMs} />
+          <Header elapsedMs={elapsedMs} />
   
           <Text style={styles.puzzleNumber}>CineMind #{puzzle.puzzleNumber}</Text>
           <View style={styles.progressRow}>
@@ -504,18 +502,14 @@ export default function CineMindScreen() {
 
 // ── Small presentational pieces ────────────────────────────────────────────
 
-function Header({ streak, elapsedMs }: { streak: number; elapsedMs?: number }) {
+function Header({ elapsedMs }: { elapsedMs?: number }) {
+  if (elapsedMs == null) return null;
   return (
     <View style={styles.header}>
       <View style={styles.headerPill}>
-        <Text style={styles.headerPillText}>🔥 {streak}</Text>
+        <Ionicons name="time-outline" size={14} color={SpaceTheme.mutedOrbit} />
+        <Text style={styles.headerPillText}>{formatDuration(elapsedMs)}</Text>
       </View>
-      {elapsedMs != null && (
-        <View style={styles.headerPill}>
-          <Ionicons name="time-outline" size={14} color={SpaceTheme.mutedOrbit} />
-          <Text style={styles.headerPillText}>{formatDuration(elapsedMs)}</Text>
-        </View>
-      )}
     </View>
   );
 }

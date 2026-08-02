@@ -30,6 +30,7 @@ import {
   getDeviceLocation,
   fetchNearbyTheaters,
   NearbyTheater,
+  Coordinates,
 } from "@/frontend/services/nearby-theaters";
 
 type SpaceType = "public_gathering" | "private_rental";
@@ -210,6 +211,15 @@ export default function CreateSpaceScreen() {
   const [theatersError, setTheatersError] = useState<string | null>(null);
   const [theaterModalVisible, setTheaterModalVisible] = useState(false);
   const [theaterSearch, setTheaterSearch] = useState("");
+  // Cached from the initial mount-time lookup so typing in the search box
+  // doesn't re-request GPS/permission on every keystroke — just reused as
+  // the location bias for each text search.
+  const [deviceCoords, setDeviceCoords] = useState<Coordinates | null>(null);
+  // Non-null once a text search has actually run — lets the render logic
+  // below tell "searched, found nothing" apart from "haven't searched yet,
+  // showing the generic nearby list."
+  const [textSearchResults, setTextSearchResults] = useState<NearbyTheater[] | null>(null);
+  const [textSearching, setTextSearching] = useState(false);
 
   const [movieModalVisible, setMovieModalVisible] = useState(false);
   const [movieSearch, setMovieSearch] = useState("");
@@ -272,8 +282,18 @@ export default function CreateSpaceScreen() {
   }, []);
 
   useEffect(() => {
+    // ~25 miles — was a hardcoded 10mi on the backend, which felt
+    // restrictive especially for Watch Party/Custom Venue (a private event
+    // isn't tied to "my local theater" the way a real screening is). Not
+    // scoped by spaceType: this effect only runs once at mount, before a
+    // later toggle between MovieSpace/Watch Party would ever be reflected,
+    // and a wider radius for a real theater search isn't a downside anyway —
+    // just more choice.
     getDeviceLocation()
-      .then((coords) => (coords ? fetchNearbyTheaters(coords) : []))
+      .then((coords) => {
+        setDeviceCoords(coords);
+        return coords ? fetchNearbyTheaters(coords, 40233.6) : [];
+      })
       .then(setTheaters)
       .catch((err) => {
         console.error("Failed to load nearby theaters:", err);
@@ -282,6 +302,28 @@ export default function CreateSpaceScreen() {
       })
       .finally(() => setTheatersLoading(false));
   }, []);
+
+  // Debounced Text Search (New) — fires 400ms after typing stops, same
+  // pattern as the movie search below. Only while the modal is actually open
+  // and a real location is known, so closing it (without clearing the text)
+  // doesn't keep firing calls in the background.
+  useEffect(() => {
+    if (!theaterModalVisible || !deviceCoords || theaterSearch.trim().length < 2) {
+      setTextSearchResults(null);
+      return;
+    }
+    setTextSearching(true);
+    const handle = setTimeout(() => {
+      fetchNearbyTheaters(deviceCoords, 40233.6, theaterSearch)
+        .then(setTextSearchResults)
+        .catch((err) => {
+          console.warn("Location text search failed:", err);
+          setTextSearchResults([]);
+        })
+        .finally(() => setTextSearching(false));
+    }, 400);
+    return () => clearTimeout(handle);
+  }, [theaterSearch, theaterModalVisible, deviceCoords]);
 
   // Pre-populate with a rotating pick of well-known titles (a fixed curated
   // list, not real theatrical data — OMDb has no now-playing/popularity
@@ -381,18 +423,28 @@ export default function CreateSpaceScreen() {
     return () => clearTimeout(handle);
   }, [movieName, venueMode]);
 
+  // Text Search's results are already query-relevant (Google did the
+  // matching server-side) — a client-side substring re-filter on top would
+  // just drop legitimate fuzzy matches (e.g. Google returning "AMC
+  // Levittown 6" for a search of "levittown"). The generic nearby list still
+  // needs it, since that one was never filtered by anything.
+  const baseTheaters = textSearchResults ?? theaters;
+
   // MovieSpaces (public_gathering) are screenings at an actual theater — bars
   // and community centers only belong in the broader Watch Party venue list.
   // A place with no returned types (rare) is kept rather than hidden, since
-  // that's more likely a data gap than a genuine non-theater.
+  // that's more likely a data gap than a genuine non-theater. Applies to
+  // text-search results too — a search shouldn't let a public_gathering end
+  // up pointed at a random bar just because it matched the typed name.
   const venueScopedTheaters =
     spaceType === "public_gathering"
-      ? theaters.filter((t) => t.types.length === 0 || t.types.includes("movie_theater"))
-      : theaters;
+      ? baseTheaters.filter((t) => t.types.length === 0 || t.types.includes("movie_theater"))
+      : baseTheaters;
 
-  const filteredTheaters = venueScopedTheaters.filter((t) =>
-    t.name.toLowerCase().includes(theaterSearch.toLowerCase()),
-  );
+  const filteredTheaters =
+    textSearchResults != null
+      ? venueScopedTheaters
+      : venueScopedTheaters.filter((t) => t.name.toLowerCase().includes(theaterSearch.toLowerCase()));
 
   const onDateChange = (_event: any, selected: Date) => {
     if (Platform.OS === "android") setDatePickerVisible(false);
@@ -659,7 +711,8 @@ export default function CreateSpaceScreen() {
             >
               <Ionicons name="storefront-outline" size={18} color={SpaceTheme.mutedOrbit} />
               <Text style={[styles.pickerFieldText, !theaterName && styles.pickerFieldPlaceholder]}>
-                {theaterName || "Select a nearby theater"}
+                {theaterName ||
+                  (spaceType === "private_rental" ? "Select a location" : "Select a nearby theater")}
               </Text>
               <Ionicons
                 name={theaterLocked ? "lock-closed" : "chevron-down"}
@@ -1186,19 +1239,21 @@ export default function CreateSpaceScreen() {
         >
           <View style={styles.modalSheet}>
             <View style={styles.modalHeader}>
-              <Text style={styles.modalTitle}>Select a Theater</Text>
+              <Text style={styles.modalTitle}>
+                {spaceType === "private_rental" ? "Select a Location" : "Select a Theater"}
+              </Text>
               <TouchableOpacity onPress={() => setTheaterModalVisible(false)} hitSlop={10}>
                 <Ionicons name="close" size={24} color={SpaceTheme.mutedOrbit} />
               </TouchableOpacity>
             </View>
             <TextInput
               style={styles.input}
-              placeholder="Search theaters..."
+              placeholder={spaceType === "private_rental" ? "Search locations..." : "Search theaters..."}
               placeholderTextColor={SpaceTheme.mutedOrbit}
               value={theaterSearch}
               onChangeText={setTheaterSearch}
             />
-            {theatersLoading ? (
+            {theatersLoading || textSearching ? (
               <ActivityIndicator color={SpaceTheme.glowCyan} style={{ marginTop: 20 }} />
             ) : (
               <FlatList
@@ -1225,15 +1280,23 @@ export default function CreateSpaceScreen() {
                 ListEmptyComponent={
                   <Text style={styles.modalEmptyText}>
                     {theatersError
-                      ? `Couldn't load theaters: ${theatersError}`
-                      : "No nearby theaters found — allow location access, or type the name in manually below."}
+                      ? `Couldn't load locations: ${theatersError}`
+                      : textSearchResults != null
+                        ? `No matches for "${theaterSearch.trim()}" — try a different name, or type it in manually below.`
+                        : spaceType === "private_rental"
+                          ? "No nearby locations found — allow location access, or type the name in manually below."
+                          : "No nearby theaters found — allow location access, or type the name in manually below."}
                   </Text>
                 }
               />
             )}
             <TextInput
               style={[styles.input, { marginTop: 8 }]}
-              placeholder="Can't find it? Type the theater name"
+              placeholder={
+                spaceType === "private_rental"
+                  ? "Can't find it? Type the location name"
+                  : "Can't find it? Type the theater name"
+              }
               placeholderTextColor={SpaceTheme.mutedOrbit}
               value={theaterName}
               onChangeText={(text) => {
