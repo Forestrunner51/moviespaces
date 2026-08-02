@@ -472,6 +472,15 @@ namespace Backend.Controllers
             var query = _db.Groups
                 .Include(g => g.Members)
                 .Where(g => g.Status == "pending")
+                // Private rentals are invite-only by design (a SpaceCode or
+                // direct link is meant to be the only way in — see
+                // join-by-code.tsx's own comment on this) — this is the
+                // enforcement of that: excluded from the one feed anyone can
+                // browse without already having been invited. JoinGroup
+                // itself still has no separate check, same trust model as
+                // sharing a link today — this only stops "found by
+                // scrolling," not "someone forwarded me the link."
+                .Where(g => g.SpaceType != "private_rental")
                 // create-space.tsx (the only creation path) always sets
                 // ScreeningTime now, so a null one means this row predates
                 // that column and is guaranteed stale — hide it rather than
