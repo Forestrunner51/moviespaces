@@ -1,5 +1,6 @@
 using Microsoft.AspNetCore.Authorization;
 using Microsoft.AspNetCore.Mvc;
+using Microsoft.AspNetCore.RateLimiting;
 using System.Linq;
 using System.Text;
 using System.Text.Json;
@@ -10,9 +11,13 @@ namespace Backend.Controllers
     // third-party API — this was previously wide open with no auth at all,
     // meaning anyone on the internet, not just app users, could script
     // requests against it and run up the Google Places bill.
+    // Rate-limited on top of [Authorize]: Google Places bills per request, so
+    // one authenticated account looping this is a billing problem even though
+    // it isn't an access-control one.
     [ApiController]
     [Route("api/[controller]")]
     [Authorize]
+    [EnableRateLimiting("metered-api")]
     public class LocationsController : ControllerBase
     {
         private readonly IHttpClientFactory _httpClientFactory;

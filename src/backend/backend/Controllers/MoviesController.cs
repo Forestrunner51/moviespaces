@@ -2,6 +2,7 @@ using System.Globalization;
 using System.Text.Json;
 using Microsoft.AspNetCore.Authorization;
 using Microsoft.AspNetCore.Mvc;
+using Microsoft.AspNetCore.RateLimiting;
 using Microsoft.Extensions.Caching.Memory;
 
 namespace Backend.Controllers
@@ -21,9 +22,13 @@ namespace Backend.Controllers
     // open with no auth at all, meaning anyone on the internet, not just app
     // users, could script requests against it and exhaust OMDb's daily quota,
     // breaking movie search for every real user.
+    // Rate-limited on top of [Authorize]: auth alone only proves the caller is
+    // *a* user, which doesn't stop one account from scripting enough requests
+    // to exhaust the daily OMDb quota for everyone.
     [ApiController]
     [Route("api/[controller]")]
     [Authorize]
+    [EnableRateLimiting("metered-api")]
     public class MoviesController : ControllerBase
     {
         private readonly IHttpClientFactory _httpClientFactory;
