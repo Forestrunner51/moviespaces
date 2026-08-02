@@ -33,12 +33,18 @@ export default function TabsLayout() {
           ),
         }}
       />
+      {/* Demoted from the app's front door (was Home) to a secondary tab —
+          still a full daily puzzle, just no longer the first thing anyone
+          sees. Watch Parties/Spaces is the primary pitch now. The global
+          leaderboard lives inside this same tab now (a view-mode toggle,
+          not its own route) rather than a separate tab. */}
       <Tabs.Screen
-        name="leaderboard"
+        name="cinemind"
         options={{
-          title: "Leaderboard",
+          title: "CineMind",
+          headerShown: false,
           tabBarIcon: ({ color, size }) => (
-            <Ionicons name="trophy-outline" size={size} color={color} />
+            <Ionicons name="bulb-outline" size={size} color={color} />
           ),
         }}
       />

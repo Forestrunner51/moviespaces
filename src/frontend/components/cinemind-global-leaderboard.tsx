@@ -8,7 +8,6 @@ import {
   ActivityIndicator,
   TouchableOpacity,
 } from "react-native";
-import { router } from "expo-router";
 import { Ionicons } from "@expo/vector-icons";
 import { Starfield } from "@/frontend/components/starfield";
 import { SpaceTheme, SpaceStyles } from "@/frontend/constants/theme";
@@ -19,12 +18,19 @@ import {
   LeaderboardEntry,
 } from "@/frontend/services/cinemind";
 
+interface GlobalLeaderboardViewProps {
+  // Formerly its own tab/route (/leaderboard) — now a mode within the
+  // CineMind tab, so this is how it hands control back to the puzzle view
+  // instead of a router.push.
+  onBack: () => void;
+}
+
 // Today's CineMind standings across every player.
 //
 // Deliberately global rather than per-Space: the Space board only exists
 // inside a Space, so a player with no Spaces finished a puzzle and had
 // nowhere to see where they landed. This is the screen that always works.
-export default function LeaderboardScreen() {
+export function GlobalLeaderboardView({ onBack }: GlobalLeaderboardViewProps) {
   const [data, setData] = useState<GlobalLeaderboard | null>(null);
   const [error, setError] = useState<string | null>(null);
   const [loading, setLoading] = useState(true);
@@ -82,6 +88,11 @@ export default function LeaderboardScreen() {
           />
         }
       >
+        <TouchableOpacity activeOpacity={0.7} style={styles.backRow} onPress={onBack}>
+          <Ionicons name="chevron-back" size={18} color={SpaceTheme.mutedOrbit} />
+          <Text style={styles.backRowText}>Back to Puzzle</Text>
+        </TouchableOpacity>
+
         <Text style={styles.title}>🧠 Today&apos;s Leaderboard</Text>
         {!!data && (
           <Text style={styles.subtitle}>
@@ -103,11 +114,7 @@ export default function LeaderboardScreen() {
           <View style={styles.card}>
             <Text style={styles.emptyTitle}>Nobody has played yet today.</Text>
             <Text style={styles.emptyText}>Be the first on the board.</Text>
-            <TouchableOpacity
-              activeOpacity={0.85}
-              style={styles.button}
-              onPress={() => router.push("/cinemind")}
-            >
+            <TouchableOpacity activeOpacity={0.85} style={styles.button} onPress={onBack}>
               <Text style={styles.buttonText}>Play Today&apos;s Puzzle</Text>
             </TouchableOpacity>
           </View>
@@ -134,11 +141,7 @@ export default function LeaderboardScreen() {
         )}
 
         {!error && !data?.you && (data?.leaderboard.length ?? 0) > 0 && (
-          <TouchableOpacity
-            activeOpacity={0.85}
-            style={styles.button}
-            onPress={() => router.push("/cinemind")}
-          >
+          <TouchableOpacity activeOpacity={0.85} style={styles.button} onPress={onBack}>
             <Text style={styles.buttonText}>Play Today&apos;s Puzzle</Text>
           </TouchableOpacity>
         )}
@@ -173,6 +176,8 @@ function medalFor(rank: number): string {
 
 const styles = StyleSheet.create({
   content: { paddingTop: 16, paddingHorizontal: 16, paddingBottom: 40 },
+  backRow: { flexDirection: "row", alignItems: "center", gap: 2, marginBottom: 12 },
+  backRowText: { fontSize: 13, color: SpaceTheme.mutedOrbit, fontWeight: "600" },
   title: { fontSize: 22, fontWeight: "700", color: SpaceTheme.starWhite, textAlign: "center" },
   subtitle: {
     fontSize: 13,
