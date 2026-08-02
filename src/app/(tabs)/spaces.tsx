@@ -16,6 +16,11 @@ import { Starfield } from "@/frontend/components/starfield";
 import { MoviePoster } from "@/frontend/components/movie-poster";
 import { SpaceTheme, SpaceStyles } from "@/frontend/constants/theme";
 import { useUnreadCounts } from "@/frontend/hooks/use-unread-counts";
+import {
+  EVENT_CATEGORIES,
+  eventCategoryOf,
+  type EventCategory,
+} from "@/frontend/constants/event-categories";
 
 interface Space {
   id: string;
@@ -29,6 +34,7 @@ interface Space {
   status: string;
   spaceType: string;
   posterPath: string | null;
+  eventCategory: string | null;
   members: { id: string; name: string; confirmed: boolean }[];
 }
 
@@ -58,7 +64,11 @@ function SpaceCard({
       style={styles.card}
       onPress={() => router.push({ pathname: "/group", params: { groupId: item.id } })}
     >
-      <MoviePoster uri={item.posterPath} width={60} />
+      <MoviePoster
+        uri={item.posterPath}
+        width={60}
+        fallbackEmoji={EVENT_CATEGORIES[eventCategoryOf(item.spaceType, item.eventCategory)].emoji}
+      />
       <View style={styles.cardBody}>
         <View style={styles.cardHeader}>
           <Text style={styles.filmName}>{item.filmName}</Text>
@@ -70,6 +80,14 @@ function SpaceCard({
             </View>
           )}
         </View>
+        {item.spaceType === "private_rental" && (
+          <View style={styles.categoryBadge}>
+            <Text style={styles.categoryBadgeText}>
+              {EVENT_CATEGORIES[eventCategoryOf(item.spaceType, item.eventCategory)].emoji}{" "}
+              {EVENT_CATEGORIES[eventCategoryOf(item.spaceType, item.eventCategory)].label}
+            </Text>
+          </View>
+        )}
         {past && (
           <View style={styles.pastBadge}>
             <Text style={styles.pastBadgeText}>⏳ This event has passed</Text>
@@ -97,6 +115,7 @@ export default function MySpacesScreen() {
   );
   const [spaces, setSpaces] = useState<Space[]>([]);
   const [loading, setLoading] = useState(true);
+  const [rentCategoryFilter, setRentCategoryFilter] = useState<EventCategory | "all">("all");
 
   const loadSpaces = async () => {
     try {
@@ -126,7 +145,11 @@ export default function MySpacesScreen() {
     }, []),
   );
 
-  const rentalSpaces = spaces.filter((s) => s.spaceType === "private_rental");
+  const rentalSpaces = spaces
+    .filter((s) => s.spaceType === "private_rental")
+    .filter(
+      (s) => rentCategoryFilter === "all" || eventCategoryOf(s.spaceType, s.eventCategory) === rentCategoryFilter,
+    );
   const gatheringSpaces = spaces.filter((s) => s.spaceType !== "private_rental");
   const unreadCounts = useUnreadCounts(spaces.map((s) => s.id));
 
@@ -188,6 +211,41 @@ export default function MySpacesScreen() {
                 <Text style={styles.newSpaceButtonText}>Find a Venue</Text>
               </TouchableOpacity>
               <Text style={styles.subtitle}>Watch parties you&apos;re part of</Text>
+              <View style={styles.categoryFilterRow}>
+                <TouchableOpacity
+                  activeOpacity={0.8}
+                  style={[styles.categoryChip, rentCategoryFilter === "all" && styles.categoryChipActive]}
+                  onPress={() => setRentCategoryFilter("all")}
+                >
+                  <Text
+                    style={[
+                      styles.categoryChipText,
+                      rentCategoryFilter === "all" && styles.categoryChipTextActive,
+                    ]}
+                  >
+                    All
+                  </Text>
+                </TouchableOpacity>
+                {(Object.entries(EVENT_CATEGORIES) as [EventCategory, { emoji: string; label: string }][]).map(
+                  ([key, { emoji, label }]) => (
+                    <TouchableOpacity
+                      key={key}
+                      activeOpacity={0.8}
+                      style={[styles.categoryChip, rentCategoryFilter === key && styles.categoryChipActive]}
+                      onPress={() => setRentCategoryFilter(key)}
+                    >
+                      <Text
+                        style={[
+                          styles.categoryChipText,
+                          rentCategoryFilter === key && styles.categoryChipTextActive,
+                        ]}
+                      >
+                        {emoji} {label}
+                      </Text>
+                    </TouchableOpacity>
+                  ),
+                )}
+              </View>
               <FlatList
                 data={rentalSpaces}
                 keyExtractor={(item) => item.id}
@@ -339,6 +397,24 @@ const styles = StyleSheet.create({
     paddingHorizontal: 8,
   },
   unreadBadgeText: { color: SpaceTheme.backgroundVoid, fontSize: 11, fontWeight: "800" },
+  categoryBadge: {
+    alignSelf: "flex-start",
+    paddingHorizontal: 8,
+    paddingVertical: 2,
+    borderRadius: 6,
+    backgroundColor: "rgba(255,255,255,0.06)",
+    marginBottom: 4,
+  },
+  categoryBadgeText: { fontSize: 11, fontWeight: "600", color: SpaceTheme.mutedOrbit },
+  categoryFilterRow: { flexDirection: "row", flexWrap: "wrap", gap: 8, marginBottom: 12 },
+  categoryChip: {
+    ...SpaceStyles.glassCard,
+    paddingVertical: 6,
+    paddingHorizontal: 12,
+  },
+  categoryChipActive: { borderColor: SpaceTheme.glowCyan, backgroundColor: "rgba(56,189,248,0.14)" },
+  categoryChipText: { fontSize: 12, fontWeight: "600", color: SpaceTheme.mutedOrbit },
+  categoryChipTextActive: { color: SpaceTheme.glowCyan },
   pastBadge: {
     alignSelf: "flex-start",
     backgroundColor: "rgba(255,255,255,0.08)",

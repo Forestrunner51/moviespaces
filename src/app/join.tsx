@@ -10,6 +10,7 @@ import {
 import { useLocalSearchParams, router } from "expo-router";
 import AsyncStorage from "@react-native-async-storage/async-storage";
 import { authFetch } from "@/frontend/services/api";
+import { supabase } from "@/frontend/config/supabase";
 import { Starfield } from "@/frontend/components/starfield";
 import { SpaceTheme, SpaceStyles } from "@/frontend/constants/theme";
 
@@ -18,10 +19,36 @@ export default function JoinScreen() {
   const [name, setName] = useState("");
   const [loading, setLoading] = useState(false);
 
+  // Auto-fill from the user's real identity rather than making them retype
+  // it every time they join a Space. Profile's display_name is the primary
+  // source (same lookup as profile.tsx) since it's what everyone else in the
+  // Space will see them as; the locally-cached name is only a fallback for
+  // the rare case a profile row doesn't exist yet. Either way this just
+  // seeds the field — it stays editable, so a one-off alias still works.
   useEffect(() => {
-    AsyncStorage.getItem("userName").then((savedName) => {
-      if (savedName) setName(savedName);
-    });
+    let cancelled = false;
+    (async () => {
+      const {
+        data: { user },
+      } = await supabase.auth.getUser();
+      if (user) {
+        const { data: row } = await supabase
+          .from("profiles")
+          .select("display_name")
+          .eq("id", user.id)
+          .maybeSingle();
+        const displayName = row?.display_name || user.user_metadata?.full_name;
+        if (displayName && !cancelled) {
+          setName(displayName);
+          return;
+        }
+      }
+      const savedName = await AsyncStorage.getItem("userName");
+      if (savedName && !cancelled) setName(savedName);
+    })();
+    return () => {
+      cancelled = true;
+    };
   }, []);
 
   const handleJoin = async () => {

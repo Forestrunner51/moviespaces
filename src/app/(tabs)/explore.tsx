@@ -18,6 +18,7 @@ import { THEATER_CHAINS, cinemaChain } from "@/frontend/constants/theater-member
 import { getDeviceLocation, Coordinates } from "@/frontend/services/nearby-theaters";
 import { distanceMiles } from "@/frontend/utils/distance";
 import { MoviePoster } from "@/frontend/components/movie-poster";
+import { EVENT_CATEGORIES, eventCategoryOf, type EventCategory } from "@/frontend/constants/event-categories";
 import { reportContent } from "@/frontend/services/moderation";
 
 // Matches the Group shape returned by GET /api/group/open
@@ -37,12 +38,21 @@ interface OpenSpace {
   maxCapacity: number;
   postActivities: string | null;
   posterPath: string | null;
+  eventCategory: string | null;
   members: { id: string; name: string; confirmed: boolean }[];
 }
 
 type TypeFilter = "all" | "public_gathering" | "private_rental";
 type PriceFilter = "any" | "under50" | "50to150" | "150plus";
 type DistanceFilter = "any" | "5" | "10" | "25";
+type EventCategoryFilter = "all" | EventCategory;
+
+const EVENT_CATEGORY_OPTIONS: { key: EventCategoryFilter; emoji: string; label: string }[] = [
+  { key: "all", emoji: "", label: "All" },
+  ...(Object.entries(EVENT_CATEGORIES) as [EventCategory, { emoji: string; label: string }][]).map(
+    ([key, { emoji, label }]) => ({ key, emoji, label }),
+  ),
+];
 
 export default function ExploreScreen() {
   const [openSpaces, setOpenSpaces] = useState<OpenSpace[]>([]);
@@ -51,6 +61,7 @@ export default function ExploreScreen() {
 
   const [movieNameFilter, setMovieNameFilter] = useState("");
   const [typeFilter, setTypeFilter] = useState<TypeFilter>("all");
+  const [eventCategoryFilter, setEventCategoryFilter] = useState<EventCategoryFilter>("all");
   const [priceFilter, setPriceFilter] = useState<PriceFilter>("any");
   const [distanceFilter, setDistanceFilter] = useState<DistanceFilter>("any");
   const [openOnly, setOpenOnly] = useState(false);
@@ -137,6 +148,11 @@ export default function ExploreScreen() {
       return false;
     }
     if (typeFilter !== "all" && space.spaceType !== typeFilter) return false;
+    if (
+      eventCategoryFilter !== "all" &&
+      eventCategoryOf(space.spaceType, space.eventCategory) !== eventCategoryFilter
+    )
+      return false;
     if (openOnly && space.members.length >= space.maxCapacity) return false;
     if (activityFilter && !space.postActivities?.split(",").includes(activityFilter)) return false;
     if (chainFilter && cinemaChain(space.cinemaName) !== chainFilter) return false;
@@ -147,6 +163,7 @@ export default function ExploreScreen() {
 
   const activeFilterCount =
     (typeFilter !== "all" ? 1 : 0) +
+    (eventCategoryFilter !== "all" ? 1 : 0) +
     (priceFilter !== "any" ? 1 : 0) +
     (distanceFilter !== "any" ? 1 : 0) +
     (chainFilter !== null ? 1 : 0) +
@@ -205,7 +222,7 @@ export default function ExploreScreen() {
                 <Ionicons name="search-outline" size={18} color={SpaceTheme.mutedOrbit} />
                 <TextInput
                   style={styles.searchInput}
-                  placeholder="Search by movie name..."
+                  placeholder="Search by title..."
                   placeholderTextColor={SpaceTheme.mutedOrbit}
                   value={movieNameFilter}
                   onChangeText={setMovieNameFilter}
@@ -273,6 +290,24 @@ export default function ExploreScreen() {
                       >
                         <Text style={[styles.chipText, typeFilter === key && styles.chipTextActive]}>
                           {label}
+                        </Text>
+                      </TouchableOpacity>
+                    ))}
+                  </View>
+
+                  <Text style={styles.filterLabel}>Event Type</Text>
+                  <View style={styles.chipRow}>
+                    {EVENT_CATEGORY_OPTIONS.map(({ key, emoji, label }) => (
+                      <TouchableOpacity
+                        key={key}
+                        activeOpacity={0.8}
+                        style={[styles.chip, eventCategoryFilter === key && styles.chipActive]}
+                        onPress={() => setEventCategoryFilter(key)}
+                      >
+                        <Text
+                          style={[styles.chipText, eventCategoryFilter === key && styles.chipTextActive]}
+                        >
+                          {emoji ? `${emoji} ${label}` : label}
                         </Text>
                       </TouchableOpacity>
                     ))}
@@ -408,7 +443,12 @@ export default function ExploreScreen() {
               style={styles.spaceCard}
               onPress={() => router.push({ pathname: "/group", params: { groupId: item.id } })}
             >
-              <MoviePoster uri={item.posterPath} width={72} style={styles.spaceCardPoster} />
+              <MoviePoster
+                uri={item.posterPath}
+                width={72}
+                style={styles.spaceCardPoster}
+                fallbackEmoji={EVENT_CATEGORIES[eventCategoryOf(item.spaceType, item.eventCategory)].emoji}
+              />
               <View style={styles.spaceCardBody}>
               <View style={styles.spaceCardHeader}>
                 <Text style={styles.spaceFilmName} numberOfLines={1}>
@@ -425,6 +465,16 @@ export default function ExploreScreen() {
                   </Text>
                 </View>
               </View>
+              {item.spaceType === "private_rental" && (
+                <View style={styles.categoryRow}>
+                  <View style={styles.categoryBadge}>
+                    <Text style={styles.categoryBadgeText}>
+                      {EVENT_CATEGORIES[eventCategoryOf(item.spaceType, item.eventCategory)].emoji}{" "}
+                      {EVENT_CATEGORIES[eventCategoryOf(item.spaceType, item.eventCategory)].label}
+                    </Text>
+                  </View>
+                </View>
+              )}
               <View style={styles.statusRow}>
                 {isHappeningTonight(item) && (
                   <View style={[styles.statusBadge, styles.statusBadgeHot]}>
@@ -639,6 +689,15 @@ const styles = StyleSheet.create({
     borderColor: "rgba(244, 114, 182, 0.4)",
   },
   typeBadgeText: { fontSize: 11, fontWeight: "700", color: SpaceTheme.starWhite },
+  categoryRow: { marginBottom: 4 },
+  categoryBadge: {
+    alignSelf: "flex-start",
+    paddingHorizontal: 8,
+    paddingVertical: 2,
+    borderRadius: 6,
+    backgroundColor: "rgba(255,255,255,0.06)",
+  },
+  categoryBadgeText: { fontSize: 11, fontWeight: "600", color: SpaceTheme.mutedOrbit },
   spaceDetails: { fontSize: 13, color: SpaceTheme.mutedOrbit, marginBottom: 2 },
   manualBadge: { fontSize: 11, color: SpaceTheme.mutedOrbit, fontStyle: "italic", marginTop: 2 },
   spacePrice: { fontSize: 13, color: SpaceTheme.accentGold, fontWeight: "700", marginTop: 4 },
