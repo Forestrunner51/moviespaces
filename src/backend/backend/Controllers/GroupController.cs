@@ -89,6 +89,14 @@ namespace Backend.Controllers
             var userId = GetUserId();
 
             var spaceType = req.SpaceType == "private_rental" ? "private_rental" : "public_gathering";
+            // Allow-listed rather than trusting the client string verbatim —
+            // this ends up in filter queries, so an unrecognized value should
+            // collapse to a safe default rather than create an unfilterable
+            // one-off category.
+            var validEventCategories = new HashSet<string> { "movie", "tv", "sports", "gaming", "awards", "other" };
+            var eventCategory = spaceType == "private_rental" && validEventCategories.Contains(req.EventCategory ?? "")
+                ? req.EventCategory
+                : spaceType == "private_rental" ? "other" : "movie";
             // Cost is optional — a watch party/venue can legitimately be free
             // (TotalCostCents null/0 means "Free to Attend" in the UI), it's
             // only invalid if a negative number sneaks through somehow.
@@ -139,6 +147,7 @@ namespace Backend.Controllers
                 PosterPath = req.PosterPath,
                 ScreeningTime = req.ScreeningTime,
                 SeasonEpisodeInfo = string.IsNullOrWhiteSpace(req.SeasonEpisodeInfo) ? null : req.SeasonEpisodeInfo.Trim(),
+                EventCategory = eventCategory,
             };
 
             group.Members.Add(new GroupMember
@@ -490,6 +499,50 @@ namespace Backend.Controllers
                 .ToListAsync();
 
             return Ok(spaces);
+        }
+
+        // GET /api/group/search-by-title?title=...
+        //
+        // Freeform private-rental titles (a Virtual "UFC 305" watch party,
+        // say) have no catalog id the way a real movie/TV pick does, so
+        // there's nothing today stopping two hosts from independently
+        // creating the exact same event as two disconnected Spaces. This is
+        // a nudge, not a hard block: surfaced client-side as "these already
+        // exist, join one instead?" rather than preventing creation outright
+        // — a same-named-but-different event is plausible enough (two
+        // different friend groups' "Movie Night") that blocking would be
+        // wrong more often than it'd help.
+        [HttpGet("search-by-title")]
+        [AllowAnonymous]
+        public async Task<IActionResult> SearchByTitle([FromQuery] string? title)
+        {
+            var normalized = title?.Trim() ?? "";
+            if (normalized.Length < 3) return Ok(new { spaces = Array.Empty<object>() });
+
+            // Escape ILIKE's own wildcard characters — a title that happens
+            // to contain a literal "%" or "_" (rare, but real event names do
+            // sometimes have them) shouldn't be treated as a pattern itself.
+            var escaped = normalized.Replace("\\", "\\\\").Replace("%", "\\%").Replace("_", "\\_");
+            var pattern = $"%{escaped}%";
+            var matches = await _db.Groups
+                .Include(g => g.Members)
+                .Where(g => g.Status == "pending" && !g.IsPublic)
+                .Where(g => g.ScreeningTime == null || g.ScreeningTime >= DateTime.UtcNow)
+                .Where(g => EF.Functions.ILike(g.FilmName, pattern))
+                .OrderByDescending(g => g.CreatedAt)
+                .Take(5)
+                .Select(g => new
+                {
+                    g.Id,
+                    g.FilmName,
+                    g.HostName,
+                    g.ShowDate,
+                    g.ShowTime,
+                    memberCount = g.Members.Count,
+                })
+                .ToListAsync();
+
+            return Ok(new { spaces = matches });
         }
 
         [HttpGet("mine")]
@@ -869,7 +922,8 @@ namespace Backend.Controllers
         int? TmdbMovieId,
         DateTime? ScreeningTime,
         string? SeasonEpisodeInfo,
-        string? PosterPath
+        string? PosterPath,
+        string? EventCategory
     );
 
     public record JoinGroupRequest(string Name);

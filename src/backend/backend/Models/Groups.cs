@@ -130,11 +130,28 @@ namespace Backend.Models
         public int ShowtimeReportCount { get; set; } = 0;
 
         // Only meaningful for TV watch parties (e.g. "Season 2 Premiere",
-        // "Episodes 1 & 2 Double Feature"). Its presence is itself the signal
-        // that a Space is a TV watch party — no separate category column,
-        // since that'd be redundant with a field that already implies it.
+        // "Episodes 1 & 2 Double Feature").
         [Column("season_episode_info")]
         public string? SeasonEpisodeInfo { get; set; }
+
+        // "movie" | "tv" | "sports" | "gaming" | "awards" | "other" — only
+        // meaningful for private_rental (a public_gathering is always a real
+        // theater movie). Needed once private_rental grew past just
+        // Movie/TV/"Other": sports, gaming, and awards are all equally
+        // freeform FilmName text with nothing else to tell them apart, unlike
+        // the old scheme where SeasonEpisodeInfo's presence alone implied TV.
+        // Nullable — legacy rows predate this column; the client (see
+        // eventCategoryOf in event-categories.ts) treats a null/missing
+        // value as "movie" for public_gathering, "other" for private_rental
+        // — it does NOT inspect SeasonEpisodeInfo to recover "tv" for a
+        // legacy private rental, since this column and the TV activity
+        // preset shipped in the same change (nothing predates it in
+        // practice) and threading SeasonEpisodeInfo through every screen
+        // that shows a category badge isn't worth it for a case that
+        // shouldn't exist. Same nullability spirit as Slug/SpaceCode
+        // elsewhere in this model, just without their inference fallback.
+        [Column("event_category")]
+        public string? EventCategory { get; set; }
 
         // Set once the "starting in 2 hours" reminder push has gone out, so
         // the reminder background service doesn't re-notify the same Space

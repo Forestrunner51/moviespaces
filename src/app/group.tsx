@@ -29,6 +29,7 @@ import { buildTicketUrl } from "@/frontend/services/ticket-links";
 import { activityLabel, activityEmoji } from "@/frontend/constants/activities";
 import { useFriends } from "@/frontend/hooks/use-friends";
 import { CineMindLeaderboard } from "@/frontend/components/cinemind-leaderboard";
+import { EVENT_CATEGORIES, eventCategoryOf } from "@/frontend/constants/event-categories";
 
 interface Member {
   id: string;
@@ -61,6 +62,7 @@ interface Group {
   showtimeReportCount: number;
   seasonEpisodeInfo: string | null;
   posterPath: string | null;
+  eventCategory: string | null;
   createdAt: string;
   members: Member[];
 }
@@ -482,11 +484,23 @@ export default function GroupScreen() {
           </View>
         )}
         <View style={styles.hero}>
-          <MoviePoster uri={group.posterPath} width={92} />
+          <MoviePoster
+            uri={group.posterPath}
+            width={92}
+            fallbackEmoji={EVENT_CATEGORIES[eventCategoryOf(group.spaceType, group.eventCategory)].emoji}
+          />
           <View style={styles.heroInfo}>
             <Text style={[styles.title, SpaceStyles.glowText, SpaceStyles.wordmark]}>
               {group.filmName}
             </Text>
+            {group.spaceType === "private_rental" && (
+              <View style={styles.categoryBadge}>
+                <Text style={styles.categoryBadgeText}>
+                  {EVENT_CATEGORIES[eventCategoryOf(group.spaceType, group.eventCategory)].emoji}{" "}
+                  {EVENT_CATEGORIES[eventCategoryOf(group.spaceType, group.eventCategory)].label}
+                </Text>
+              </View>
+            )}
             <Text style={styles.subtitle}>
               {group.cinemaName} • {group.showTime}
             </Text>
@@ -882,6 +896,15 @@ const styles = StyleSheet.create({
   title: { fontSize: 26, color: SpaceTheme.starWhite },
   subtitle: { fontSize: 14, color: SpaceTheme.mutedOrbit, marginTop: 4 },
   heroDate: { fontSize: 13, color: SpaceTheme.glowCyan, fontWeight: "600", marginTop: 4 },
+  categoryBadge: {
+    alignSelf: "flex-start",
+    paddingHorizontal: 8,
+    paddingVertical: 2,
+    borderRadius: 6,
+    backgroundColor: "rgba(255,255,255,0.06)",
+    marginTop: 6,
+  },
+  categoryBadgeText: { fontSize: 11, fontWeight: "600", color: SpaceTheme.mutedOrbit },
   tvBadge: {
     flexDirection: "row",
     alignItems: "center",

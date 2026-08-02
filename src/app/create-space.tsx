@@ -37,8 +37,18 @@ type SpaceType = "public_gathering" | "private_rental";
 const formatDate = (d: Date) =>
   `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, "0")}-${String(d.getDate()).padStart(2, "0")}`;
 
-const formatTime = (d: Date) =>
-  d.toLocaleTimeString(undefined, { hour: "numeric", minute: "2-digit", hour12: true });
+// includeZone is for Virtual events specifically — a same-day global stream
+// (an anime simulcast, an overseas fight card) is genuinely ambiguous as
+// "8:00 PM" with no zone attached once host and joiner aren't in the same
+// timezone, unlike an in-person venue where "8:00 PM" always means the
+// venue's own local time no matter who's asking.
+const formatTime = (d: Date, includeZone = false) =>
+  d.toLocaleTimeString(undefined, {
+    hour: "numeric",
+    minute: "2-digit",
+    hour12: true,
+    ...(includeZone ? { timeZoneName: "short" } : {}),
+  });
 
 // Theaters don't run showings between roughly 2am and 10:30am — catches an
 // obvious fat-finger on the time picker (e.g. AM/PM mixup) before it's saved.
@@ -73,8 +83,12 @@ export default function CreateSpaceScreen() {
   // Locked when arriving from rent-a-theater.tsx's guided flow with a
   // specific theater already picked — not a blanket lock on every private
   // rental, since someone starting a rental from scratch still needs to
-  // choose one.
-  const theaterLocked = !!prefillPlaceId;
+  // choose one. State, not a plain const: once the Home/Virtual venue chips
+  // exist, a locked user can switch away from "theater" entirely (clearing
+  // the pre-picked place) and then back — the lock has to actually release
+  // at that point, or the picker would stay permanently disabled with
+  // nothing left in it to unlock.
+  const [theaterLocked, setTheaterLocked] = useState(!!prefillPlaceId);
   const [hostName, setHostName] = useState("");
   const [theaterName, setTheaterName] = useState(prefillTheaterName ?? "");
   const [theaterPlaceId, setTheaterPlaceId] = useState<string | null>(prefillPlaceId ?? null);
@@ -89,14 +103,23 @@ export default function CreateSpaceScreen() {
   // can show poster art without a per-card metadata lookup.
   const [posterPath, setPosterPath] = useState<string | null>(prefillPosterPath ?? null);
   const [showDate, setShowDate] = useState("");
-  const [showTime, setShowTime] = useState("");
 
   // Private rental only — a rental doesn't have to be a movie screening at
-  // all: "tv" swaps the movie search for a TMDb TV-show search (plus
-  // optional season/episode info), "other" swaps it for a plain freeform
-  // description instead of forcing a title choice at all.
-  const [rentalActivityType, setRentalActivityType] = useState<"movie" | "tv" | "other">("movie");
+  // all: "tv" swaps the movie search for an OMDb TV-show search (plus
+  // optional season/episode info); sports/gaming/awards/other all swap it for
+  // a plain freeform title instead of forcing a catalog match — there's no
+  // database of UFC cards or Twitch streams to search, so these just differ
+  // in their placeholder copy to nudge the right kind of title.
+  type RentalActivityType = "movie" | "tv" | "sports" | "gaming" | "awards" | "other";
+  const [rentalActivityType, setRentalActivityType] = useState<RentalActivityType>("movie");
   const [seasonEpisodeInfo, setSeasonEpisodeInfo] = useState("");
+  // Private rental only — where the party actually happens. Reuses the same
+  // theaterName/bookingUrl fields a real theater venue already has (no schema
+  // change): "home" just means theaterName holds an address/description
+  // instead of a Google Places result, "virtual" means it holds a platform
+  // name and bookingUrl holds the stream/watch link.
+  type VenueMode = "theater" | "home" | "virtual";
+  const [venueMode, setVenueMode] = useState<VenueMode>("theater");
   const [totalCost, setTotalCost] = useState("");
   const [maxCapacity, setMaxCapacity] = useState("");
   const [bookingUrl, setBookingUrl] = useState("");
@@ -192,10 +215,31 @@ export default function CreateSpaceScreen() {
   const [showtimeConfirmed, setShowtimeConfirmed] = useState(false);
   const [nowPlaying, setNowPlaying] = useState<Movie[]>([]);
 
+  // Nudge, not a hard block — see the search-by-title endpoint's own
+  // comment for why this only informs rather than prevents creation.
+  interface SimilarSpace {
+    id: string;
+    filmName: string;
+    hostName: string;
+    showDate: string;
+    showTime: string;
+    memberCount: number;
+  }
+  const [similarSpaces, setSimilarSpaces] = useState<SimilarSpace[]>([]);
+  // Tracks which title the banner was dismissed for, rather than a plain
+  // boolean — so it naturally "un-dismisses" the moment the title changes
+  // again instead of needing an effect to explicitly reset a separate flag.
+  const [similarSpacesDismissedFor, setSimilarSpacesDismissedFor] = useState<string | null>(null);
+
   const [datePickerVisible, setDatePickerVisible] = useState(false);
   const [dateValue, setDateValue] = useState<Date | null>(null);
   const [timePickerVisible, setTimePickerVisible] = useState(false);
   const [timeValue, setTimeValue] = useState<Date | null>(null);
+  // Derived, not stored — a plain computed value naturally stays in sync
+  // with venueMode (Virtual gets a timezone suffix) with no effect/cascading
+  // render needed, unlike re-deriving it via setState whenever either
+  // timeValue or venueMode changes.
+  const showTime = timeValue ? formatTime(timeValue, venueMode === "virtual") : "";
 
   // Host name is the creator's own profile name — there's no name input on
   // this screen anymore (you don't rename yourself while creating a Space), so
@@ -244,15 +288,43 @@ export default function CreateSpaceScreen() {
 
   const searchingTv = spaceType === "private_rental" && rentalActivityType === "tv";
 
-  // Debounced TMDb search — fires 400ms after the user stops typing. An
+  // A rented custom venue isn't a public theater screening — "showing" reads
+  // more naturally there (could be a re-watch, a screener, a private premiere)
+  // than "movie" does. Public gatherings at a real theater keep "movie"
+  // since that's literally what the TMDb search underneath is finding.
+  const isCustomVenueShowing = spaceType === "private_rental" && rentalActivityType === "movie";
+
+  // Placeholder copy per non-catalog preset — the only thing that actually
+  // differs between them, since they all just set a freeform title.
+  const FREEFORM_TITLE_PLACEHOLDER: Record<"sports" | "gaming" | "awards" | "other", string> = {
+    sports: "What's the event? (e.g. UFC 305, Fight Night, Super Bowl LX)",
+    gaming: "What's the event? (e.g. Valorant Champions, The Game Awards)",
+    awards: "What's the event? (e.g. Oscars 2026, Grammys)",
+    other: "What's the event?",
+  };
+
+  // A generic noun per activity preset — used anywhere copy needs to say
+  // "this kind of thing" without hardcoding "movie" (e.g. the cost-splitting
+  // field, which used to always say "Movie Night" regardless of what was
+  // actually being hosted).
+  const EVENT_NOUN: Record<RentalActivityType, string> = {
+    movie: "Movie Night",
+    tv: "TV Event",
+    sports: "Fight Night",
+    gaming: "Gaming Event",
+    awards: "Watch Event",
+    other: "Event",
+  };
+
+  // Debounced OMDb search — fires 400ms after the user stops typing. An
   // empty query falls back to the now-playing list instead of a blank modal
   // (TV mode has no equivalent "airing now" list, so it just stays empty).
   //
   // Full catalog search is available for both space types (not just private
   // rentals) — different theaters carry different things (indie/arthouse
   // screens, re-releases, festivals), so restricting MovieSpaces to
-  // only TMDb's generic "now playing" list was too narrow for what a given
-  // theater might actually be showing. Manual entry covers whatever TMDb
+  // only OMDb's generic "now playing" list was too narrow for what a given
+  // theater might actually be showing. Manual entry covers whatever OMDb
   // itself doesn't have.
   useEffect(() => {
     if (!movieSearch.trim()) {
@@ -283,6 +355,27 @@ export default function CreateSpaceScreen() {
     return () => clearTimeout(handle);
   }, [movieSearch, nowPlaying, searchingTv]);
 
+  // Only for Virtual private rentals — a real theater's Google Place ID
+  // already gives public gatherings natural dedup, and Home/in-person
+  // rentals are inherently distinct locations anyway. Virtual is the one
+  // case where two hosts can trivially create the identical event ("UFC
+  // 305") with nothing to tell them apart.
+  useEffect(() => {
+    if (venueMode !== "virtual" || movieName.trim().length < 3) {
+      setSimilarSpaces([]);
+      return;
+    }
+    const handle = setTimeout(() => {
+      fetch(
+        `${process.env.EXPO_PUBLIC_API_URL}/api/group/search-by-title?title=${encodeURIComponent(movieName.trim())}`,
+      )
+        .then((res) => (res.ok ? res.json() : { spaces: [] }))
+        .then((data: { spaces: SimilarSpace[] }) => setSimilarSpaces(data.spaces || []))
+        .catch((err) => console.warn("Similar-space lookup failed:", err));
+    }, 500);
+    return () => clearTimeout(handle);
+  }, [movieName, venueMode]);
+
   // MovieSpaces (public_gathering) are screenings at an actual theater — bars
   // and community centers only belong in the broader Watch Party venue list.
   // A place with no returned types (rare) is kept rather than hidden, since
@@ -305,7 +398,6 @@ export default function CreateSpaceScreen() {
   const onTimeChange = (_event: any, selected: Date) => {
     if (Platform.OS === "android") setTimePickerVisible(false);
     setTimeValue(selected);
-    setShowTime(formatTime(selected));
   };
 
   // Opens Google's showtimes results for the picked film near the chosen
@@ -317,14 +409,20 @@ export default function CreateSpaceScreen() {
   };
 
   const handleSubmit = async () => {
-    const isOtherActivity = spaceType === "private_rental" && rentalActivityType === "other";
-    const mediaLabel = isOtherActivity ? "activity" : searchingTv ? "show" : "movie";
+    const isFreeformActivity =
+      spaceType === "private_rental" && rentalActivityType !== "movie" && rentalActivityType !== "tv";
+    const mediaLabel = isFreeformActivity ? "event" : searchingTv ? "show" : "movie";
+    const venueLabel = venueMode === "home" ? "address" : venueMode === "virtual" ? "platform" : "theater";
     if (!theaterName.trim() || !movieName.trim() || !showDate.trim() || !showTime.trim()) {
-      Alert.alert("Missing info", `Please fill in your theater, ${mediaLabel}, date, and time.`);
+      Alert.alert("Missing info", `Please fill in your ${venueLabel}, ${mediaLabel}, date, and time.`);
       return;
     }
 
-    if (timeValue && isOutsideBusinessHours(timeValue)) {
+    // Theater hours only make sense for an actual theater — a Home or
+    // Virtual watch party legitimately might start at 3am (an overseas UFC
+    // card, a same-day anime simulcast), so this check would otherwise block
+    // a perfectly real submission for those venue modes.
+    if (venueMode === "theater" && timeValue && isOutsideBusinessHours(timeValue)) {
       Alert.alert(
         "Check your showtime",
         "Theaters don't typically run showings between 2:00 AM and 10:30 AM — double-check the time you picked.",
@@ -385,6 +483,7 @@ export default function CreateSpaceScreen() {
           postActivities,
           hangoutNotes: hangoutNotes.trim() || null,
           seasonEpisodeInfo: searchingTv && seasonEpisodeInfo.trim() ? seasonEpisodeInfo.trim() : null,
+          eventCategory: spaceType === "private_rental" ? rentalActivityType : "movie",
         }),
       });
 
@@ -422,7 +521,22 @@ export default function CreateSpaceScreen() {
                 styles.toggleOption,
                 spaceType === "public_gathering" && styles.toggleOptionActiveCyan,
               ]}
-              onPress={() => setSpaceType("public_gathering")}
+              onPress={() => {
+                setSpaceType("public_gathering");
+                // A public gathering must always be a real Google
+                // Places theater (Explore's distance/theater-chain filters
+                // and "Find Showtimes Near Me" depend on real coordinates) —
+                // venueMode is private-rental-only UI, but its state
+                // otherwise survives switching spaceType, so force it back
+                // and drop whatever freeform Home/Virtual text was typed.
+                if (venueMode !== "theater") {
+                  setVenueMode("theater");
+                  setTheaterName("");
+                  setTheaterPlaceId(null);
+                  setTheaterLat(null);
+                  setTheaterLng(null);
+                }
+              }}
             >
               <Ionicons
                 name="planet-outline"
@@ -463,22 +577,89 @@ export default function CreateSpaceScreen() {
             </TouchableOpacity>
           </View>
 
-          <TouchableOpacity
-            activeOpacity={theaterLocked ? 1 : 0.8}
-            style={styles.pickerField}
-            onPress={() => !theaterLocked && setTheaterModalVisible(true)}
-            disabled={theaterLocked}
-          >
-            <Ionicons name="storefront-outline" size={18} color={SpaceTheme.mutedOrbit} />
-            <Text style={[styles.pickerFieldText, !theaterName && styles.pickerFieldPlaceholder]}>
-              {theaterName || "Select a nearby theater"}
-            </Text>
-            <Ionicons
-              name={theaterLocked ? "lock-closed" : "chevron-down"}
-              size={18}
-              color={SpaceTheme.mutedOrbit}
+          {spaceType === "private_rental" && (
+            <View style={styles.chipRow}>
+              <TouchableOpacity
+                activeOpacity={0.8}
+                style={[styles.afterChip, venueMode === "theater" && styles.afterChipActive]}
+                onPress={() => setVenueMode("theater")}
+              >
+                <Text style={styles.afterChipEmoji}>📍</Text>
+                <Text style={[styles.afterChipText, venueMode === "theater" && styles.afterChipTextActive]}>
+                  In-Person / Venue
+                </Text>
+              </TouchableOpacity>
+              <TouchableOpacity
+                activeOpacity={0.8}
+                style={[styles.afterChip, venueMode === "home" && styles.afterChipActive]}
+                onPress={() => {
+                  setVenueMode("home");
+                  setTheaterLocked(false);
+                  setTheaterName("");
+                  setTheaterPlaceId(null);
+                  setTheaterLat(null);
+                  setTheaterLng(null);
+                }}
+              >
+                <Text style={styles.afterChipEmoji}>🏠</Text>
+                <Text style={[styles.afterChipText, venueMode === "home" && styles.afterChipTextActive]}>
+                  Home / Hosted
+                </Text>
+              </TouchableOpacity>
+              <TouchableOpacity
+                activeOpacity={0.8}
+                style={[styles.afterChip, venueMode === "virtual" && styles.afterChipActive]}
+                onPress={() => {
+                  setVenueMode("virtual");
+                  setTheaterLocked(false);
+                  setTheaterName("");
+                  setTheaterPlaceId(null);
+                  setTheaterLat(null);
+                  setTheaterLng(null);
+                }}
+              >
+                <Text style={styles.afterChipEmoji}>🌐</Text>
+                <Text style={[styles.afterChipText, venueMode === "virtual" && styles.afterChipTextActive]}>
+                  Virtual / Online
+                </Text>
+              </TouchableOpacity>
+            </View>
+          )}
+
+          {venueMode === "theater" ? (
+            <TouchableOpacity
+              activeOpacity={theaterLocked ? 1 : 0.8}
+              style={styles.pickerField}
+              onPress={() => !theaterLocked && setTheaterModalVisible(true)}
+              disabled={theaterLocked}
+            >
+              <Ionicons name="storefront-outline" size={18} color={SpaceTheme.mutedOrbit} />
+              <Text style={[styles.pickerFieldText, !theaterName && styles.pickerFieldPlaceholder]}>
+                {theaterName || "Select a nearby theater"}
+              </Text>
+              <Ionicons
+                name={theaterLocked ? "lock-closed" : "chevron-down"}
+                size={18}
+                color={SpaceTheme.mutedOrbit}
+              />
+            </TouchableOpacity>
+          ) : venueMode === "home" ? (
+            <TextInput
+              style={styles.input}
+              placeholder="Address, room, or host's place (e.g. Sarah's Apartment, Unit 4B)"
+              placeholderTextColor={SpaceTheme.mutedOrbit}
+              value={theaterName}
+              onChangeText={setTheaterName}
             />
-          </TouchableOpacity>
+          ) : (
+            <TextInput
+              style={styles.input}
+              placeholder="Platform (e.g. Netflix Party, Twitch, Discord)"
+              placeholderTextColor={SpaceTheme.mutedOrbit}
+              value={theaterName}
+              onChangeText={setTheaterName}
+            />
+          )}
 
           {spaceType === "private_rental" && (
             <View style={styles.chipRow}>
@@ -491,7 +672,7 @@ export default function CreateSpaceScreen() {
                   setPosterPath(null);
                 }}
               >
-                <Text style={styles.afterChipEmoji}>🎬</Text>
+                <Text style={styles.afterChipEmoji}>🍿</Text>
                 <Text
                   style={[
                     styles.afterChipText,
@@ -522,9 +703,47 @@ export default function CreateSpaceScreen() {
               </TouchableOpacity>
               <TouchableOpacity
                 activeOpacity={0.8}
-                style={[styles.afterChip, rentalActivityType === "other" && styles.afterChipActive]}
+                style={[styles.afterChip, rentalActivityType === "sports" && styles.afterChipActive]}
                 onPress={() => {
-                  setRentalActivityType("other");
+                  setRentalActivityType("sports");
+                  setMovieName("");
+                  setPosterPath(null);
+                }}
+              >
+                <Text style={styles.afterChipEmoji}>🥊</Text>
+                <Text
+                  style={[
+                    styles.afterChipText,
+                    rentalActivityType === "sports" && styles.afterChipTextActive,
+                  ]}
+                >
+                  Combat Sports / Fights
+                </Text>
+              </TouchableOpacity>
+              <TouchableOpacity
+                activeOpacity={0.8}
+                style={[styles.afterChip, rentalActivityType === "gaming" && styles.afterChipActive]}
+                onPress={() => {
+                  setRentalActivityType("gaming");
+                  setMovieName("");
+                  setPosterPath(null);
+                }}
+              >
+                <Text style={styles.afterChipEmoji}>🎮</Text>
+                <Text
+                  style={[
+                    styles.afterChipText,
+                    rentalActivityType === "gaming" && styles.afterChipTextActive,
+                  ]}
+                >
+                  Gaming / Esports
+                </Text>
+              </TouchableOpacity>
+              <TouchableOpacity
+                activeOpacity={0.8}
+                style={[styles.afterChip, rentalActivityType === "awards" && styles.afterChipActive]}
+                onPress={() => {
+                  setRentalActivityType("awards");
                   setMovieName("");
                   setPosterPath(null);
                 }}
@@ -533,19 +752,40 @@ export default function CreateSpaceScreen() {
                 <Text
                   style={[
                     styles.afterChipText,
+                    rentalActivityType === "awards" && styles.afterChipTextActive,
+                  ]}
+                >
+                  Awards / Live TV
+                </Text>
+              </TouchableOpacity>
+              <TouchableOpacity
+                activeOpacity={0.8}
+                style={[styles.afterChip, rentalActivityType === "other" && styles.afterChipActive]}
+                onPress={() => {
+                  setRentalActivityType("other");
+                  setMovieName("");
+                  setPosterPath(null);
+                }}
+              >
+                <Text style={styles.afterChipEmoji}>✨</Text>
+                <Text
+                  style={[
+                    styles.afterChipText,
                     rentalActivityType === "other" && styles.afterChipTextActive,
                   ]}
                 >
-                  Sports / Gaming / Other
+                  Custom / Other
                 </Text>
               </TouchableOpacity>
             </View>
           )}
 
-          {spaceType === "private_rental" && rentalActivityType === "other" ? (
+          {spaceType === "private_rental" &&
+          rentalActivityType !== "movie" &&
+          rentalActivityType !== "tv" ? (
             <TextInput
               style={styles.input}
-              placeholder="What's the event? (e.g. Fight Night, Game Tournament, Anime Night)"
+              placeholder={FREEFORM_TITLE_PLACEHOLDER[rentalActivityType]}
               placeholderTextColor={SpaceTheme.mutedOrbit}
               value={movieName}
               onChangeText={setMovieName}
@@ -558,10 +798,49 @@ export default function CreateSpaceScreen() {
             >
               <Ionicons name={searchingTv ? "tv-outline" : "film-outline"} size={18} color={SpaceTheme.mutedOrbit} />
               <Text style={[styles.pickerFieldText, !movieName && styles.pickerFieldPlaceholder]}>
-                {movieName || (searchingTv ? "Search for a TV show" : "Search for a movie")}
+                {movieName ||
+                  (searchingTv
+                    ? "Search for a TV show"
+                    : isCustomVenueShowing
+                      ? "Search for a showing"
+                      : "Search for a movie")}
               </Text>
               <Ionicons name="chevron-down" size={18} color={SpaceTheme.mutedOrbit} />
             </TouchableOpacity>
+          )}
+
+          {similarSpacesDismissedFor !== movieName.trim() && similarSpaces.length > 0 && (
+            <View style={styles.similarBanner}>
+              <View style={styles.similarBannerHeader}>
+                <Ionicons name="information-circle-outline" size={16} color={SpaceTheme.accentGold} />
+                <Text style={styles.similarBannerTitle}>
+                  {similarSpaces.length === 1
+                    ? "A watch party for this already exists"
+                    : `${similarSpaces.length} watch parties for this already exist`}
+                </Text>
+                <TouchableOpacity onPress={() => setSimilarSpacesDismissedFor(movieName.trim())} hitSlop={8}>
+                  <Ionicons name="close" size={16} color={SpaceTheme.mutedOrbit} />
+                </TouchableOpacity>
+              </View>
+              {similarSpaces.map((s) => (
+                <TouchableOpacity
+                  key={s.id}
+                  activeOpacity={0.8}
+                  style={styles.similarRow}
+                  onPress={() => router.push({ pathname: "/group", params: { groupId: s.id } })}
+                >
+                  <Text style={styles.similarRowTitle} numberOfLines={1}>
+                    {s.filmName}
+                  </Text>
+                  <Text style={styles.similarRowSubtitle} numberOfLines={1}>
+                    Hosted by {s.hostName} • {s.showDate} • {s.showTime} • {s.memberCount} joined
+                  </Text>
+                </TouchableOpacity>
+              ))}
+              <Text style={styles.similarBannerFootnote}>
+                Tap one to join instead, or keep filling this out to create your own.
+              </Text>
+            </View>
           )}
 
           {searchingTv && (
@@ -624,12 +903,9 @@ export default function CreateSpaceScreen() {
             onPress={() => {
               // Same fix as the date field above — seed a real value up
               // front so "Done" always has something to commit even if the
-              // user never touches the spinner.
-              if (!timeValue) {
-                const initial = new Date();
-                setTimeValue(initial);
-                setShowTime(formatTime(initial));
-              }
+              // user never touches the spinner. showTime itself derives from
+              // timeValue via the effect above, not set directly here.
+              if (!timeValue) setTimeValue(new Date());
               setTimePickerVisible(true);
             }}
           >
@@ -706,7 +982,7 @@ export default function CreateSpaceScreen() {
 
               <TextInput
                 style={styles.input}
-                placeholder="Total Venue / Event Cost (Optional)"
+                placeholder={`Total Venue / ${EVENT_NOUN[rentalActivityType]} Cost (Optional)`}
                 placeholderTextColor={SpaceTheme.mutedOrbit}
                 value={totalCost}
                 onChangeText={setTotalCost}
@@ -717,7 +993,13 @@ export default function CreateSpaceScreen() {
               </Text>
               <TextInput
                 style={styles.input}
-                placeholder="Max capacity (default 40)"
+                placeholder={
+                  venueMode === "home"
+                    ? "How many people fit at your place? (default 40)"
+                    : venueMode === "virtual"
+                      ? "Max attendees (optional headcount — no real limit online)"
+                      : "Max capacity (default 40)"
+                }
                 placeholderTextColor={SpaceTheme.mutedOrbit}
                 value={maxCapacity}
                 onChangeText={setMaxCapacity}
@@ -725,7 +1007,11 @@ export default function CreateSpaceScreen() {
               />
               <TextInput
                 style={styles.input}
-                placeholder="Event / Venue Link (Optional)"
+                placeholder={
+                  venueMode === "virtual"
+                    ? "Streaming/watch link (e.g. https://netflix.com/watch/...)"
+                    : "Event / Venue Link (Optional)"
+                }
                 placeholderTextColor={SpaceTheme.mutedOrbit}
                 value={bookingUrl}
                 onChangeText={setBookingUrl}
@@ -954,7 +1240,11 @@ export default function CreateSpaceScreen() {
           <View style={styles.modalSheet}>
             <View style={styles.modalHeader}>
               <Text style={styles.modalTitle}>
-                {searchingTv ? "Search for a TV Show" : "Search for a Movie"}
+                {searchingTv
+                  ? "Search for a TV Show"
+                  : isCustomVenueShowing
+                    ? "Search for a Showing"
+                    : "Search for a Movie"}
               </Text>
               <TouchableOpacity onPress={() => setMovieModalVisible(false)} hitSlop={10}>
                 <Ionicons name="close" size={24} color={SpaceTheme.mutedOrbit} />
@@ -962,12 +1252,35 @@ export default function CreateSpaceScreen() {
             </View>
             <TextInput
               style={styles.input}
-              placeholder={searchingTv ? "Search TV shows..." : "Search movies..."}
+              placeholder={
+                searchingTv ? "Search TV shows..." : isCustomVenueShowing ? "Search showings..." : "Search movies..."
+              }
               placeholderTextColor={SpaceTheme.mutedOrbit}
               value={movieSearch}
               onChangeText={setMovieSearch}
               autoFocus
             />
+            {/* One-tap custom title — for anything that isn't in the catalog
+                at all (a Twitch stream, "UFC 305", "Oscars 2026"), so typing
+                a query is enough on its own without also having to scroll
+                past empty search results to the fallback field below. */}
+            {movieSearch.trim().length > 0 && (
+              <TouchableOpacity
+                activeOpacity={0.8}
+                style={styles.customTitleRow}
+                onPress={() => {
+                  setMovieName(movieSearch.trim());
+                  setPosterPath(null);
+                  setMovieModalVisible(false);
+                  setMovieSearch("");
+                }}
+              >
+                <Ionicons name="add-circle" size={20} color={SpaceTheme.glowCyan} />
+                <Text style={styles.customTitleRowText} numberOfLines={1}>
+                  Use &quot;{movieSearch.trim()}&quot; as the title
+                </Text>
+              </TouchableOpacity>
+            )}
             {movieSearchError ? (
               <Text style={[styles.modalEmptyText, { color: SpaceTheme.danger }]}>
                 {movieSearchError}
@@ -1004,7 +1317,8 @@ export default function CreateSpaceScreen() {
                 ListEmptyComponent={
                   movieSearch.trim() ? (
                     <Text style={styles.modalEmptyText}>
-                      No {searchingTv ? "TV shows" : "movies"} found for &quot;{movieSearch}&quot;.
+                      No {searchingTv ? "TV shows" : isCustomVenueShowing ? "showings" : "movies"} found for &quot;
+                      {movieSearch}&quot;.
                     </Text>
                   ) : null
                 }
@@ -1012,7 +1326,13 @@ export default function CreateSpaceScreen() {
             )}
             <TextInput
               style={[styles.input, { marginTop: 8 }]}
-              placeholder={searchingTv ? "Can't find it? Type the show title" : "Can't find it? Type the movie title"}
+              placeholder={
+                searchingTv
+                  ? "Can't find it? Type the show title"
+                  : isCustomVenueShowing
+                    ? "Type the event/showing name"
+                    : "Can't find it? Type the movie title"
+              }
               placeholderTextColor={SpaceTheme.mutedOrbit}
               value={movieName}
               onChangeText={(text) => {
@@ -1169,6 +1489,32 @@ const styles = StyleSheet.create({
     lineHeight: 17,
     marginTop: -4,
   },
+  similarBanner: {
+    ...SpaceStyles.glassCard,
+    padding: 12,
+    marginBottom: 16,
+    borderColor: "rgba(245, 197, 24, 0.35)",
+  },
+  similarBannerHeader: { flexDirection: "row", alignItems: "center", gap: 6, marginBottom: 8 },
+  similarBannerTitle: {
+    flex: 1,
+    fontSize: 13,
+    fontWeight: "700",
+    color: SpaceTheme.starWhite,
+  },
+  similarRow: {
+    paddingVertical: 8,
+    borderTopWidth: 1,
+    borderTopColor: "rgba(255,255,255,0.08)",
+  },
+  similarRowTitle: { fontSize: 14, fontWeight: "600", color: SpaceTheme.glowCyan, marginBottom: 2 },
+  similarRowSubtitle: { fontSize: 12, color: SpaceTheme.mutedOrbit },
+  similarBannerFootnote: {
+    fontSize: 11,
+    color: SpaceTheme.mutedOrbit,
+    marginTop: 6,
+    fontStyle: "italic",
+  },
   submitButton: {
     backgroundColor: SpaceTheme.supernovaPink,
     padding: 18,
@@ -1285,6 +1631,14 @@ const styles = StyleSheet.create({
   },
   modalRowTitle: { fontSize: 15, fontWeight: "600", color: SpaceTheme.starWhite, marginBottom: 2 },
   modalRowSubtitle: { fontSize: 13, color: SpaceTheme.mutedOrbit },
+  customTitleRow: {
+    flexDirection: "row",
+    alignItems: "center",
+    gap: 8,
+    paddingVertical: 10,
+    marginTop: 8,
+  },
+  customTitleRowText: { flex: 1, fontSize: 14, fontWeight: "600", color: SpaceTheme.glowCyan },
   friendModalRowContent: {
     flexDirection: "row",
     alignItems: "center",
