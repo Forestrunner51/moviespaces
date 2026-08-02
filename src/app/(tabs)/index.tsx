@@ -1,4 +1,4 @@
-import { useEffect, useState } from "react";
+import { useCallback, useEffect, useState } from "react";
 import {
   View,
   Text,
@@ -8,11 +8,12 @@ import {
   ActivityIndicator,
   ScrollView,
 } from "react-native";
-import { router } from "expo-router";
+import { router, useFocusEffect } from "expo-router";
 import { Ionicons } from "@expo/vector-icons";
 import { Starfield } from "@/frontend/components/starfield";
 import { SpaceTheme, SpaceStyles } from "@/frontend/constants/theme";
 import { MoviePoster } from "@/frontend/components/movie-poster";
+import { authFetch } from "@/frontend/services/api";
 
 interface NearbySpace {
   id: string;
@@ -22,6 +23,31 @@ interface NearbySpace {
   posterPath: string | null;
   showDate: string;
   showTime: string;
+}
+
+// Shape returned by GET /api/group/mine — a superset of NearbySpace, but
+// kept as its own type since "my" cards need isPublic/screeningTime to sort
+// and filter, which the public teaser feed above never needs.
+interface MySpace {
+  id: string;
+  filmName: string;
+  cinemaName: string;
+  posterPath: string | null;
+  showDate: string;
+  showTime: string;
+  screeningTime: string | null;
+  isPublic: boolean;
+  status: string;
+}
+
+// Shape returned by GET /api/group/community-spaces/discover, narrowed to
+// clubs the user has already joined.
+interface MyClub {
+  id: string;
+  displayName: string;
+  genreCategory: string | null;
+  memberCount: number;
+  playedTodayCount: number;
 }
 
 // Fisher-Yates-ish partial shuffle — good enough for picking a handful of
@@ -38,6 +64,9 @@ function pickRandom<T>(arr: T[], count: number): T[] {
 export default function HomeScreen() {
   const [nearbySpaces, setNearbySpaces] = useState<NearbySpace[]>([]);
   const [spacesLoading, setSpacesLoading] = useState(true);
+  const [mySpaces, setMySpaces] = useState<MySpace[]>([]);
+  const [mySpacesLoading, setMySpacesLoading] = useState(true);
+  const [myClubs, setMyClubs] = useState<MyClub[]>([]);
 
   useEffect(() => {
     fetch(`${process.env.EXPO_PUBLIC_API_URL}/api/group/open`)
@@ -57,48 +86,93 @@ export default function HomeScreen() {
       .finally(() => setSpacesLoading(false));
   }, []);
 
+  // Refetched on focus (not just mount) so a Space created or joined
+  // elsewhere shows up here the moment the user lands back on Home — this is
+  // now the primary watch-party hub, so "did my new Space actually appear"
+  // has to hold on every return trip, not just app cold-start.
+  useFocusEffect(
+    useCallback(() => {
+      let cancelled = false;
+
+      authFetch(`${process.env.EXPO_PUBLIC_API_URL}/api/group/mine`)
+        .then((res) => (res.ok ? res.json() : []))
+        .then((data: MySpace[]) => {
+          if (cancelled) return;
+          const now = Date.now();
+          const upcoming = (data || [])
+            // Community Spaces have their own row below — this section is
+            // for real one-off gatherings/rentals the user is actually
+            // attending. Same past/evergreen logic as group.tsx's hasPassed.
+            .filter((s) => !s.isPublic && s.status !== "cancelled")
+            .filter((s) => !s.screeningTime || new Date(s.screeningTime).getTime() >= now)
+            .sort((a, b) => {
+              if (!a.screeningTime) return 1;
+              if (!b.screeningTime) return -1;
+              return new Date(a.screeningTime).getTime() - new Date(b.screeningTime).getTime();
+            });
+          setMySpaces(upcoming.slice(0, 5));
+        })
+        .catch((err) => console.warn("Failed to load my spaces for home screen:", err))
+        .finally(() => {
+          if (!cancelled) setMySpacesLoading(false);
+        });
+
+      authFetch(`${process.env.EXPO_PUBLIC_API_URL}/api/group/community-spaces/discover`)
+        .then((res) => (res.ok ? res.json() : { spaces: [] }))
+        .then((data: { spaces: (MyClub & { isJoined: boolean })[] }) => {
+          if (cancelled) return;
+          setMyClubs((data.spaces || []).filter((s) => s.isJoined));
+        })
+        .catch((err) => console.warn("Failed to load my clubs for home screen:", err));
+
+      return () => {
+        cancelled = true;
+      };
+    }, []),
+  );
+
   return (
     <Starfield>
       <ScrollView style={styles.flex} contentContainerStyle={styles.container}>
         <Text style={[styles.title, SpaceStyles.glowText, SpaceStyles.wordmark, styles.titleSpacing]}>MovieSpaces</Text>
         <Text style={styles.chooseSubtitle}>What do you want to do?</Text>
 
-        {/* Placed above the Space actions and visually distinct: the daily
-            puzzle is the one thing that expires, so it's the only card here
-            with a reason to be opened *today* specifically. */}
-        <TouchableOpacity
-          activeOpacity={0.85}
-          style={[styles.chooseCard, styles.cineMindCard]}
-          onPress={() => router.push("/cinemind")}
-        >
-          <Text style={styles.cineMindEmoji}>🧠</Text>
-          <View style={{ flex: 1 }}>
-            <Text style={styles.chooseCardTitle}>CineMind</Text>
-            <Text style={styles.chooseCardSubtitle}>
-              Today&apos;s 3-minute movie puzzle — one play a day
+        <Text style={styles.sectionTitle}>My Upcoming Spaces</Text>
+        {mySpacesLoading ? (
+          <ActivityIndicator color={SpaceTheme.glowCyan} style={styles.sectionLoading} />
+        ) : mySpaces.length === 0 ? (
+          <View style={styles.emptySection}>
+            <Text style={styles.emptySectionText}>
+              Nothing on your calendar yet — host one below or join with a code.
             </Text>
           </View>
-          <Ionicons name="chevron-forward" size={20} color={SpaceTheme.accentGold} />
-        </TouchableOpacity>
-
-        {/* Replaces the old "Surprise Me" carousel below, which was really
-            just a plain movie list — never actually random. A real spin,
-            plus a one-off practice CineMind challenge, is what that name
-            should have meant. */}
-        <TouchableOpacity
-          activeOpacity={0.85}
-          style={[styles.chooseCard, styles.rouletteCard]}
-          onPress={() => router.push("/roulette")}
-        >
-          <Ionicons name="shuffle" size={26} color={SpaceTheme.supernovaPink} />
-          <View style={{ flex: 1 }}>
-            <Text style={styles.chooseCardTitle}>Movie Roulette</Text>
-            <Text style={styles.chooseCardSubtitle}>
-              Spin for a random film and a practice trivia challenge
-            </Text>
-          </View>
-          <Ionicons name="chevron-forward" size={20} color={SpaceTheme.supernovaPink} />
-        </TouchableOpacity>
+        ) : (
+          <FlatList
+            horizontal
+            showsHorizontalScrollIndicator={false}
+            data={mySpaces}
+            keyExtractor={(item) => item.id}
+            contentContainerStyle={styles.carouselContent}
+            renderItem={({ item }) => (
+              <TouchableOpacity
+                activeOpacity={0.85}
+                style={styles.spaceCard}
+                onPress={() => router.push({ pathname: "/group", params: { groupId: item.id } })}
+              >
+                <MoviePoster uri={item.posterPath} width={132} style={styles.spaceCardPoster} />
+                <Text style={styles.spaceCardTitle} numberOfLines={1}>
+                  {item.filmName}
+                </Text>
+                <Text style={styles.spaceCardSubtitle} numberOfLines={1}>
+                  {item.cinemaName}
+                </Text>
+                <Text style={styles.spaceCardTime} numberOfLines={1}>
+                  {item.showDate} • {item.showTime}
+                </Text>
+              </TouchableOpacity>
+            )}
+          />
+        )}
 
         <TouchableOpacity
           activeOpacity={0.85}
@@ -142,7 +216,71 @@ export default function HomeScreen() {
           <Text style={styles.codeEntryLinkText}>Have a Space code?</Text>
         </TouchableOpacity>
 
-        <Text style={styles.sectionTitle}>Upcoming Spaces</Text>
+        {myClubs.length > 0 && (
+          <>
+            <Text style={styles.sectionTitle}>My Community Clubs</Text>
+            <FlatList
+              horizontal
+              showsHorizontalScrollIndicator={false}
+              data={myClubs}
+              keyExtractor={(item) => item.id}
+              contentContainerStyle={styles.carouselContent}
+              renderItem={({ item }) => (
+                <TouchableOpacity
+                  activeOpacity={0.85}
+                  style={styles.clubChip}
+                  onPress={() => router.push({ pathname: "/group", params: { groupId: item.id } })}
+                >
+                  <Text style={styles.clubChipTitle} numberOfLines={1}>
+                    {item.displayName}
+                  </Text>
+                  <Text style={styles.clubChipSubtitle}>
+                    {item.memberCount} members
+                    {item.playedTodayCount > 0 ? ` • ${item.playedTodayCount} played today` : ""}
+                  </Text>
+                </TouchableOpacity>
+              )}
+            />
+          </>
+        )}
+
+        {/* Demoted from the app's front door: still one tap away, but no
+            longer the first card on Home — Watch Parties leads now. */}
+        <TouchableOpacity
+          activeOpacity={0.85}
+          style={[styles.chooseCard, styles.cineMindCard]}
+          onPress={() => router.push("/cinemind")}
+        >
+          <Text style={styles.cineMindEmoji}>🧠</Text>
+          <View style={{ flex: 1 }}>
+            <Text style={styles.chooseCardTitle}>CineMind</Text>
+            <Text style={styles.chooseCardSubtitle}>
+              Today&apos;s 3-minute movie puzzle — one play a day
+            </Text>
+          </View>
+          <Ionicons name="chevron-forward" size={20} color={SpaceTheme.accentGold} />
+        </TouchableOpacity>
+
+        {/* Replaces the old "Surprise Me" carousel below, which was really
+            just a plain movie list — never actually random. A real spin,
+            plus a one-off practice CineMind challenge, is what that name
+            should have meant. */}
+        <TouchableOpacity
+          activeOpacity={0.85}
+          style={[styles.chooseCard, styles.rouletteCard]}
+          onPress={() => router.push("/roulette")}
+        >
+          <Ionicons name="shuffle" size={26} color={SpaceTheme.supernovaPink} />
+          <View style={{ flex: 1 }}>
+            <Text style={styles.chooseCardTitle}>Movie Roulette</Text>
+            <Text style={styles.chooseCardSubtitle}>
+              Spin for a random film and a practice trivia challenge
+            </Text>
+          </View>
+          <Ionicons name="chevron-forward" size={20} color={SpaceTheme.supernovaPink} />
+        </TouchableOpacity>
+
+        <Text style={styles.sectionTitle}>Nearby Public Gatherings</Text>
         {spacesLoading ? (
           <ActivityIndicator color={SpaceTheme.glowCyan} style={styles.sectionLoading} />
         ) : nearbySpaces.length === 0 ? (
@@ -270,4 +408,11 @@ const styles = StyleSheet.create({
   spaceCardSubtitle: { fontSize: 12, color: SpaceTheme.mutedOrbit, marginBottom: 4 },
   spaceCardTime: { fontSize: 12, color: SpaceTheme.glowCyan, fontWeight: "600", marginBottom: 6 },
   spaceCardHost: { fontSize: 11, color: SpaceTheme.mutedOrbit },
+  clubChip: {
+    ...SpaceStyles.glassCard,
+    width: 160,
+    padding: 14,
+  },
+  clubChipTitle: { fontSize: 14, fontWeight: "700", color: SpaceTheme.starWhite, marginBottom: 4 },
+  clubChipSubtitle: { fontSize: 12, color: SpaceTheme.mutedOrbit },
 });

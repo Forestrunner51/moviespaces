@@ -12,12 +12,12 @@ import {
   KeyboardAvoidingView,
   Platform,
 } from "react-native";
-import { router } from "expo-router";
 import { Ionicons } from "@expo/vector-icons";
 import { Starfield } from "@/frontend/components/starfield";
 import { MoviePoster } from "@/frontend/components/movie-poster";
 import { LockedStateView } from "@/frontend/components/locked-state-view";
 import { CineMindStatsCard } from "@/frontend/components/cinemind-stats";
+import { GlobalLeaderboardView } from "@/frontend/components/cinemind-global-leaderboard";
 import { SpaceTheme, SpaceStyles } from "@/frontend/constants/theme";
 import {
   fetchTodayPuzzle,
@@ -40,6 +40,10 @@ import { generateShareGrid } from "@/frontend/utils/generateShareGrid";
 type Phase = "loading" | "playing" | "locked" | "results" | "error";
 
 export default function CineMindScreen() {
+  // Global leaderboard used to be its own tab/route (/leaderboard) — now a
+  // mode within this tab, switched via LeaderboardLink, so it works whether
+  // today's puzzle is loading, locked, in progress, or already submitted.
+  const [viewMode, setViewMode] = useState<"puzzle" | "leaderboard">("puzzle");
   const [phase, setPhase] = useState<Phase>("loading");
   const [errorText, setErrorText] = useState<string | null>(null);
   const [today, setToday] = useState<TodayResponse | null>(null);
@@ -227,6 +231,10 @@ export default function CineMindScreen() {
 
   // ── Render ───────────────────────────────────────────────────────────────
 
+  if (viewMode === "leaderboard") {
+    return <GlobalLeaderboardView onBack={() => setViewMode("puzzle")} />;
+  }
+
   if (phase === "loading") {
     return (
       <Starfield>
@@ -283,7 +291,7 @@ export default function CineMindScreen() {
             shareText={shareText}
           />
           {stats && <CineMindStatsCard stats={stats} />}
-          <LeaderboardLink />
+          <LeaderboardLink onPress={() => setViewMode("leaderboard")} />
         </ScrollView>
       </Starfield>
     );
@@ -317,7 +325,7 @@ export default function CineMindScreen() {
           </TouchableOpacity>
 
           {stats && <CineMindStatsCard stats={stats} />}
-          <LeaderboardLink />
+          <LeaderboardLink onPress={() => setViewMode("leaderboard")} />
           <NextPuzzleCountdown deadline={nextPuzzleAt} />
         </ScrollView>
       </Starfield>
@@ -525,13 +533,9 @@ function SlowLoadNotice() {
   return <Text style={styles.slowLoadText}>Waking up the server — this can take a moment…</Text>;
 }
 
-function LeaderboardLink() {
+function LeaderboardLink({ onPress }: { onPress: () => void }) {
   return (
-    <TouchableOpacity
-      activeOpacity={0.85}
-      style={styles.secondaryButton}
-      onPress={() => router.push("/leaderboard")}
-    >
+    <TouchableOpacity activeOpacity={0.85} style={styles.secondaryButton} onPress={onPress}>
       <Ionicons name="trophy-outline" size={18} color={SpaceTheme.accentGold} />
       <Text style={styles.secondaryButtonText}>See Today&apos;s Leaderboard</Text>
     </TouchableOpacity>
