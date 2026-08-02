@@ -106,14 +106,19 @@ function Layout() {
             real title — without one, iOS falls back to the raw route name
             ("(tabs)") for that back label. */}
         <Stack.Screen name="(tabs)" options={{ headerShown: false, title: "Home" }} />
-        <Stack.Screen name="group" options={{ title: "Movie Group" }} />
+        {/* Titles use the app's own vocabulary — Space / Watch Party — rather
+            than the pre-pivot "Group"/"Rent a Theater" wording. "Rent a
+            Theater" in particular contradicted that screen's own copy, which
+            covers bars, community spaces and your own place, and states the
+            app doesn't handle booking. */}
+        <Stack.Screen name="group" options={{ title: "Space" }} />
         <Stack.Screen name="space/[id]" options={{ title: "Opening Space..." }} />
-        <Stack.Screen name="join" options={{ title: "Join Group" }} />
+        <Stack.Screen name="join" options={{ title: "Join Space" }} />
         <Stack.Screen name="join-by-code" options={{ title: "Enter Code" }} />
         <Stack.Screen name="chat/[userId]" options={{ title: "Chat" }} />
-        <Stack.Screen name="group-chat/[id]" options={{ title: "Group Chat" }} />
+        <Stack.Screen name="group-chat/[id]" options={{ title: "Space Chat" }} />
         <Stack.Screen name="create-space" options={{ title: "Create a Space" }} />
-        <Stack.Screen name="rent-a-theater" options={{ title: "Rent a Theater" }} />
+        <Stack.Screen name="rent-a-theater" options={{ title: "Host a Watch Party" }} />
         <Stack.Screen name="legal/terms" options={{ title: "Terms of Service" }} />
         <Stack.Screen name="legal/privacy" options={{ title: "Privacy Policy" }} />
         <Stack.Screen name="settings" options={{ title: "Settings" }} />

@@ -233,14 +233,20 @@ export default function ExploreScreen() {
               actual local screenings. space-discovery.tsx is otherwise
               onboarding-only, so this is the general entry point for anyone
               past that (or who skipped it) to still find one. No genres
-              param means "show every public club." */}
+              param means "show every public club."
+
+              Styled as a real chip, not the same muted text link as the code
+              entry beside it: this opens an entire second catalog that the
+              feed below deliberately hides, so making it look like a
+              footnote undersold how much content sits behind it. */}
           <TouchableOpacity
-            activeOpacity={0.7}
-            style={styles.codeEntryLink}
+            activeOpacity={0.8}
+            style={styles.clubsChip}
             onPress={() => router.push("/space-discovery")}
           >
-            <Ionicons name="people-outline" size={15} color={SpaceTheme.mutedOrbit} />
-            <Text style={styles.codeEntryLinkText}>Browse Community Clubs</Text>
+            <Ionicons name="people-outline" size={15} color={SpaceTheme.accentGold} />
+            <Text style={styles.clubsChipText}>Browse Community Clubs</Text>
+            <Ionicons name="chevron-forward" size={14} color={SpaceTheme.accentGold} />
           </TouchableOpacity>
         </View>
 
@@ -615,7 +621,13 @@ const styles = StyleSheet.create({
   },
   title: { fontSize: 28, fontWeight: "bold", color: SpaceTheme.starWhite },
   subtitle: { fontSize: 14, color: SpaceTheme.mutedOrbit, marginBottom: 16 },
-  linkRow: { flexDirection: "row", justifyContent: "center", gap: 20, marginBottom: 8 },
+  linkRow: {
+    flexDirection: "row",
+    justifyContent: "center",
+    alignItems: "center",
+    gap: 16,
+    marginBottom: 10,
+  },
   codeEntryLink: {
     flexDirection: "row",
     alignItems: "center",
@@ -624,6 +636,18 @@ const styles = StyleSheet.create({
     paddingVertical: 4,
   },
   codeEntryLinkText: { color: SpaceTheme.mutedOrbit, fontSize: 13, fontWeight: "600" },
+  clubsChip: {
+    flexDirection: "row",
+    alignItems: "center",
+    gap: 6,
+    paddingVertical: 6,
+    paddingHorizontal: 12,
+    borderRadius: 999,
+    borderWidth: 1,
+    borderColor: "rgba(245, 197, 24, 0.35)",
+    backgroundColor: "rgba(245, 197, 24, 0.10)",
+  },
+  clubsChipText: { color: SpaceTheme.accentGold, fontSize: 13, fontWeight: "700" },
   filters: { marginBottom: 8 },
   searchBox: {
     ...SpaceStyles.glassCard,

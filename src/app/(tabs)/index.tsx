@@ -152,6 +152,29 @@ export default function HomeScreen() {
         <Text style={[styles.title, SpaceStyles.glowText, SpaceStyles.wordmark, styles.titleSpacing]}>MovieSpaces</Text>
         <Text style={styles.chooseSubtitle}>What do you want to do?</Text>
 
+        {/* Joining leads, and it's a full card rather than a muted text link.
+            Both hosting options below author an event from scratch — for a
+            new user with no friends and no Spaces yet, every prominent action
+            used to end in "you've created something nobody is in." */}
+        <TouchableOpacity
+          activeOpacity={0.85}
+          style={styles.chooseCard}
+          onPress={() => router.push({ pathname: "/(tabs)/explore" })}
+        >
+          <Ionicons name="telescope-outline" size={28} color={SpaceTheme.accentGold} />
+          <View style={{ flex: 1 }}>
+            <Text style={styles.chooseCardTitle}>Find a Space to Join</Text>
+            <Text style={styles.chooseCardSubtitle}>
+              Browse public screenings and watch parties happening near you
+            </Text>
+          </View>
+          <Ionicons name="chevron-forward" size={20} color={SpaceTheme.mutedOrbit} />
+        </TouchableOpacity>
+
+        {/* Titles say where it happens, not just what you do — "Watch a
+            Movie" and "Host a Watch Party" both read as hosting, and you can
+            watch a movie at a watch party, so the old split only made sense
+            after you'd been through both. */}
         <TouchableOpacity
           activeOpacity={0.85}
           style={styles.chooseCard}
@@ -161,9 +184,9 @@ export default function HomeScreen() {
         >
           <Ionicons name="film-outline" size={28} color={SpaceTheme.glowCyan} />
           <View style={{ flex: 1 }}>
-            <Text style={styles.chooseCardTitle}>Watch a Movie</Text>
+            <Text style={styles.chooseCardTitle}>See a Movie at a Theater</Text>
             <Text style={styles.chooseCardSubtitle}>
-              Pick a movie and a nearby theater, then start a Space with friends
+              Pick a showtime at a nearby theater and invite friends along
             </Text>
           </View>
           <Ionicons name="chevron-forward" size={20} color={SpaceTheme.mutedOrbit} />
@@ -176,10 +199,9 @@ export default function HomeScreen() {
         >
           <Ionicons name="storefront-outline" size={28} color={SpaceTheme.supernovaPink} />
           <View style={{ flex: 1 }}>
-            <Text style={styles.chooseCardTitle}>Host a Watch Party</Text>
+            <Text style={styles.chooseCardTitle}>Host at Your Own Venue</Text>
             <Text style={styles.chooseCardSubtitle}>
-              Organize a movie night, fight night, or screening at a theater, local venue, or
-              custom space
+              Your place, a bar, or a rented space — movie night, fight night, or a finale
             </Text>
           </View>
           <Ionicons name="chevron-forward" size={20} color={SpaceTheme.mutedOrbit} />

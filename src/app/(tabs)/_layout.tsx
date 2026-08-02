@@ -24,12 +24,30 @@ export default function TabsLayout() {
           ),
         }}
       />
+      {/* headerShown: false on every tab — each of these screens renders its
+          own wordmark heading, so a native header on top of that showed the
+          same word twice with 60px of dead space between them (the screens'
+          paddingTop is sized to clear the notch on its own). */}
       <Tabs.Screen
         name="explore"
         options={{
           title: "Explore",
+          headerShown: false,
           tabBarIcon: ({ color, size }) => (
             <Ionicons name="telescope-outline" size={size} color={color} />
+          ),
+        }}
+      />
+      {/* My Spaces sits in the center slot (the easiest to reach), not
+          CineMind — CineMind is the deliberately secondary daily puzzle,
+          while My Spaces is core to the watch-party pitch. */}
+      <Tabs.Screen
+        name="spaces"
+        options={{
+          title: "My Spaces",
+          headerShown: false,
+          tabBarIcon: ({ color, size }) => (
+            <Ionicons name="rocket-outline" size={size} color={color} />
           ),
         }}
       />
@@ -49,18 +67,10 @@ export default function TabsLayout() {
         }}
       />
       <Tabs.Screen
-        name="spaces"
-        options={{
-          title: "My Spaces",
-          tabBarIcon: ({ color, size }) => (
-            <Ionicons name="rocket-outline" size={size} color={color} />
-          ),
-        }}
-      />
-      <Tabs.Screen
         name="profile"
         options={{
           title: "Profile",
+          headerShown: false,
           tabBarIcon: ({ color, size }) => (
             <Ionicons name="person-circle-outline" size={size} color={color} />
           ),

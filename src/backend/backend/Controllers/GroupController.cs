@@ -377,10 +377,29 @@ namespace Backend.Controllers
 
         [HttpGet("/space/{id}")]
         [AllowAnonymous]
-        public async Task<IActionResult> SpaceInvitePage(string id)
+        public async Task<IActionResult> SpaceInvitePage(
+            string id,
+            [FromQuery] string? code,
+            [FromServices] IConfiguration configuration)
         {
             var group = await ResolveGroupAsync(id);
             if (group == null) return NotFound();
+
+            // A private Space's contents are gated here too, not just its join
+            // call. This page is anonymous and renders the full attendee list,
+            // so without this check a forwarded URL with no code still exposed
+            // everything about an invite-only Space — exactly the "a known link
+            // alone isn't enough" property IsPrivate is supposed to guarantee.
+            // Resolving *by* the code counts as presenting it (that's how
+            // /space/HORROR-style links work).
+            var presentedCode = (code ?? "").Trim();
+            var resolvedByCode = string.Equals(id.Trim(), group.SpaceCode, StringComparison.OrdinalIgnoreCase);
+            if (group.IsPrivate
+                && !resolvedByCode
+                && !string.Equals(presentedCode, group.SpaceCode, StringComparison.OrdinalIgnoreCase))
+            {
+                return Content(BuildPrivateSpaceGatePage(), "text/html");
+            }
 
             // SECURITY: HTML-encode all user-controlled strings before interpolating into
             // the page. FilmName / HostName / member Name are user-supplied (group creation,
@@ -391,6 +410,10 @@ namespace Backend.Controllers
             var hostName = WebUtility.HtmlEncode(group.HostName);
             var showTime = WebUtility.HtmlEncode(group.ShowTime);
             var showDate = WebUtility.HtmlEncode(group.ShowDate);
+            var posterUrl = WebUtility.HtmlEncode(group.PosterPath ?? "");
+            var joinCode = WebUtility.HtmlEncode(group.SpaceCode ?? "");
+            var iosStoreUrl = WebUtility.HtmlEncode(configuration["AppLinks:IosStoreUrl"] ?? "");
+            var androidStoreUrl = WebUtility.HtmlEncode(configuration["AppLinks:AndroidStoreUrl"] ?? "");
 
             var html = $@"
         <!DOCTYPE html>
@@ -401,6 +424,8 @@ namespace Backend.Controllers
             <title>{filmName} - MovieSpaces</title>
             <meta property='og:title' content='{filmName} - MovieSpaces'>
             <meta property='og:description' content='{hostName} is watching {filmName} at {cinemaName} on {showDate} at {showTime}. Join them!'>
+            {(string.IsNullOrEmpty(posterUrl) ? "" : $@"<meta property='og:image' content='{posterUrl}'>
+            <meta name='twitter:card' content='summary_large_image'>")}
             <style>
                 * {{ margin: 0; padding: 0; box-sizing: border-box; }}
                 body {{ font-family: -apple-system, sans-serif; background: #111; color: #fff; min-height: 100vh; display: flex; flex-direction: column; align-items: center; justify-content: center; padding: 24px; }}
@@ -417,6 +442,10 @@ namespace Backend.Controllers
                 button {{ width: 100%; padding: 16px; border-radius: 8px; border: none; background: #E50914; color: #fff; font-size: 18px; font-weight: bold; cursor: pointer; }}
                 .app-link {{ margin-top: 16px; font-size: 12px; color: #555; text-decoration: none; display: block; }}
                 .confirmed {{ color: #34C759; font-size: 24px; margin-bottom: 8px; }}
+                .error {{ color: #FF6B81; font-size: 14px; margin-top: 12px; min-height: 18px; }}
+                .divider {{ border-top: 1px solid #2a2a2a; margin: 24px 0 20px; }}
+                .get-app-title {{ font-size: 13px; color: #888; margin-bottom: 12px; }}
+                .store {{ display: block; padding: 13px; border-radius: 8px; background: #222; color: #fff; text-decoration: none; font-size: 15px; font-weight: 600; margin-bottom: 8px; border: 1px solid #333; }}
             </style>
         </head>
         <body>
@@ -434,32 +463,84 @@ namespace Backend.Controllers
 
                 <div id='form'>
                     <input type='text' id='name' placeholder='Your name' />
-                    <button onclick='joinSpace()'>🎟 I'm In!</button>
+                    <button id='joinBtn' onclick='joinSpace()'>🎟 I'm In!</button>
+                    <div class='error' id='error'></div>
                 </div>
                 <div id='success' style='display:none'>
                     <div class='confirmed'>✓ You're in!</div>
                     <p style='color:#888'>The host will be notified.</p>
                 </div>
-                <a href='moviespaces://space/{group.Id}' class='app-link'>Open in the MovieSpaces App</a>
+
+                <div class='divider'></div>
+                <div class='get-app-title'>Get the app to chat, RSVP and see who's going</div>
+                <a href='moviespaces://space/{group.Id}' class='store'>Open in the MovieSpaces App</a>
+                {(string.IsNullOrEmpty(iosStoreUrl) ? "" : $"<a href='{iosStoreUrl}' class='store'>Download for iPhone</a>")}
+                {(string.IsNullOrEmpty(androidStoreUrl) ? "" : $"<a href='{androidStoreUrl}' class='store'>Download for Android</a>")}
+                {(string.IsNullOrEmpty(joinCode) ? "" : $"<p class='app-link'>Space code: <strong>{joinCode}</strong></p>")}
             </div>
 
             <script>
-                const appLink = 'moviespaces://space/{group.Id}';
-                setTimeout(() => {{ window.location = appLink; }}, 250);
+                // No automatic redirect to the moviespaces:// scheme. This page
+                // exists for people who DON'T have the app, and firing an
+                // unhandled custom scheme at them produced ERR_UNKNOWN_URL_SCHEME
+                // on Android Chrome / a 'Cannot Open Page' dialog on iOS Safari —
+                // a quarter-second after landing, before they'd read anything.
+                // Opening the app is now an explicit tap (the link above);
+                // anyone who already has it gets there via the verified
+                // universal/app link without ever seeing this page.
+
+                // Stable per-browser id so a repeat visit updates the same
+                // membership instead of creating a second one, and so two
+                // different guests sharing a first name stay distinct.
+                function guestToken() {{
+                    let t = null;
+                    try {{ t = localStorage.getItem('ms_guest_token'); }} catch (e) {{}}
+                    if (!t) {{
+                        t = (crypto.randomUUID && crypto.randomUUID()) ||
+                            (Date.now() + '-' + Math.random().toString(16).slice(2));
+                        try {{ localStorage.setItem('ms_guest_token', t); }} catch (e) {{}}
+                    }}
+                    return t;
+                }}
 
                 async function joinSpace() {{
                     const name = document.getElementById('name').value.trim();
-                    if (!name) return;
+                    const errorEl = document.getElementById('error');
+                    const btn = document.getElementById('joinBtn');
+                    errorEl.textContent = '';
+                    if (!name) {{
+                        errorEl.textContent = 'Enter your name first.';
+                        return;
+                    }}
 
-                    const res = await fetch('/api/group/{group.Id}/join-web', {{
-                        method: 'POST',
-                        headers: {{ 'Content-Type': 'application/json' }},
-                        body: JSON.stringify({{ name }})
-                    }});
+                    btn.disabled = true;
+                    btn.textContent = 'Joining...';
+                    try {{
+                        const res = await fetch('/api/group/{group.Id}/join-web', {{
+                            method: 'POST',
+                            headers: {{ 'Content-Type': 'application/json' }},
+                            body: JSON.stringify({{
+                                name: name,
+                                spaceCode: {(string.IsNullOrEmpty(joinCode) ? "null" : $"'{joinCode}'")},
+                                guestToken: guestToken()
+                            }})
+                        }});
 
-                    if (res.ok) {{
-                        document.getElementById('form').style.display = 'none';
-                        document.getElementById('success').style.display = 'block';
+                        if (res.ok) {{
+                            document.getElementById('form').style.display = 'none';
+                            document.getElementById('success').style.display = 'block';
+                            return;
+                        }}
+                        // Previously there was no else branch at all, so a full
+                        // Space, a cancelled one, or a private-code rejection
+                        // made this button silently do nothing.
+                        const body = await res.json().catch(() => null);
+                        errorEl.textContent = (body && body.error) || 'Could not join. Please try again.';
+                    }} catch (e) {{
+                        errorEl.textContent = 'Network error — please try again.';
+                    }} finally {{
+                        btn.disabled = false;
+                        btn.textContent = '🎟 I\'m In!';
                     }}
                 }}
             </script>
@@ -468,6 +549,37 @@ namespace Backend.Controllers
 
             return Content(html, "text/html");
         }
+
+        // Shown instead of the full invite page when someone opens a private
+        // Space's link without the code. Deliberately reveals nothing about the
+        // Space — no title, venue, host or attendee list — since leaking those
+        // to anyone holding a forwarded URL is the exact thing IsPrivate exists
+        // to prevent. No group-specific data is interpolated, so there's
+        // nothing here to encode.
+        private static string BuildPrivateSpaceGatePage() => @"
+        <!DOCTYPE html>
+        <html>
+        <head>
+            <meta charset='utf-8'>
+            <meta name='viewport' content='width=device-width, initial-scale=1'>
+            <title>Private Space - MovieSpaces</title>
+            <style>
+                * { margin: 0; padding: 0; box-sizing: border-box; }
+                body { font-family: -apple-system, sans-serif; background: #111; color: #fff; min-height: 100vh; display: flex; align-items: center; justify-content: center; padding: 24px; }
+                .card { background: #1a1a1a; border-radius: 16px; padding: 32px; max-width: 400px; width: 100%; text-align: center; }
+                .emoji { font-size: 48px; margin-bottom: 16px; }
+                h1 { font-size: 22px; font-weight: bold; margin-bottom: 12px; }
+                p { color: #888; font-size: 14px; line-height: 20px; }
+            </style>
+        </head>
+        <body>
+            <div class='card'>
+                <div class='emoji'>&#128274;</div>
+                <h1>This Space is private</h1>
+                <p>Ask the host for their invite link or 6-character Space code, then open it in the MovieSpaces app to join.</p>
+            </div>
+        </body>
+        </html>";
 
         [HttpGet("search")]
         public async Task<IActionResult> SearchSpaces([FromQuery] int filmId)
@@ -630,14 +742,29 @@ namespace Backend.Controllers
             // from the same person and create a duplicate member row.
             var cleanName = _profanityFilter.CleanOrFallback(req.Name, "A Movie Fan");
 
-            // Guard: web joiners have no UserId, so de-dupe on name instead (case-insensitive)
-            // to avoid double-joins if the page reloads or the deep-link redirect races the click.
-            var existing = await _db.GroupMembers
-                .FirstOrDefaultAsync(m => m.GroupId == id
-                    && m.UserId == ""
+            // De-dupe on the browser's stable guest token when it sent one.
+            // Name-based de-duping (the previous behaviour, kept only as a
+            // fallback for a client that sends no token) is genuinely wrong:
+            // two different guests both called "Alex" collapsed into a single
+            // membership — the second silently received the first's memberId
+            // and never actually joined — while one guest who typed "alex" and
+            // then "Alex Smith" ended up as two separate members.
+            var guestToken = string.IsNullOrWhiteSpace(req.GuestToken) ? null : req.GuestToken.Trim();
+            var existing = guestToken != null
+                ? await _db.GroupMembers.FirstOrDefaultAsync(m =>
+                    m.GroupId == id && m.GuestToken == guestToken)
+                : await _db.GroupMembers.FirstOrDefaultAsync(m =>
+                    m.GroupId == id && m.UserId == "" && m.GuestToken == null
                     && m.Name.ToLower() == cleanName.Trim().ToLower());
             if (existing != null)
             {
+                // A returning guest may have typed a different name than last
+                // time; keep the latest rather than silently ignoring it.
+                if (existing.Name != cleanName)
+                {
+                    existing.Name = cleanName;
+                    await _db.SaveChangesAsync();
+                }
                 return Ok(new { memberId = existing.Id });
             }
 
@@ -666,6 +793,12 @@ namespace Backend.Controllers
                 GroupId = id,
                 Name = cleanName,
                 UserId = "",
+                GuestToken = guestToken,
+                // Confirmed, like before: a web guest has no way to come back
+                // and RSVP later, so leaving them pending would stall the
+                // host's "waiting for N confirmations" gate forever. The
+                // member list marks them as web guests (see group.tsx) so the
+                // host can tell this apart from a real in-app confirmation.
                 Confirmed = true
             };
 
@@ -785,6 +918,41 @@ namespace Backend.Controllers
             };
 
             return new JsonResult(association) { ContentType = "application/json" };
+        }
+
+        // The Android counterpart to the Apple association file above. app.json
+        // declares an autoVerify:true intent filter for https://<host>/space,
+        // but Android only honours it if this file verifies — without it,
+        // verification silently fails and every https invite link opens the
+        // browser even when the app is installed. Returns 404 rather than an
+        // empty statement list until the signing fingerprints are configured,
+        // since a malformed/empty file is worse than an absent one.
+        [HttpGet("/.well-known/assetlinks.json")]
+        [AllowAnonymous]
+        public IActionResult GetAndroidAssetLinks([FromServices] IConfiguration configuration)
+        {
+            var package = configuration["AppLinks:AndroidPackageName"];
+            var fingerprints = (configuration["AppLinks:AndroidSha256Fingerprints"] ?? "")
+                .Split(',', StringSplitOptions.RemoveEmptyEntries | StringSplitOptions.TrimEntries);
+
+            if (string.IsNullOrWhiteSpace(package) || fingerprints.Length == 0)
+                return NotFound();
+
+            var statements = new[]
+            {
+                new
+                {
+                    relation = new[] { "delegate_permission/common.handle_all_urls" },
+                    target = new
+                    {
+                        @namespace = "android_app",
+                        package_name = package,
+                        sha256_cert_fingerprints = fingerprints,
+                    },
+                },
+            };
+
+            return new JsonResult(statements) { ContentType = "application/json" };
         }
 
         [HttpPost("{id}/book")]
@@ -951,7 +1119,9 @@ namespace Backend.Controllers
 
     // SpaceCode is only checked when joining a private Space (see JoinGroup)
     // — optional so the request shape stays the same for every public join.
-    public record JoinGroupRequest(string Name, string? SpaceCode = null);
+    // GuestToken is web-only (see JoinGroupWeb): a stable per-browser id that
+    // gives accountless joiners something to de-dupe on other than their name.
+    public record JoinGroupRequest(string Name, string? SpaceCode = null, string? GuestToken = null);
     public record UpdateBookingUrlRequest(string? BookingUrl);
     public record NotifyMessageRequest(string SenderName, string Preview);
     public record TransferOwnershipRequest(string NewHostUserId);

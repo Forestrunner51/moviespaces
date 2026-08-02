@@ -1,6 +1,6 @@
 import { useEffect, useState } from "react";
 import * as WebBrowser from "expo-web-browser";
-import { View, Text, FlatList, StyleSheet, ActivityIndicator, TouchableOpacity, Alert } from "react-native";
+import { View, Text, FlatList, StyleSheet, ActivityIndicator, TouchableOpacity } from "react-native";
 import { Ionicons } from "@expo/vector-icons";
 import { router } from "expo-router";
 import { Starfield } from "@/frontend/components/starfield";
@@ -11,6 +11,7 @@ import {
   NearbyTheater,
 } from "@/frontend/services/nearby-theaters";
 import { getCorporateRentalUrl } from "@/frontend/utils/theater-rentals";
+import { cinemaChain } from "@/frontend/constants/theater-memberships";
 
 export default function RentATheaterScreen() {
   const [theaters, setTheaters] = useState<NearbyTheater[]>([]);
@@ -18,32 +19,32 @@ export default function RentATheaterScreen() {
   const [locationDenied, setLocationDenied] = useState(false);
   const [error, setError] = useState<string | null>(null);
 
+  // Straight into the form — no confirmation alert, and no forced detour out
+  // to a third-party site first. Previously this opened the venue's rental
+  // page in a browser *before* the user had seen the form at all, so
+  // dismissing the browser dropped them on a screen they never asked for.
+  // Booking is optional and can happen later (the Space supports a blank
+  // venue link precisely so a host can gauge interest first), so the rental
+  // page is now an opt-in link on the card instead — see below.
   const handleSelectTheater = (theater: NearbyTheater) => {
-    Alert.alert(
-      "🎟️ Ready to Host?",
-      "You can lock down this venue two ways:\n\n" +
-        "1. Book it now on their site, copy the confirmation link, and paste it here to split the cost.\n\n" +
-        "2. Leave the link blank for now to gauge friend interest first, then lock it in once enough people RSVP!",
-      [
-        { text: "Cancel", style: "cancel" },
-        {
-          text: "Let's Go",
-          onPress: async () => {
-            await WebBrowser.openBrowserAsync(getCorporateRentalUrl(theater.name));
-            router.push({
-              pathname: "/create-space",
-              params: {
-                theaterName: theater.name,
-                theaterPlaceId: theater.placeId,
-                theaterLat: theater.latitude?.toString() ?? "",
-                theaterLng: theater.longitude?.toString() ?? "",
-                spaceType: "private_rental",
-              },
-            });
-          },
-        },
-      ],
-    );
+    router.push({
+      pathname: "/create-space",
+      params: {
+        theaterName: theater.name,
+        theaterPlaceId: theater.placeId,
+        theaterLat: theater.latitude?.toString() ?? "",
+        theaterLng: theater.longitude?.toString() ?? "",
+        spaceType: "private_rental",
+      },
+    });
+  };
+
+  // Only offered for venues we can actually map to a real corporate rental
+  // program. getCorporateRentalUrl falls back to a Google search for anything
+  // unrecognized, which is noise on a neighborhood bar or community hall —
+  // those have no rental page to send someone to.
+  const handleViewRentalInfo = (theater: NearbyTheater) => {
+    WebBrowser.openBrowserAsync(getCorporateRentalUrl(theater.name));
   };
 
   useEffect(() => {
@@ -109,6 +110,18 @@ export default function RentATheaterScreen() {
                     <Text style={styles.filmName}>{item.name}</Text>
                     <Text style={styles.details}>{item.address}</Text>
                     <Text style={styles.cta}>Start a Space here →</Text>
+                    {!!cinemaChain(item.name) && (
+                      <TouchableOpacity
+                        activeOpacity={0.7}
+                        hitSlop={8}
+                        onPress={(e) => {
+                          e.stopPropagation();
+                          handleViewRentalInfo(item);
+                        }}
+                      >
+                        <Text style={styles.rentalInfoLink}>View their rental info ↗</Text>
+                      </TouchableOpacity>
+                    )}
                   </View>
                   <Ionicons name="chevron-forward" size={20} color={SpaceTheme.mutedOrbit} />
                 </View>
@@ -172,6 +185,7 @@ const styles = StyleSheet.create({
   },
   details: { fontSize: 14, color: SpaceTheme.mutedOrbit, marginBottom: 2 },
   cta: { fontSize: 13, color: SpaceTheme.supernovaPink, fontWeight: "600", marginTop: 6 },
+  rentalInfoLink: { fontSize: 12, color: SpaceTheme.mutedOrbit, marginTop: 6 },
   emptyState: {
     alignItems: "center",
     marginTop: 60,

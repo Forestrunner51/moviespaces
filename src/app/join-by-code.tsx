@@ -87,7 +87,9 @@ export default function JoinByCodeScreen() {
 }
 
 const styles = StyleSheet.create({
-  container: { flex: 1, alignItems: "center", padding: 24, paddingTop: 80, gap: 6 },
+  // paddingTop stays modest — this screen keeps its native header, which
+  // already clears the notch (see _layout.tsx).
+  container: { flex: 1, alignItems: "center", padding: 24, paddingTop: 32, gap: 6 },
   title: { fontSize: 22, fontWeight: "700", color: SpaceTheme.starWhite, marginTop: 12 },
   subtitle: { fontSize: 14, color: SpaceTheme.mutedOrbit, marginBottom: 28, textAlign: "center" },
   input: {
