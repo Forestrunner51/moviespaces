@@ -14,6 +14,7 @@ import { useCallback, useEffect, useState } from "react";
 import { useFocusEffect, router } from "expo-router";
 import { authFetch } from "@/frontend/services/api";
 import * as ImagePicker from "expo-image-picker";
+import { File } from "expo-file-system";
 import { Ionicons } from "@expo/vector-icons";
 import { Starfield } from "@/frontend/components/starfield";
 import { SpaceTheme, SpaceStyles } from "@/frontend/constants/theme";
@@ -193,13 +194,21 @@ export default function ProfileScreen() {
       let avatarUrl = profile?.avatarUrl ?? null;
 
       if (pendingAvatarUri) {
-        const response = await fetch(pendingAvatarUri);
-        const blob = await response.blob();
+        // NOT fetch(uri).blob() — React Native's Blob implementation doesn't
+        // support being built from an ArrayBuffer/ArrayBufferView (throws
+        // "Creating blobs from 'ArrayBuffer' and 'ArrayBufferView' are not
+        // supported"), which is exactly what supabase-js's upload path does
+        // under the hood. Reading the local file straight into a real
+        // ArrayBuffer via expo-file-system's File class sidesteps RN's Blob
+        // entirely — this is Supabase's own documented workaround for React
+        // Native. (Not FileSystem.readAsStringAsync — that's the pre-SDK-54
+        // legacy API and throws at runtime in SDK 56.)
+        const arrayBuffer = await new File(pendingAvatarUri).arrayBuffer();
         const path = `${userId}.jpg`;
 
         const { error: uploadError } = await supabase.storage
           .from("avatars")
-          .upload(path, blob, { contentType: "image/jpeg", upsert: true });
+          .upload(path, arrayBuffer, { contentType: "image/jpeg", upsert: true });
         if (uploadError) throw uploadError;
 
         const { data: publicUrlData } = supabase.storage

@@ -2,9 +2,12 @@ using Backend.Data;
 using Backend.Services;
 using Microsoft.EntityFrameworkCore;
 using Microsoft.AspNetCore.Authentication.JwtBearer;
+using Microsoft.AspNetCore.RateLimiting;
 using Microsoft.IdentityModel.Tokens;
 using Sentry.AspNetCore;
+using System.Security.Claims;
 using System.Text;
+using System.Threading.RateLimiting;
 
 var builder = WebApplication.CreateBuilder(args);
 
@@ -35,6 +38,60 @@ builder.Services.AddCors(options =>
               .AllowAnyMethod();
     });
 });
+
+// --- RATE LIMITING ---
+//
+// There was none at all before this. Three things needed protecting:
+//   1. Metered third-party APIs behind our own endpoints (OMDb's daily quota,
+//      Google Places' per-request billing). [Authorize] keeps out randos, but
+//      one free account could still drain the quota or run up the bill.
+//   2. Unbounded DB writes (report-showtime).
+//   3. The instance itself — this runs as a single Render instance, so a
+//      modest flood is enough to make the app unavailable for everyone.
+//
+// Partitioned per authenticated user where possible, falling back to remote IP
+// for anonymous callers, so one abusive client can't consume everyone's budget.
+static string LimitPartitionKey(HttpContext http) =>
+    http.User.FindFirstValue(ClaimTypes.NameIdentifier)
+    ?? http.User.FindFirstValue("sub")
+    ?? http.Connection.RemoteIpAddress?.ToString()
+    ?? "anonymous";
+
+builder.Services.AddRateLimiter(options =>
+{
+    options.RejectionStatusCode = StatusCodes.Status429TooManyRequests;
+
+    // Applies to every endpoint that doesn't opt into a named policy. Generous
+    // on purpose — the app polls (group.tsx refetches every 5s, chat every 4s),
+    // so this has to sit well above normal foreground usage and only catch
+    // genuine floods.
+    options.GlobalLimiter = PartitionedRateLimiter.Create<HttpContext, string>(http =>
+        RateLimitPartition.GetFixedWindowLimiter(LimitPartitionKey(http), _ => new FixedWindowRateLimiterOptions
+        {
+            PermitLimit = 300,
+            Window = TimeSpan.FromMinutes(1),
+        }));
+
+    // Endpoints that cost real money per call (OMDb, Google Places). Well above
+    // what the debounced search boxes generate by hand, far below what a script
+    // needs to burn a daily quota.
+    options.AddPolicy("metered-api", http =>
+        RateLimitPartition.GetFixedWindowLimiter(LimitPartitionKey(http), _ => new FixedWindowRateLimiterOptions
+        {
+            PermitLimit = 60,
+            Window = TimeSpan.FromMinutes(1),
+        }));
+
+    // Unbounded-write endpoints. A real user reports a bad showtime once, not
+    // ten times a minute.
+    options.AddPolicy("write-heavy", http =>
+        RateLimitPartition.GetFixedWindowLimiter(LimitPartitionKey(http), _ => new FixedWindowRateLimiterOptions
+        {
+            PermitLimit = 10,
+            Window = TimeSpan.FromMinutes(1),
+        }));
+});
+// ---------------------
 
 builder.Services.AddControllers();
 
@@ -94,6 +151,10 @@ var app = builder.Build();
 app.UseCors("AllowReactApp");
 app.UseAuthentication();
 app.UseAuthorization();
+// After authentication so the limiter can partition on the caller's user id
+// (see LimitPartitionKey) rather than lumping every signed-in user behind one
+// shared IP bucket.
+app.UseRateLimiter();
 app.MapControllers();
 
 // Anonymous, no database work — this exists to be pinged cheaply.
@@ -102,11 +163,13 @@ app.MapControllers();
 // costs the next real user a ~30s cold start AND stops background services
 // (the daily CineMind reminder) from running on time. An external uptime
 // pinger hitting this on a schedule keeps the instance warm.
+// Exempt from rate limiting: this is what keeps the instance warm, and a
+// throttled 429 here would look like a health failure to the uptime pinger.
 app.MapGet("/health", () => Results.Ok(new
 {
     status = "ok",
     utc = DateTime.UtcNow,
-})).AllowAnonymous();
+})).AllowAnonymous().DisableRateLimiting();
 
 // Applies any migrations not yet recorded in __EFMigrationsHistory. The DB is
 // already fully migrated, so on a normal boot this is a single cheap check.

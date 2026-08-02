@@ -1,6 +1,7 @@
 using Microsoft.AspNetCore.Mvc;
 using Microsoft.EntityFrameworkCore;
 using Microsoft.AspNetCore.Authorization;
+using Microsoft.AspNetCore.RateLimiting;
 using Backend.Data;
 using Backend.Models;
 using Backend.Services;
@@ -190,16 +191,22 @@ namespace Backend.Controllers
         // form), or SpaceCode (a share/onboarding link using the short code,
         // e.g. moviespaces.onrender.com/space/HORROR) — in that order, so a
         // 6-char SpaceCode can never accidentally shadow a real Guid or Slug.
+        //
+        // AsNoTracking: both callers (GetGroup, SpaceInvitePage) are read-only
+        // and GetGroup redacts SpaceCode off the returned instance before
+        // serializing it. Without this, that redaction would be a pending
+        // change on a tracked entity — one stray SaveChangesAsync in the same
+        // request scope would persist the null and destroy the real code.
         private async Task<Group?> ResolveGroupAsync(string id)
         {
             if (Guid.TryParse(id, out var groupId))
-                return await _db.Groups.Include(g => g.Members).FirstOrDefaultAsync(g => g.Id == groupId);
+                return await _db.Groups.AsNoTracking().Include(g => g.Members).FirstOrDefaultAsync(g => g.Id == groupId);
 
-            var bySlug = await _db.Groups.Include(g => g.Members).FirstOrDefaultAsync(g => g.Slug == id);
+            var bySlug = await _db.Groups.AsNoTracking().Include(g => g.Members).FirstOrDefaultAsync(g => g.Slug == id);
             if (bySlug != null) return bySlug;
 
             var normalizedCode = id.Trim().ToUpperInvariant();
-            return await _db.Groups.Include(g => g.Members).FirstOrDefaultAsync(g => g.SpaceCode == normalizedCode);
+            return await _db.Groups.AsNoTracking().Include(g => g.Members).FirstOrDefaultAsync(g => g.SpaceCode == normalizedCode);
         }
 
         // POST /api/group/community-spaces/seed
@@ -353,6 +360,18 @@ namespace Backend.Controllers
         {
             var group = await ResolveGroupAsync(id);
             if (group == null) return NotFound();
+
+            // SECURITY: SpaceCode is the credential that satisfies the private-Space
+            // gate in JoinGroup/JoinGroupWeb. This endpoint is reachable by ANY
+            // authenticated user with a group id (no membership required), so
+            // returning the code here handed out the very secret that gate checks —
+            // fetch the Space, read spaceCode, join. Only people already inside
+            // (host or joined member) get to see the code they're meant to share.
+            var userId = GetUserId();
+            var canSeeCode = !string.IsNullOrEmpty(userId)
+                && (group.UserId == userId || (group.Members?.Any(m => m.UserId == userId) ?? false));
+            if (!canSeeCode) group.SpaceCode = null;
+
             return Ok(group);
         }
 
@@ -700,8 +719,14 @@ namespace Backend.Controllers
             return Ok();
         }
 
+        // Was [AllowAnonymous] with an unbounded "+= 1" write per call and no
+        // dedupe — anyone on the internet could loop this to hammer the DB and
+        // inflate any Space's "flagged as possibly outdated" counter until it
+        // looked untrustworthy. The only caller is group.tsx's Report action,
+        // which already goes through authFetch, so requiring a token costs
+        // nothing; the rate-limit policy caps it further.
         [HttpPost("{id}/report-showtime")]
-        [AllowAnonymous]
+        [EnableRateLimiting("write-heavy")]
         public async Task<IActionResult> ReportShowtime(Guid id)
         {
             var group = await _db.Groups.FindAsync(id);

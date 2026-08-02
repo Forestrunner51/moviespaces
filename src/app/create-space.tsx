@@ -19,6 +19,7 @@ import { router, useLocalSearchParams } from "expo-router";
 import AsyncStorage from "@react-native-async-storage/async-storage";
 import DateTimePicker from "@react-native-community/datetimepicker";
 import * as ImagePicker from "expo-image-picker";
+import { File } from "expo-file-system";
 import { Ionicons } from "@expo/vector-icons";
 import { authFetch } from "@/frontend/services/api";
 import { supabase } from "@/frontend/config/supabase";
@@ -351,8 +352,15 @@ export default function CreateSpaceScreen() {
       } = await supabase.auth.getUser();
       if (!user) throw new Error("You need to be signed in to upload a photo.");
 
-      const response = await fetch(result.assets[0].uri);
-      const blob = await response.blob();
+      // NOT fetch(uri).blob() — React Native's Blob can't be built from an
+      // ArrayBuffer/ArrayBufferView (throws "Creating blobs from 'ArrayBuffer'
+      // and 'ArrayBufferView' are not supported"), which is exactly what
+      // supabase-js's upload path does under the hood. Reading the local file
+      // straight into a real ArrayBuffer via expo-file-system's File class
+      // sidesteps RN's Blob entirely — same fix as profile.tsx's avatar
+      // upload. (Not FileSystem.readAsStringAsync — that's the pre-SDK-54
+      // legacy API and throws at runtime in SDK 56.)
+      const arrayBuffer = await new File(result.assets[0].uri).arrayBuffer();
       // Namespaced under the uploader's own folder (not a groupId — the
       // Space doesn't exist yet at this point in the form) so Storage RLS
       // can scope write access to "your own folder" without needing a
@@ -361,7 +369,7 @@ export default function CreateSpaceScreen() {
 
       const { error: uploadError } = await supabase.storage
         .from("space-photos")
-        .upload(path, blob, { contentType: "image/jpeg" });
+        .upload(path, arrayBuffer, { contentType: "image/jpeg" });
       if (uploadError) throw uploadError;
 
       const { data: publicUrlData } = supabase.storage.from("space-photos").getPublicUrl(path);
