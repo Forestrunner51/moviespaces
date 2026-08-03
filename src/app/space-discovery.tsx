@@ -3,7 +3,7 @@ import { View, Text, StyleSheet, ScrollView, TouchableOpacity, ActivityIndicator
 import { useLocalSearchParams, router } from "expo-router";
 import { Ionicons } from "@expo/vector-icons";
 import { Starfield } from "@/frontend/components/starfield";
-import { SpaceTheme, SpaceStyles } from "@/frontend/constants/theme";
+import { SpaceTheme, SpaceStyles, Palette } from "@/frontend/constants/theme";
 import { authFetch } from "@/frontend/services/api";
 import { completeOnboarding } from "@/frontend/services/onboarding";
 
@@ -18,13 +18,14 @@ interface DiscoverSpace {
   isJoined: boolean;
 }
 
-const EMOJI_BY_GENRE: Record<string, string> = {
-  Blockbusters: "🍿",
-  "Sci-Fi": "🔮",
-  Horror: "🩸",
-  Indie: "🎨",
-  Action: "⚡",
-  General: "🎬",
+// Icons rather than emoji — see event-categories.ts for the reasoning.
+const ICON_BY_GENRE: Record<string, keyof typeof Ionicons.glyphMap> = {
+  Blockbusters: "film-outline",
+  "Sci-Fi": "planet-outline",
+  Horror: "skull-outline",
+  Indie: "color-palette-outline",
+  Action: "flash-outline",
+  General: "videocam-outline",
 };
 
 // Preview-before-joining: reached from onboarding's genre picker (with
@@ -112,7 +113,11 @@ export default function SpaceDiscoveryScreen() {
           spaces.map((space) => (
             <View key={space.id} style={styles.card}>
               <View style={styles.cardHeader}>
-                <Text style={styles.emoji}>{EMOJI_BY_GENRE[space.genreCategory ?? ""] ?? "🎬"}</Text>
+                <Ionicons
+                  name={ICON_BY_GENRE[space.genreCategory ?? ""] ?? "videocam-outline"}
+                  size={22}
+                  color={Palette.accent}
+                />
                 <View style={{ flex: 1 }}>
                   <Text style={styles.cardTitle}>{space.displayName}</Text>
                   {!!space.genreCategory && <Text style={styles.genreBadge}>{space.genreCategory}</Text>}
@@ -120,10 +125,10 @@ export default function SpaceDiscoveryScreen() {
               </View>
 
               <View style={styles.statsRow}>
-                <Text style={styles.statText}>👥 {space.memberCount} members</Text>
+                <Text style={styles.statText}>{space.memberCount} members</Text>
                 <Text style={styles.statText}>
                   {space.playedTodayCount > 0
-                    ? `🧠 ${space.playedTodayCount} played today · avg ${space.todayAvgScore}`
+                    ? `${space.playedTodayCount} played today · avg ${space.todayAvgScore}`
                     : "No plays yet today"}
                 </Text>
               </View>

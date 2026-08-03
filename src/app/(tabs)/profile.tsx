@@ -17,7 +17,7 @@ import * as ImagePicker from "expo-image-picker";
 import { uploadImage } from "@/frontend/services/image-upload";
 import { Ionicons } from "@expo/vector-icons";
 import { Starfield } from "@/frontend/components/starfield";
-import { SpaceTheme, SpaceStyles } from "@/frontend/constants/theme";
+import { SpaceStyles, Palette, Type, Display } from "@/frontend/constants/theme";
 import { THEATER_MEMBERSHIPS, membershipLabel } from "@/frontend/constants/theater-memberships";
 import { checkUsernameAvailable, normalizeUsername } from "@/frontend/services/username";
 import { useFriends } from "@/frontend/hooks/use-friends";
@@ -261,7 +261,7 @@ export default function ProfileScreen() {
   if (loading) {
     return (
       <Starfield>
-        <ActivityIndicator size="large" color={SpaceTheme.glowCyan} style={{ flex: 1 }} />
+        <ActivityIndicator size="large" color={Palette.accent} style={{ flex: 1 }} />
       </Starfield>
     );
   }
@@ -284,7 +284,7 @@ export default function ProfileScreen() {
             style={styles.settingsButton}
             onPress={() => router.push("/settings")}
           >
-            <Ionicons name="settings-outline" size={24} color={SpaceTheme.starWhite} />
+            <Ionicons name="settings-outline" size={24} color={Palette.text} />
           </TouchableOpacity>
         </View>
 
@@ -316,25 +316,25 @@ export default function ProfileScreen() {
                 value={nameInput}
                 onChangeText={setNameInput}
                 placeholder="Display name"
-                placeholderTextColor={SpaceTheme.mutedOrbit}
+                placeholderTextColor={Palette.textMuted}
               />
               <TextInput
                 style={[styles.nameInput, styles.usernameInput]}
                 value={usernameInput}
                 onChangeText={(text) => setUsernameInput(text.toLowerCase())}
                 placeholder="username"
-                placeholderTextColor={SpaceTheme.mutedOrbit}
+                placeholderTextColor={Palette.textMuted}
                 autoCapitalize="none"
                 autoCorrect={false}
               />
               {checkingUsername ? (
-                <ActivityIndicator size="small" color={SpaceTheme.mutedOrbit} style={{ marginTop: 6 }} />
+                <ActivityIndicator size="small" color={Palette.textMuted} style={{ marginTop: 6 }} />
               ) : (
                 usernameCheck && (
                   <Text
                     style={[
                       styles.usernameCheckText,
-                      { color: usernameCheck.available ? "#4ADE80" : SpaceTheme.supernovaPink },
+                      { color: usernameCheck.available ? Palette.positive : Palette.accent },
                     ]}
                   >
                     {usernameCheck.available ? "✓" : "✗"} {usernameCheck.message}
@@ -413,7 +413,7 @@ export default function ProfileScreen() {
                 disabled={saving}
               >
                 {saving ? (
-                  <ActivityIndicator color={SpaceTheme.backgroundVoid} />
+                  <ActivityIndicator color={Palette.base} />
                 ) : (
                   <Text style={styles.saveButtonText}>Save</Text>
                 )}
@@ -491,11 +491,7 @@ const styles = StyleSheet.create({
     paddingHorizontal: 16,
     paddingBottom: 40,
   },
-  title: {
-    fontSize: 28,
-    fontWeight: "bold",
-    color: SpaceTheme.starWhite,
-  },
+  title: { ...Display.heading, color: Palette.text },
   titleRow: {
     flexDirection: "row",
     justifyContent: "space-between",
@@ -526,11 +522,11 @@ const styles = StyleSheet.create({
     width: 84,
     height: 84,
     borderRadius: 42,
-    backgroundColor: SpaceTheme.glowCyan,
+    backgroundColor: Palette.accent,
     alignItems: "center",
     justifyContent: "center",
   },
-  avatarPlaceholderText: { color: SpaceTheme.backgroundVoid, fontSize: 32, fontWeight: "700" },
+  avatarPlaceholderText: { color: Palette.base, fontSize: 32, fontWeight: "700" },
   avatarEditBadge: {
     position: "absolute",
     bottom: 0,
@@ -542,15 +538,15 @@ const styles = StyleSheet.create({
     paddingVertical: 4,
     alignItems: "center",
   },
-  avatarEditBadgeText: { color: SpaceTheme.starWhite, fontSize: 11, fontWeight: "700" },
-  name: { fontSize: 20, fontWeight: "700", color: SpaceTheme.starWhite },
-  usernameText: { fontSize: 14, color: SpaceTheme.mutedOrbit, marginTop: 2 },
-  usernameInput: { marginTop: 8, fontSize: 15 },
-  usernameCheckText: { fontSize: 12, fontWeight: "600", marginTop: 6 },
+  avatarEditBadgeText: { ...Type.caption, color: Palette.text, fontWeight: "700"},
+  name: { ...Type.title, fontWeight: "700", color: Palette.text},
+  usernameText: { ...Type.small, color: Palette.textMuted, marginTop: 2},
+  usernameInput: { ...Type.small, marginTop: 8,},
+  usernameCheckText: { ...Type.caption, fontWeight: "600", marginTop: 6},
   nameInput: {
-    fontSize: 18,
+    ...Type.title,
     fontWeight: "700",
-    color: SpaceTheme.starWhite,
+    color: Palette.text,
     borderWidth: 1,
     borderColor: "rgba(255,255,255,0.15)",
     backgroundColor: "rgba(255,255,255,0.05)",
@@ -560,14 +556,14 @@ const styles = StyleSheet.create({
     minWidth: 200,
     textAlign: "center",
   },
-  email: { fontSize: 15, color: SpaceTheme.mutedOrbit, marginTop: 4 },
-  joined: { fontSize: 13, color: SpaceTheme.mutedOrbit, marginTop: 8 },
-  friendCount: { fontSize: 15, fontWeight: "700", color: SpaceTheme.glowCyan, marginTop: 10 },
+  email: { ...Type.small, color: Palette.textMuted, marginTop: 4},
+  joined: { ...Type.small, color: Palette.textMuted, marginTop: 8},
+  friendCount: { ...Type.small, fontWeight: "700", color: Palette.accent, marginTop: 10},
   membershipsSection: { marginTop: 16, width: "100%" },
   membershipsLabel: {
-    fontSize: 12,
+    ...Type.caption,
     fontWeight: "700",
-    color: SpaceTheme.mutedOrbit,
+    color: Palette.textMuted,
     marginBottom: 8,
     textTransform: "uppercase",
     textAlign: "center",
@@ -579,48 +575,48 @@ const styles = StyleSheet.create({
     paddingHorizontal: 12,
   },
   membershipChipActive: {
-    backgroundColor: "rgba(56, 189, 248, 0.15)",
-    borderColor: SpaceTheme.glowCyan,
+    backgroundColor: Palette.accentDim,
+    borderColor: Palette.accent,
   },
-  membershipChipText: { fontSize: 13, fontWeight: "600", color: SpaceTheme.mutedOrbit },
-  membershipChipTextActive: { color: SpaceTheme.glowCyan },
+  membershipChipText: { ...Type.small, fontWeight: "600", color: Palette.textMuted},
+  membershipChipTextActive: { color: Palette.accent },
   membershipBadge: {
-    backgroundColor: "rgba(56, 189, 248, 0.12)",
+    backgroundColor: Palette.accentDim,
     borderWidth: 1,
-    borderColor: "rgba(56, 189, 248, 0.35)",
+    borderColor: Palette.accentBorder,
     borderRadius: 8,
     paddingVertical: 5,
     paddingHorizontal: 10,
   },
-  membershipBadgeText: { fontSize: 12, fontWeight: "600", color: SpaceTheme.glowCyan },
+  membershipBadgeText: { ...Type.caption, fontWeight: "600", color: Palette.accent},
   editButton: { marginTop: 16, padding: 8 },
-  editButtonText: { color: SpaceTheme.glowCyan, fontSize: 15, fontWeight: "600" },
+  editButtonText: { ...Type.small, color: Palette.accent, fontWeight: "600"},
   editActions: { flexDirection: "row", gap: 12, marginTop: 16 },
   saveButton: {
-    backgroundColor: SpaceTheme.glowCyan,
+    backgroundColor: Palette.accent,
     paddingVertical: 10,
     paddingHorizontal: 24,
     borderRadius: 8,
   },
-  saveButtonText: { color: SpaceTheme.backgroundVoid, fontWeight: "700", fontSize: 15 },
+  saveButtonText: { ...Type.small, color: Palette.base, fontWeight: "700",},
   cancelEditButton: {
     paddingVertical: 10,
     paddingHorizontal: 16,
   },
-  cancelEditButtonText: { color: SpaceTheme.mutedOrbit, fontSize: 15 },
+  cancelEditButtonText: { ...Type.small, color: Palette.textMuted,},
   spacesSection: { marginBottom: 24 },
   spacesSectionTitle: {
-    fontSize: 16,
+    ...Type.body,
     fontWeight: "700",
-    color: SpaceTheme.starWhite,
+    color: Palette.text,
     marginBottom: 10,
   },
-  spacesEmptyText: { fontSize: 13, color: SpaceTheme.mutedOrbit },
+  spacesEmptyText: { ...Type.small, color: Palette.textMuted},
   spaceRow: {
     ...SpaceStyles.glassCard,
     padding: 12,
     marginBottom: 8,
   },
-  spaceRowTitle: { fontSize: 15, fontWeight: "600", color: SpaceTheme.starWhite },
-  spaceRowSubtitle: { fontSize: 12, color: SpaceTheme.mutedOrbit, marginTop: 2 },
+  spaceRowTitle: { ...Type.small, fontWeight: "600", color: Palette.text},
+  spaceRowSubtitle: { ...Type.caption, color: Palette.textMuted, marginTop: 2},
 });

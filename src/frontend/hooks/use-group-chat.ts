@@ -123,15 +123,17 @@ export function useGroupChat(groupType: GroupChatType, groupId: string) {
   //
   // Marking only on mount left anything that landed mid-conversation still
   // counted as unread: you'd watch a message come in, leave, and the badge
-  // would claim it was new. Keyed on the newest message's timestamp so this
-  // writes at most once per genuinely new message, not on every 4s poll.
+  // would claim it was new. Keyed on Space + newest message timestamp so this
+  // writes at most once per genuinely new message, not on every 4s poll, and
+  // switching Spaces always re-marks even if both share a latest timestamp.
   const lastMarkedRef = useRef<string | null>(null);
   const latestMessageAt = messages.length ? messages[messages.length - 1].created_at : null;
+  const markKey = latestMessageAt ? `${groupId}:${latestMessageAt}` : null;
 
   useEffect(() => {
-    if (!currentUserId || !groupId || !latestMessageAt) return;
-    if (lastMarkedRef.current === latestMessageAt) return;
-    lastMarkedRef.current = latestMessageAt;
+    if (!currentUserId || !groupId || !markKey) return;
+    if (lastMarkedRef.current === markKey) return;
+    lastMarkedRef.current = markKey;
 
     supabase
       .from("group_message_reads")
@@ -140,14 +142,14 @@ export function useGroupChat(groupType: GroupChatType, groupId: string) {
         { onConflict: "user_id,group_type,group_id" },
       )
       .then(({ error }) => {
-        if (error) console.warn("Failed to mark chat as read:", error);
+        if (error) {
+          console.warn("Failed to mark chat as read:", error);
+          // Clear the key so the next poll retries rather than treating a
+          // failed write as done.
+          lastMarkedRef.current = null;
+        }
       });
-  }, [currentUserId, groupId, groupType, latestMessageAt]);
-
-  // Reset when switching Spaces so the next one gets its own marker.
-  useEffect(() => {
-    lastMarkedRef.current = null;
-  }, [groupId]);
+  }, [currentUserId, groupId, groupType, markKey]);
 
   const sendMessage = async (content: string) => {
     if (!currentUserId || !groupId || !content.trim()) return { success: false };

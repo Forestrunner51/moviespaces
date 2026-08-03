@@ -25,7 +25,7 @@ import { authFetch } from "@/frontend/services/api";
 import { supabase } from "@/frontend/config/supabase";
 import { Starfield } from "@/frontend/components/starfield";
 import { MoviePoster } from "@/frontend/components/movie-poster";
-import { SpaceTheme, SpaceStyles } from "@/frontend/constants/theme";
+import { SpaceStyles, Palette, Type } from "@/frontend/constants/theme";
 import { POST_ACTIVITIES } from "@/frontend/constants/activities";
 import { useFriends } from "@/frontend/hooks/use-friends";
 import { searchMovies, searchTvShows, getNowPlaying, Movie } from "@/frontend/services/movies";
@@ -198,7 +198,7 @@ export default function CreateSpaceScreen() {
     const rows = Array.from(invitedFriendIds).map((receiverId) => ({
       sender_id: currentUserId,
       receiver_id: receiverId,
-      content: `🎬 ${hostName.trim() || "A friend"} invited you to a watch party for ${movieName.trim()}! Join here: ${link}`,
+      content: `${hostName.trim() || "A friend"} invited you to a watch party for ${movieName.trim()}. Join here: ${link}`,
     }));
     try {
       await supabase.from("messages").insert(rows);
@@ -611,7 +611,7 @@ export default function CreateSpaceScreen() {
               <Ionicons
                 name="planet-outline"
                 size={20}
-                color={spaceType === "public_gathering" ? SpaceTheme.glowCyan : SpaceTheme.mutedOrbit}
+                color={spaceType === "public_gathering" ? Palette.accent : Palette.textMuted}
               />
               <Text
                 style={[
@@ -634,7 +634,7 @@ export default function CreateSpaceScreen() {
               <Ionicons
                 name="storefront-outline"
                 size={20}
-                color={spaceType === "private_rental" ? SpaceTheme.supernovaPink : SpaceTheme.mutedOrbit}
+                color={spaceType === "private_rental" ? Palette.accent : Palette.textMuted}
               />
               <Text
                 style={[
@@ -654,7 +654,7 @@ export default function CreateSpaceScreen() {
                 style={[styles.afterChip, venueMode === "theater" && styles.afterChipActive]}
                 onPress={() => setVenueMode("theater")}
               >
-                <Text style={styles.afterChipEmoji}>📍</Text>
+                <Ionicons name="location-outline" size={15} color={Palette.textMuted} />
                 <Text style={[styles.afterChipText, venueMode === "theater" && styles.afterChipTextActive]}>
                   In-Person / Venue
                 </Text>
@@ -671,7 +671,7 @@ export default function CreateSpaceScreen() {
                   setTheaterLng(null);
                 }}
               >
-                <Text style={styles.afterChipEmoji}>🏠</Text>
+                <Ionicons name="home-outline" size={15} color={Palette.textMuted} />
                 <Text style={[styles.afterChipText, venueMode === "home" && styles.afterChipTextActive]}>
                   Home / Hosted
                 </Text>
@@ -686,7 +686,7 @@ export default function CreateSpaceScreen() {
               onPress={() => !theaterLocked && setTheaterModalVisible(true)}
               disabled={theaterLocked}
             >
-              <Ionicons name="storefront-outline" size={18} color={SpaceTheme.mutedOrbit} />
+              <Ionicons name="storefront-outline" size={18} color={Palette.textMuted} />
               <Text style={[styles.pickerFieldText, !theaterName && styles.pickerFieldPlaceholder]}>
                 {theaterName ||
                   (spaceType === "private_rental" ? "Select a location" : "Select a nearby theater")}
@@ -694,14 +694,14 @@ export default function CreateSpaceScreen() {
               <Ionicons
                 name={theaterLocked ? "lock-closed" : "chevron-down"}
                 size={18}
-                color={SpaceTheme.mutedOrbit}
+                color={Palette.textMuted}
               />
             </TouchableOpacity>
           ) : (
             <TextInput
               style={styles.input}
               placeholder="Address, room, or host's place (e.g. Sarah's Apartment, Unit 4B)"
-              placeholderTextColor={SpaceTheme.mutedOrbit}
+              placeholderTextColor={Palette.textMuted}
               value={theaterName}
               onChangeText={setTheaterName}
             />
@@ -718,7 +718,7 @@ export default function CreateSpaceScreen() {
                   setPosterPath(null);
                 }}
               >
-                <Text style={styles.afterChipEmoji}>🍿</Text>
+                <Ionicons name="film-outline" size={15} color={Palette.textMuted} />
                 <Text
                   style={[
                     styles.afterChipText,
@@ -737,7 +737,7 @@ export default function CreateSpaceScreen() {
                   setPosterPath(null);
                 }}
               >
-                <Text style={styles.afterChipEmoji}>📺</Text>
+                <Ionicons name="tv-outline" size={15} color={Palette.textMuted} />
                 <Text
                   style={[
                     styles.afterChipText,
@@ -756,7 +756,7 @@ export default function CreateSpaceScreen() {
                   setPosterPath(null);
                 }}
               >
-                <Text style={styles.afterChipEmoji}>🥊</Text>
+                <Ionicons name="football-outline" size={15} color={Palette.textMuted} />
                 <Text
                   style={[
                     styles.afterChipText,
@@ -775,7 +775,7 @@ export default function CreateSpaceScreen() {
                   setPosterPath(null);
                 }}
               >
-                <Text style={styles.afterChipEmoji}>🎮</Text>
+                <Ionicons name="game-controller-outline" size={15} color={Palette.textMuted} />
                 <Text
                   style={[
                     styles.afterChipText,
@@ -794,7 +794,7 @@ export default function CreateSpaceScreen() {
                   setPosterPath(null);
                 }}
               >
-                <Text style={styles.afterChipEmoji}>🏆</Text>
+                <Ionicons name="trophy-outline" size={15} color={Palette.textMuted} />
                 <Text
                   style={[
                     styles.afterChipText,
@@ -813,7 +813,7 @@ export default function CreateSpaceScreen() {
                   setPosterPath(null);
                 }}
               >
-                <Text style={styles.afterChipEmoji}>✨</Text>
+                <Ionicons name="sparkles-outline" size={15} color={Palette.textMuted} />
                 <Text
                   style={[
                     styles.afterChipText,
@@ -833,7 +833,7 @@ export default function CreateSpaceScreen() {
               <TextInput
                 style={styles.input}
                 placeholder={FREEFORM_TITLE_PLACEHOLDER[rentalActivityType]}
-                placeholderTextColor={SpaceTheme.mutedOrbit}
+                placeholderTextColor={Palette.textMuted}
                 value={movieName}
                 onChangeText={setMovieName}
               />
@@ -843,7 +843,7 @@ export default function CreateSpaceScreen() {
                 onPress={handlePickEventPhoto}
                 disabled={uploadingEventPhoto}
               >
-                <MoviePoster uri={posterPath} width={56} fallbackEmoji="📷" />
+                <MoviePoster uri={posterPath} width={56} fallbackIcon="camera-outline" />
                 <View style={styles.eventPhotoInfo}>
                   <Text style={styles.eventPhotoLabel}>
                     {posterPath ? "Change cover photo" : "Add a cover photo (optional)"}
@@ -852,7 +852,7 @@ export default function CreateSpaceScreen() {
                     Shown on your Space instead of the default icon.
                   </Text>
                 </View>
-                {uploadingEventPhoto && <ActivityIndicator color={SpaceTheme.glowCyan} />}
+                {uploadingEventPhoto && <ActivityIndicator color={Palette.accent} />}
               </TouchableOpacity>
             </>
           ) : (
@@ -861,7 +861,7 @@ export default function CreateSpaceScreen() {
               style={styles.pickerField}
               onPress={() => setMovieModalVisible(true)}
             >
-              <Ionicons name={searchingTv ? "tv-outline" : "film-outline"} size={18} color={SpaceTheme.mutedOrbit} />
+              <Ionicons name={searchingTv ? "tv-outline" : "film-outline"} size={18} color={Palette.textMuted} />
               <Text style={[styles.pickerFieldText, !movieName && styles.pickerFieldPlaceholder]}>
                 {movieName ||
                   (searchingTv
@@ -870,7 +870,7 @@ export default function CreateSpaceScreen() {
                       ? "Search for a showing"
                       : "Search for a movie")}
               </Text>
-              <Ionicons name="chevron-down" size={18} color={SpaceTheme.mutedOrbit} />
+              <Ionicons name="chevron-down" size={18} color={Palette.textMuted} />
             </TouchableOpacity>
           )}
 
@@ -878,7 +878,7 @@ export default function CreateSpaceScreen() {
             <TextInput
               style={styles.input}
               placeholder="Season & Episode Info (Optional) — e.g. Season 2 Premiere"
-              placeholderTextColor={SpaceTheme.mutedOrbit}
+              placeholderTextColor={Palette.textMuted}
               value={seasonEpisodeInfo}
               onChangeText={setSeasonEpisodeInfo}
             />
@@ -900,7 +900,7 @@ export default function CreateSpaceScreen() {
               setDatePickerVisible(true);
             }}
           >
-            <Ionicons name="calendar-outline" size={18} color={SpaceTheme.mutedOrbit} />
+            <Ionicons name="calendar-outline" size={18} color={Palette.textMuted} />
             <Text style={[styles.pickerFieldText, !showDate && styles.pickerFieldPlaceholder]}>
               {showDate || "Select screening date"}
             </Text>
@@ -940,7 +940,7 @@ export default function CreateSpaceScreen() {
               setTimePickerVisible(true);
             }}
           >
-            <Ionicons name="time-outline" size={18} color={SpaceTheme.mutedOrbit} />
+            <Ionicons name="time-outline" size={18} color={Palette.textMuted} />
             <Text style={[styles.pickerFieldText, !showTime && styles.pickerFieldPlaceholder]}>
               {showTime || "Select screening time"}
             </Text>
@@ -975,7 +975,7 @@ export default function CreateSpaceScreen() {
               style={styles.showtimeButton}
               onPress={handleFindShowtimes}
             >
-              <Ionicons name="search-outline" size={18} color={SpaceTheme.backgroundVoid} />
+              <Ionicons name="search-outline" size={18} color={Palette.base} />
               <Text style={styles.showtimeButtonText}>Find Showtimes Near Me</Text>
             </TouchableOpacity>
           )}
@@ -988,7 +988,7 @@ export default function CreateSpaceScreen() {
             <Ionicons
               name={moreOptionsOpen ? "chevron-up" : "chevron-down"}
               size={16}
-              color={SpaceTheme.mutedOrbit}
+              color={Palette.textMuted}
             />
             <Text style={styles.moreOptionsToggleText}>
               {moreOptionsOpen ? "Hide more options" : "More options"}
@@ -998,7 +998,7 @@ export default function CreateSpaceScreen() {
           {spaceType === "private_rental" && moreOptionsOpen && (
             <View style={styles.rentalSection}>
               <View style={styles.rentalSectionHeader}>
-                <Ionicons name="storefront-outline" size={16} color={SpaceTheme.supernovaPink} />
+                <Ionicons name="storefront-outline" size={16} color={Palette.accent} />
                 <Text style={styles.rentalSectionTitle}>Venue & Event Details</Text>
               </View>
               <Text style={styles.rentalSectionSubtext}>
@@ -1010,31 +1010,29 @@ export default function CreateSpaceScreen() {
               <TextInput
                 style={styles.input}
                 placeholder={`Total Venue / ${EVENT_NOUN[rentalActivityType]} Cost (Optional)`}
-                placeholderTextColor={SpaceTheme.mutedOrbit}
+                placeholderTextColor={Palette.textMuted}
                 value={totalCost}
                 onChangeText={setTotalCost}
                 keyboardType="decimal-pad"
                 inputAccessoryViewID={NUMERIC_ACCESSORY_ID}
               />
               <Text style={styles.rentalHintText}>
-                💡 Leave at $0 if this event is free for attendees.
+                Leave at $0 if this event is free for attendees.
               </Text>
               <TextInput
                 style={styles.input}
                 placeholder="Event / Venue Link (Optional)"
-                placeholderTextColor={SpaceTheme.mutedOrbit}
+                placeholderTextColor={Palette.textMuted}
                 value={bookingUrl}
                 onChangeText={setBookingUrl}
                 autoCapitalize="none"
                 keyboardType="url"
               />
               <Text style={styles.rentalHintText}>
-                💡 Paste a reservation link, invite URL, or chip-in link — or leave it blank to
-                gauge interest before spending money out of pocket!
+                Paste a reservation, invite, or chip-in link — or leave it blank while you gauge interest.
               </Text>
               <Text style={styles.rentalHintText}>
-                ⚠️ This link opens for every guest in the Space. Only add links you trust, and
-                never one that asks for a password or payment card directly.
+                This opens for every guest. Only add links you trust — never one asking for a password or card details.
               </Text>
             </View>
           )}
@@ -1051,7 +1049,7 @@ export default function CreateSpaceScreen() {
                 ? "How many people fit at your place? (default 40)"
                 : "Max capacity (default 40)"
             }
-            placeholderTextColor={SpaceTheme.mutedOrbit}
+            placeholderTextColor={Palette.textMuted}
             value={maxCapacity}
             onChangeText={setMaxCapacity}
             keyboardType="number-pad"
@@ -1088,7 +1086,7 @@ export default function CreateSpaceScreen() {
                 onPress={() => removeCustomActivity(label)}
               >
                 <Text style={[styles.afterChipText, styles.afterChipTextActive]}>{label}</Text>
-                <Ionicons name="close" size={14} color={SpaceTheme.glowCyan} />
+                <Ionicons name="close" size={14} color={Palette.accent} />
               </TouchableOpacity>
             ))}
           </View>
@@ -1097,7 +1095,7 @@ export default function CreateSpaceScreen() {
             <TextInput
               style={[styles.input, styles.customActivityInput]}
               placeholder="Add your own (e.g. Board games)"
-              placeholderTextColor={SpaceTheme.mutedOrbit}
+              placeholderTextColor={Palette.textMuted}
               value={customActivityInput}
               onChangeText={setCustomActivityInput}
               onSubmitEditing={addCustomActivity}
@@ -1108,7 +1106,7 @@ export default function CreateSpaceScreen() {
               style={styles.customActivityAddButton}
               onPress={addCustomActivity}
             >
-              <Ionicons name="add" size={20} color={SpaceTheme.backgroundVoid} />
+              <Ionicons name="add" size={20} color={Palette.base} />
             </TouchableOpacity>
           </View>
 
@@ -1116,7 +1114,7 @@ export default function CreateSpaceScreen() {
             <TextInput
               style={[styles.input, styles.notesInput]}
               placeholder="e.g., Grabbing drinks at the bar across the street..."
-              placeholderTextColor={SpaceTheme.mutedOrbit}
+              placeholderTextColor={Palette.textMuted}
               value={hangoutNotes}
               onChangeText={setHangoutNotes}
               multiline
@@ -1131,13 +1129,13 @@ export default function CreateSpaceScreen() {
                 style={styles.pickerField}
                 onPress={() => setFriendsModalVisible(true)}
               >
-                <Ionicons name="person-add-outline" size={18} color={SpaceTheme.mutedOrbit} />
+                <Ionicons name="person-add-outline" size={18} color={Palette.textMuted} />
                 <Text style={styles.pickerFieldText}>
                   {invitedFriendIds.size === 0
                     ? `Select from ${friends.length} friend${friends.length === 1 ? "" : "s"}`
                     : `${invitedFriendIds.size} friend${invitedFriendIds.size === 1 ? "" : "s"} selected`}
                 </Text>
-                <Ionicons name="chevron-down" size={18} color={SpaceTheme.mutedOrbit} />
+                <Ionicons name="chevron-down" size={18} color={Palette.textMuted} />
               </TouchableOpacity>
               {invitedFriendIds.size > 0 && (
                 <View style={styles.chipRow}>
@@ -1153,13 +1151,13 @@ export default function CreateSpaceScreen() {
                         <Text style={[styles.afterChipText, styles.afterChipTextActive]}>
                           {friend.display_name}
                         </Text>
-                        <Ionicons name="close" size={14} color={SpaceTheme.glowCyan} />
+                        <Ionicons name="close" size={14} color={Palette.accent} />
                       </TouchableOpacity>
                     ))}
                 </View>
               )}
               <Text style={styles.rentalHintText}>
-                💡 Selected friends get the invite link sent to them in the app.
+                Selected friends get the invite link in the app.
               </Text>
             </>
           )}
@@ -1180,7 +1178,7 @@ export default function CreateSpaceScreen() {
               <Ionicons
                 name={showtimeConfirmed ? "checkbox" : "square-outline"}
                 size={20}
-                color={showtimeConfirmed ? SpaceTheme.glowCyan : SpaceTheme.mutedOrbit}
+                color={showtimeConfirmed ? Palette.accent : Palette.textMuted}
               />
               <Text style={styles.confirmRowText}>
                 I&apos;ve confirmed this movie is actually playing at this theater at this date/time.
@@ -1202,11 +1200,10 @@ export default function CreateSpaceScreen() {
             <Ionicons
               name={isPrivate ? "checkbox" : "square-outline"}
               size={20}
-              color={isPrivate ? SpaceTheme.glowCyan : SpaceTheme.mutedOrbit}
+              color={isPrivate ? Palette.accent : Palette.textMuted}
             />
             <Text style={styles.confirmRowText}>
-              🔒 Make this Space private — only joinable with the invite code, hidden from Explore
-              and Home.
+              Make this Space private — joinable only with the invite code, and hidden from Explore.
             </Text>
           </TouchableOpacity>
 
@@ -1217,7 +1214,7 @@ export default function CreateSpaceScreen() {
             disabled={creating}
           >
             {creating ? (
-              <ActivityIndicator color={SpaceTheme.backgroundVoid} />
+              <ActivityIndicator color={Palette.base} />
             ) : (
               <Text style={styles.submitButtonText}>Create Space</Text>
             )}
@@ -1255,18 +1252,18 @@ export default function CreateSpaceScreen() {
                 {spaceType === "private_rental" ? "Select a Location" : "Select a Theater"}
               </Text>
               <TouchableOpacity onPress={() => setTheaterModalVisible(false)} hitSlop={10}>
-                <Ionicons name="close" size={24} color={SpaceTheme.mutedOrbit} />
+                <Ionicons name="close" size={24} color={Palette.textMuted} />
               </TouchableOpacity>
             </View>
             <TextInput
               style={styles.input}
               placeholder={spaceType === "private_rental" ? "Search locations..." : "Search theaters..."}
-              placeholderTextColor={SpaceTheme.mutedOrbit}
+              placeholderTextColor={Palette.textMuted}
               value={theaterSearch}
               onChangeText={setTheaterSearch}
             />
             {theatersLoading || textSearching ? (
-              <ActivityIndicator color={SpaceTheme.glowCyan} style={{ marginTop: 20 }} />
+              <ActivityIndicator color={Palette.accent} style={{ marginTop: 20 }} />
             ) : (
               <FlatList
                 data={filteredTheaters}
@@ -1309,7 +1306,7 @@ export default function CreateSpaceScreen() {
                   ? "Can't find it? Type the location name"
                   : "Can't find it? Type the theater name"
               }
-              placeholderTextColor={SpaceTheme.mutedOrbit}
+              placeholderTextColor={Palette.textMuted}
               value={theaterName}
               onChangeText={(text) => {
                 setTheaterName(text);
@@ -1352,7 +1349,7 @@ export default function CreateSpaceScreen() {
                     : "Search for a Movie"}
               </Text>
               <TouchableOpacity onPress={() => setMovieModalVisible(false)} hitSlop={10}>
-                <Ionicons name="close" size={24} color={SpaceTheme.mutedOrbit} />
+                <Ionicons name="close" size={24} color={Palette.textMuted} />
               </TouchableOpacity>
             </View>
             <TextInput
@@ -1360,7 +1357,7 @@ export default function CreateSpaceScreen() {
               placeholder={
                 searchingTv ? "Search TV shows..." : isCustomVenueShowing ? "Search showings..." : "Search movies..."
               }
-              placeholderTextColor={SpaceTheme.mutedOrbit}
+              placeholderTextColor={Palette.textMuted}
               value={movieSearch}
               onChangeText={setMovieSearch}
               autoFocus
@@ -1380,23 +1377,23 @@ export default function CreateSpaceScreen() {
                   setMovieSearch("");
                 }}
               >
-                <Ionicons name="add-circle" size={20} color={SpaceTheme.glowCyan} />
+                <Ionicons name="add-circle" size={20} color={Palette.accent} />
                 <Text style={styles.customTitleRowText} numberOfLines={1}>
                   Use &quot;{movieSearch.trim()}&quot; as the title
                 </Text>
               </TouchableOpacity>
             )}
             {movieSearchError ? (
-              <Text style={[styles.modalEmptyText, { color: SpaceTheme.danger }]}>
+              <Text style={[styles.modalEmptyText, { color: Palette.danger }]}>
                 {movieSearchError}
               </Text>
             ) : movieSearchNotice ? (
-              <Text style={[styles.modalEmptyText, { color: SpaceTheme.mutedOrbit }]}>
+              <Text style={[styles.modalEmptyText, { color: Palette.textMuted }]}>
                 {movieSearchNotice}
               </Text>
             ) : null}
             {movieSearching ? (
-              <ActivityIndicator color={SpaceTheme.glowCyan} style={{ marginTop: 20 }} />
+              <ActivityIndicator color={Palette.accent} style={{ marginTop: 20 }} />
             ) : (
               <FlatList
                 data={movieResults}
@@ -1438,7 +1435,7 @@ export default function CreateSpaceScreen() {
                     ? "Type the event/showing name"
                     : "Can't find it? Type the movie title"
               }
-              placeholderTextColor={SpaceTheme.mutedOrbit}
+              placeholderTextColor={Palette.textMuted}
               value={movieName}
               onChangeText={(text) => {
                 setMovieName(text);
@@ -1473,13 +1470,13 @@ export default function CreateSpaceScreen() {
             <View style={styles.modalHeader}>
               <Text style={styles.modalTitle}>Invite Friends</Text>
               <TouchableOpacity onPress={() => setFriendsModalVisible(false)} hitSlop={10}>
-                <Ionicons name="close" size={24} color={SpaceTheme.mutedOrbit} />
+                <Ionicons name="close" size={24} color={Palette.textMuted} />
               </TouchableOpacity>
             </View>
             <TextInput
               style={styles.input}
               placeholder="Search friends by name or @username..."
-              placeholderTextColor={SpaceTheme.mutedOrbit}
+              placeholderTextColor={Palette.textMuted}
               value={friendSearch}
               onChangeText={setFriendSearch}
               autoCapitalize="none"
@@ -1506,7 +1503,7 @@ export default function CreateSpaceScreen() {
                       <Ionicons
                         name={selected ? "checkmark-circle" : "ellipse-outline"}
                         size={22}
-                        color={selected ? SpaceTheme.glowCyan : SpaceTheme.mutedOrbit}
+                        color={selected ? Palette.accent : Palette.textMuted}
                       />
                     </View>
                   </TouchableOpacity>
@@ -1548,51 +1545,49 @@ const styles = StyleSheet.create({
     gap: 8,
   },
   toggleOptionActiveCyan: {
-    backgroundColor: "rgba(56, 189, 248, 0.12)",
-    borderColor: "rgba(56, 189, 248, 0.5)",
-    shadowColor: SpaceTheme.glowCyan,
+    backgroundColor: Palette.accentDim,
+    borderColor: Palette.accentBorder,
+    shadowColor: Palette.accent,
     shadowOffset: { width: 0, height: 0 },
     shadowOpacity: 0.4,
     shadowRadius: 8,
     elevation: 4,
   },
   toggleOptionActivePink: {
-    backgroundColor: "rgba(244, 114, 182, 0.12)",
-    borderColor: "rgba(244, 114, 182, 0.5)",
-    shadowColor: SpaceTheme.supernovaPink,
+    backgroundColor: Palette.accentDim,
+    borderColor: Palette.accentBorder,
+    shadowColor: Palette.accent,
     shadowOffset: { width: 0, height: 0 },
     shadowOpacity: 0.4,
     shadowRadius: 8,
     elevation: 4,
   },
-  toggleLabel: { fontSize: 13, fontWeight: "600", color: SpaceTheme.mutedOrbit, textAlign: "center" },
-  toggleLabelActiveCyan: { color: SpaceTheme.glowCyan },
-  toggleLabelActivePink: { color: SpaceTheme.supernovaPink },
+  toggleLabel: { ...Type.small, fontWeight: "600", color: Palette.textMuted, textAlign: "center"},
+  toggleLabelActiveCyan: { color: Palette.accent },
+  toggleLabelActivePink: { color: Palette.accent },
   input: {
+    ...Type.body,
     ...SpaceStyles.glassCard,
-    color: SpaceTheme.starWhite,
+    color: Palette.text,
     padding: 14,
-    fontSize: 16,
     marginBottom: 12,
   },
   rentalSection: {
     ...SpaceStyles.glassCard,
-    borderColor: "rgba(244, 114, 182, 0.25)",
+    borderColor: Palette.accentBorder,
     padding: 16,
     marginBottom: 8,
   },
   rentalSectionHeader: { flexDirection: "row", alignItems: "center", gap: 8, marginBottom: 8 },
-  rentalSectionTitle: { fontSize: 15, fontWeight: "700", color: SpaceTheme.starWhite },
+  rentalSectionTitle: { ...Type.small, fontWeight: "700", color: Palette.text},
   rentalSectionSubtext: {
-    fontSize: 12,
-    color: SpaceTheme.mutedOrbit,
-    lineHeight: 17,
+    ...Type.caption,
+    color: Palette.textMuted,
     marginBottom: 14,
   },
   rentalHintText: {
-    fontSize: 12,
-    color: SpaceTheme.supernovaPink,
-    lineHeight: 17,
+    ...Type.caption,
+    color: Palette.accent,
     marginTop: -4,
   },
   eventPhotoRow: {
@@ -1604,32 +1599,32 @@ const styles = StyleSheet.create({
     marginBottom: 16,
   },
   eventPhotoInfo: { flex: 1 },
-  eventPhotoLabel: { fontSize: 14, fontWeight: "700", color: SpaceTheme.starWhite, marginBottom: 2 },
-  eventPhotoHint: { fontSize: 12, color: SpaceTheme.mutedOrbit, lineHeight: 16 },
+  eventPhotoLabel: { ...Type.small, fontWeight: "700", color: Palette.text, marginBottom: 2},
+  eventPhotoHint: { ...Type.caption, color: Palette.textMuted,},
   submitButton: {
-    backgroundColor: SpaceTheme.supernovaPink,
+    backgroundColor: Palette.accent,
     padding: 18,
     borderRadius: 14,
     alignItems: "center",
     marginTop: 8,
-    shadowColor: SpaceTheme.supernovaPink,
+    shadowColor: Palette.accent,
     shadowOffset: { width: 0, height: 0 },
     shadowOpacity: 0.5,
     shadowRadius: 10,
     elevation: 6,
   },
-  submitButtonText: { color: SpaceTheme.backgroundVoid, fontWeight: "800", fontSize: 17 },
+  submitButtonText: { ...Type.body, color: Palette.base, fontWeight: "800",},
   showtimeButton: {
     flexDirection: "row",
     alignItems: "center",
     justifyContent: "center",
     gap: 8,
-    backgroundColor: SpaceTheme.accentGold,
+    backgroundColor: Palette.accent,
     borderRadius: 12,
     paddingVertical: 12,
     marginTop: 4,
   },
-  showtimeButtonText: { color: SpaceTheme.backgroundVoid, fontSize: 15, fontWeight: "700" },
+  showtimeButtonText: { ...Type.small, color: Palette.base, fontWeight: "700"},
   confirmRow: {
     flexDirection: "row",
     alignItems: "center",
@@ -1638,10 +1633,9 @@ const styles = StyleSheet.create({
     marginBottom: 4,
   },
   confirmRowText: {
+    ...Type.small,
     flex: 1,
-    color: SpaceTheme.mutedOrbit,
-    fontSize: 13,
-    lineHeight: 18,
+    color: Palette.textMuted,
   },
   pickerField: {
     ...SpaceStyles.glassCard,
@@ -1651,8 +1645,8 @@ const styles = StyleSheet.create({
     padding: 14,
     marginBottom: 12,
   },
-  pickerFieldText: { flex: 1, color: SpaceTheme.starWhite, fontSize: 16 },
-  pickerFieldPlaceholder: { color: SpaceTheme.mutedOrbit },
+  pickerFieldText: { ...Type.body, flex: 1, color: Palette.text,},
+  pickerFieldPlaceholder: { color: Palette.textMuted },
   pickerNativeTime: { width: "100%", height: 200, marginBottom: 4 },
   moreOptionsToggle: {
     flexDirection: "row",
@@ -1662,11 +1656,11 @@ const styles = StyleSheet.create({
     paddingVertical: 12,
     marginBottom: 8,
   },
-  moreOptionsToggleText: { color: SpaceTheme.mutedOrbit, fontSize: 14, fontWeight: "600" },
+  moreOptionsToggleText: { ...Type.small, color: Palette.textMuted, fontWeight: "600"},
   afterSectionTitle: {
-    fontSize: 14,
+    ...Type.small,
     fontWeight: "700",
-    color: SpaceTheme.starWhite,
+    color: Palette.text,
     marginTop: 4,
     marginBottom: 10,
   },
@@ -1680,17 +1674,17 @@ const styles = StyleSheet.create({
     paddingHorizontal: 12,
   },
   afterChipActive: {
-    backgroundColor: "rgba(56, 189, 248, 0.15)",
-    borderColor: SpaceTheme.glowCyan,
+    backgroundColor: Palette.accentDim,
+    borderColor: Palette.accent,
   },
-  afterChipEmoji: { fontSize: 14 },
-  afterChipText: { fontSize: 13, fontWeight: "600", color: SpaceTheme.mutedOrbit },
-  afterChipTextActive: { color: SpaceTheme.glowCyan },
+  afterChipEmoji: { ...Type.small },
+  afterChipText: { ...Type.small, fontWeight: "600", color: Palette.textMuted},
+  afterChipTextActive: { color: Palette.accent },
   notesInput: { minHeight: 60, textAlignVertical: "top" },
   customActivityRow: { flexDirection: "row", gap: 8, alignItems: "center", marginBottom: 12 },
   customActivityInput: { flex: 1, marginBottom: 0 },
   customActivityAddButton: {
-    backgroundColor: SpaceTheme.glowCyan,
+    backgroundColor: Palette.accent,
     width: 46,
     height: 46,
     borderRadius: 12,
@@ -1704,22 +1698,22 @@ const styles = StyleSheet.create({
     marginTop: 8,
     marginBottom: 12,
   },
-  pickerDoneButtonText: { color: SpaceTheme.glowCyan, fontWeight: "700", fontSize: 15 },
+  pickerDoneButtonText: { ...Type.small, color: Palette.accent, fontWeight: "700",},
   keyboardDoneBar: {
-    backgroundColor: SpaceTheme.deepSpace,
+    backgroundColor: Palette.raised,
     borderTopWidth: 1,
     borderTopColor: "rgba(255, 255, 255, 0.08)",
     alignItems: "flex-end",
     padding: 10,
   },
-  keyboardDoneBarText: { color: SpaceTheme.glowCyan, fontWeight: "700", fontSize: 15 },
+  keyboardDoneBarText: { ...Type.small, color: Palette.accent, fontWeight: "700",},
   modalBackdrop: {
     flex: 1,
     justifyContent: "flex-end",
     backgroundColor: "rgba(0, 0, 0, 0.6)",
   },
   modalSheet: {
-    backgroundColor: SpaceTheme.deepSpace,
+    backgroundColor: Palette.raised,
     borderTopLeftRadius: 20,
     borderTopRightRadius: 20,
     padding: 16,
@@ -1731,14 +1725,14 @@ const styles = StyleSheet.create({
     alignItems: "center",
     marginBottom: 12,
   },
-  modalTitle: { fontSize: 18, fontWeight: "700", color: SpaceTheme.starWhite },
+  modalTitle: { ...Type.title, fontWeight: "700", color: Palette.text},
   modalRow: {
     paddingVertical: 12,
     borderBottomWidth: 1,
     borderBottomColor: "rgba(255, 255, 255, 0.08)",
   },
-  modalRowTitle: { fontSize: 15, fontWeight: "600", color: SpaceTheme.starWhite, marginBottom: 2 },
-  modalRowSubtitle: { fontSize: 13, color: SpaceTheme.mutedOrbit },
+  modalRowTitle: { ...Type.small, fontWeight: "600", color: Palette.text, marginBottom: 2},
+  modalRowSubtitle: { ...Type.small, color: Palette.textMuted},
   customTitleRow: {
     flexDirection: "row",
     alignItems: "center",
@@ -1746,15 +1740,15 @@ const styles = StyleSheet.create({
     paddingVertical: 10,
     marginTop: 8,
   },
-  customTitleRowText: { flex: 1, fontSize: 14, fontWeight: "600", color: SpaceTheme.glowCyan },
+  customTitleRowText: { ...Type.small, flex: 1, fontWeight: "600", color: Palette.accent},
   friendModalRowContent: {
     flexDirection: "row",
     alignItems: "center",
     justifyContent: "space-between",
   },
   modalEmptyText: {
-    color: SpaceTheme.mutedOrbit,
-    fontSize: 14,
+    ...Type.small,
+    color: Palette.textMuted,
     textAlign: "center",
     marginTop: 20,
     paddingHorizontal: 12,

@@ -26,13 +26,16 @@ import { Starfield } from "@/frontend/components/starfield";
 import { ActionButton } from "@/frontend/components/action-button";
 import { QuickAction } from "@/frontend/components/quick-action";
 import { MoviePoster } from "@/frontend/components/movie-poster";
-import { SpaceTheme, SpaceStyles } from "@/frontend/constants/theme";
+import { SpaceTheme, SpaceStyles, Palette, Type, Radius, Display } from "@/frontend/constants/theme";
 import { buildTicketUrl } from "@/frontend/services/ticket-links";
 import { activityLabel, activityEmoji } from "@/frontend/constants/activities";
 import { useFriends } from "@/frontend/hooks/use-friends";
 import { CineMindLeaderboard } from "@/frontend/components/cinemind-leaderboard";
 import { EVENT_CATEGORIES, eventCategoryOf } from "@/frontend/constants/event-categories";
 import { reportContent } from "@/frontend/services/moderation";
+import { Avatar } from "@/frontend/components/avatar";
+import { useProfiles } from "@/frontend/hooks/use-profiles";
+import { formatEventDate } from "@/frontend/utils/event-date";
 
 interface Member {
   id: string;
@@ -92,6 +95,10 @@ export default function GroupScreen() {
   // Friend requests straight from the member list — see who you're watching
   // with and add them without leaving the Space.
   const { friends, sendFriendRequest } = useFriends();
+  // Member rows come from the .NET backend, which has no access to Supabase
+  // avatars — joined here so the guest list shows faces instead of a column
+  // of plain text names.
+  const memberProfiles = useProfiles((group?.members ?? []).map((m) => m.userId));
   const [requestedFriendIds, setRequestedFriendIds] = useState<Set<string>>(new Set());
   const friendIds = new Set(friends.map((f) => f.id));
 
@@ -408,6 +415,86 @@ export default function GroupScreen() {
     setSavingBookingUrl(false);
   };
 
+  // Edit modal — covers the fields a host is actually likely to need to fix
+  // after creation: title, venue, date/time, capacity, cost. This is what
+  // makes ShowtimeReportCount ("Flagged by N members") actionable — before
+  // this, a host had no way to correct a wrong showtime short of deleting
+  // the whole Space and losing every RSVP and the chat history with it.
+  const [editModalVisible, setEditModalVisible] = useState(false);
+  const [editFilmName, setEditFilmName] = useState("");
+  const [editCinemaName, setEditCinemaName] = useState("");
+  const [editShowDate, setEditShowDate] = useState("");
+  const [editShowTime, setEditShowTime] = useState("");
+  const [editMaxCapacity, setEditMaxCapacity] = useState("");
+  const [editTotalCost, setEditTotalCost] = useState("");
+  const [saving, setSaving] = useState(false);
+
+  const openEditModal = () => {
+    if (!group) return;
+    setEditFilmName(group.filmName);
+    setEditCinemaName(group.cinemaName);
+    setEditShowDate(group.showDate);
+    setEditShowTime(group.showTime);
+    setEditMaxCapacity(String(group.maxCapacity));
+    setEditTotalCost(group.totalCostCents != null ? String(group.totalCostCents / 100) : "");
+    setEditModalVisible(true);
+  };
+
+  const handleSaveEdit = async () => {
+    if (!editFilmName.trim() || !editCinemaName.trim() || !editShowDate.trim() || !editShowTime.trim()) {
+      Alert.alert("Missing info", "Title, venue, date, and time can't be blank.");
+      return;
+    }
+    const capacity = parseInt(editMaxCapacity, 10);
+    if (!Number.isFinite(capacity) || capacity < 1) {
+      Alert.alert("Invalid capacity", "Enter a capacity of at least 1.");
+      return;
+    }
+    let totalCostCents: number | null = null;
+    if (editTotalCost.trim()) {
+      const dollars = parseFloat(editTotalCost);
+      if (!Number.isFinite(dollars) || dollars < 0) {
+        Alert.alert("Invalid cost", "Enter a valid cost, or leave it blank.");
+        return;
+      }
+      totalCostCents = Math.round(dollars * 100);
+    }
+
+    setSaving(true);
+    const ok = await runGroupAction("/edit", {
+      body: JSON.stringify({
+        filmName: editFilmName.trim(),
+        cinemaName: editCinemaName.trim(),
+        showDate: editShowDate.trim(),
+        showTime: editShowTime.trim(),
+        maxCapacity: capacity,
+        totalCostCents,
+      }),
+    });
+    if (ok) {
+      await fetchGroup();
+      setEditModalVisible(false);
+    }
+    setSaving(false);
+  };
+
+  const handleRemoveMember = (member: Member) => {
+    Alert.alert(
+      "Remove from this Space?",
+      `${member.name} will be removed and lose their spot.`,
+      [
+        { text: "Cancel", style: "cancel" },
+        {
+          text: "Remove",
+          style: "destructive",
+          onPress: async () => {
+            if (await runGroupAction(`/remove-member/${member.id}`)) await fetchGroup();
+          },
+        },
+      ],
+    );
+  };
+
   const [transferModalVisible, setTransferModalVisible] = useState(false);
   const [transferring, setTransferring] = useState(false);
   const [deleting, setDeleting] = useState(false);
@@ -509,7 +596,7 @@ export default function GroupScreen() {
     await fetchGroup();
 
     Alert.alert(
-      "🎉 Group Confirmed!",
+      "Space confirmed",
       `Your group is booked for ${group.filmName} at ${group.showTime} on ${group.showDate}.\n\nHead to ${group.cinemaName} to purchase tickets! Everyone in the group has been notified.`,
       [{ text: "OK" }],
     );
@@ -581,18 +668,22 @@ export default function GroupScreen() {
   // eslint-disable-next-line react-hooks/purity -- see comment above
   const hasPassed = !group.isPublic && new Date(group.screeningTime ?? group.createdAt).getTime() < Date.now();
 
+  // eslint-disable-next-line react-hooks/purity -- relative labels ("Tonight",
+  // "In 3 days") are read off the real current time, same as hasPassed above.
+  const eventDate = formatEventDate(group.screeningTime, group.showDate, group.showTime);
+
   return (
     <Starfield>
       <ScrollView style={styles.container} contentContainerStyle={styles.containerContent}>
         {group.status === "cancelled" ? (
           <View style={styles.cancelledBanner}>
-            <Ionicons name="close-circle" size={15} color={SpaceTheme.supernovaPink} />
+            <Ionicons name="close-circle" size={15} color={Palette.danger} />
             <Text style={styles.cancelledBannerText}>This Space has been cancelled</Text>
           </View>
         ) : (
           hasPassed && (
             <View style={styles.cancelledBanner}>
-              <Ionicons name="time-outline" size={15} color={SpaceTheme.supernovaPink} />
+              <Ionicons name="time-outline" size={15} color={Palette.textMuted} />
               <Text style={styles.cancelledBannerText}>This event has passed</Text>
             </View>
           )
@@ -609,17 +700,21 @@ export default function GroupScreen() {
           <MoviePoster
             uri={group.posterPath}
             width={92}
-            fallbackEmoji={EVENT_CATEGORIES[eventCategoryOf(group.spaceType, group.eventCategory)].emoji}
+            fallbackIcon={EVENT_CATEGORIES[eventCategoryOf(group.spaceType, group.eventCategory)].icon}
           />
           <View style={styles.heroInfo}>
-            <Text style={[styles.title, SpaceStyles.glowText, SpaceStyles.wordmark]}>
+            <Text style={styles.title}>
               {group.filmName}
             </Text>
             <View style={styles.badgeRow}>
               {group.spaceType === "private_rental" && (
                 <View style={styles.categoryBadge}>
+                  <Ionicons
+                    name={EVENT_CATEGORIES[eventCategoryOf(group.spaceType, group.eventCategory)].icon}
+                    size={11}
+                    color={Palette.textMuted}
+                  />
                   <Text style={styles.categoryBadgeText}>
-                    {EVENT_CATEGORIES[eventCategoryOf(group.spaceType, group.eventCategory)].emoji}{" "}
                     {EVENT_CATEGORIES[eventCategoryOf(group.spaceType, group.eventCategory)].label}
                   </Text>
                 </View>
@@ -635,15 +730,46 @@ export default function GroupScreen() {
                 </View>
               )}
             </View>
-            <Text style={styles.subtitle}>
-              {group.cinemaName} • {group.showTime}
+            <Text style={styles.subtitle}>Hosted by {group.hostName}</Text>
+          </View>
+          {isHost && !hasPassed && (
+            <TouchableOpacity
+              activeOpacity={0.8}
+              onPress={openEditModal}
+              hitSlop={8}
+              style={styles.editButton}
+            >
+              <Ionicons name="pencil-outline" size={17} color={Palette.textMuted} />
+            </TouchableOpacity>
+          )}
+        </View>
+
+        {/* When/where, given the weight it deserves. This is an events app —
+            the date used to render at 13px underneath the venue, smaller than
+            the venue name itself. */}
+        <View style={styles.whenWhere}>
+          {/* Date, time and the relative label share one baseline so they read
+              as a single fact. Previously they were three stacked lines at
+              three different sizes, fonts and colours inside a top-and-bottom
+              bordered box, which bracketed the whole thing off as a slab
+              dropped into the page rather than part of it. */}
+          <View style={styles.whenRow}>
+            <Text style={styles.whenDate}>{eventDate.date}</Text>
+            <Text style={styles.whenTime}>{eventDate.time}</Text>
+            {!!eventDate.relative && !hasPassed && (
+              <Text style={styles.whenRelative}>{eventDate.relative}</Text>
+            )}
+          </View>
+          <View style={styles.whereRow}>
+            <Ionicons name="location-outline" size={14} color={Palette.textFaint} />
+            <Text style={styles.whereText} numberOfLines={2}>
+              {group.cinemaName}
             </Text>
-            <Text style={styles.heroDate}>{group.showDate}</Text>
           </View>
         </View>
 
         <View style={styles.manualRow}>
-          <Text style={styles.manualBadge}>👤 Showtime scheduled manually by host</Text>
+          <Text style={styles.manualBadge}>Showtime set by the host</Text>
           {!hasPassed && (
             <TouchableOpacity
               activeOpacity={0.8}
@@ -667,7 +793,8 @@ export default function GroupScreen() {
         {group.postActivities && (
           <View style={styles.hangoutCapsule}>
             <View style={styles.hangoutCapsuleHeader}>
-              <Text style={styles.hangoutCapsuleTitle}>💬 Hangout After</Text>
+              <Ionicons name="chatbubbles-outline" size={15} color={Palette.accent} />
+              <Text style={styles.hangoutCapsuleTitle}>Hangout After</Text>
             </View>
             <View style={styles.afterRow}>
               {group.postActivities.split(",").map((key) => (
@@ -694,18 +821,27 @@ export default function GroupScreen() {
                 <Text style={styles.rentalCostText}>
                   ${(group.totalCostCents / 100).toFixed(2)} total
                 </Text>
-                <Text style={styles.rentalPerPersonText}>
-                  ${(group.totalCostCents / 100 / Math.max(confirmedCount, 1)).toFixed(2)} per
-                  person ({confirmedCount} confirmed)
-                </Text>
+                {/* The per-person split is derived from the confirmed count,
+                    which is zero whenever the guest list is hidden — showing it
+                    then would quote the entire venue cost as one person's
+                    share. Same reason the spots-filled line is suppressed. */}
+                {!group.membersHidden && (
+                  <Text style={styles.rentalPerPersonText}>
+                    ${(group.totalCostCents / 100 / Math.max(confirmedCount, 1)).toFixed(2)} per
+                    person ({confirmedCount} confirmed)
+                  </Text>
+                )}
               </>
             ) : (
               <View style={styles.freeBadge}>
-                <Text style={styles.freeBadgeText}>🎉 Free to Attend</Text>
+                <Ionicons name="pricetag-outline" size={14} color={Palette.positive} />
+                <Text style={styles.freeBadgeText}>Free to attend</Text>
               </View>
             )}
             <Text style={styles.rentalCapacityText}>
-              {groupMembers.length} / {group.maxCapacity} spots filled
+              {group.membersHidden
+                ? `Up to ${group.maxCapacity} spots`
+                : `${groupMembers.length} / ${group.maxCapacity} spots filled`}
             </Text>
 
             {group.bookingUrl ? (
@@ -721,18 +857,18 @@ export default function GroupScreen() {
                   />
                 )}
                 <Text style={styles.linkDisclaimer}>
-                  ⚠️ Added by the host — verify it&apos;s legit before entering any personal or
+                  Added by the host — verify it&apos;s legit before entering any personal or
                   payment info.
                 </Text>
                 <View style={styles.rentalSecuredBadge}>
-                  <Text style={styles.rentalSecuredBadgeText}>🔒 Venue Secured & Confirmed</Text>
+                  <Text style={styles.rentalSecuredBadgeText}>Venue confirmed</Text>
                 </View>
               </>
             ) : (
               <>
                 <View style={styles.tentativeBanner}>
                   <Text style={styles.tentativeBannerText}>
-                    ⏳ Tentative Mode — Host will lock in the venue once enough members RSVP!
+                    Not locked in yet — the host will confirm the venue once enough people RSVP.
                   </Text>
                 </View>
                 {isHost && !hasPassed && (
@@ -784,11 +920,16 @@ export default function GroupScreen() {
               // a host counting heads needs to tell them apart from a real
               // in-app confirmation.
               const isWebGuest = !item.userId;
+              const profile = item.userId ? memberProfiles.get(item.userId) : undefined;
+              // Host can remove anyone but themselves — Cancel/Delete/Hand
+              // Off Ownership already cover a host leaving their own Space.
+              const canRemove = isHost && !hasPassed && item.userId !== group.userId;
               return (
                 <View style={styles.memberRow}>
+                  <Avatar uri={profile?.avatarUrl} name={item.name} size={36} />
                   <View style={styles.memberNameBlock}>
                     <Text style={styles.memberName}>{item.name}</Text>
-                    {isWebGuest && <Text style={styles.guestTag}>Web guest</Text>}
+                    {isWebGuest && <Text style={styles.guestTag}>Joined from the web</Text>}
                   </View>
                   <View style={styles.memberRowRight}>
                     {canAddFriend &&
@@ -804,8 +945,17 @@ export default function GroupScreen() {
                         </TouchableOpacity>
                       ))}
                     <Text style={item.confirmed ? styles.confirmed : styles.pending}>
-                      {item.confirmed ? "✓ In" : "Pending"}
+                      {item.confirmed ? "Going" : "Pending"}
                     </Text>
+                    {canRemove && (
+                      <TouchableOpacity
+                        activeOpacity={0.8}
+                        onPress={() => handleRemoveMember(item)}
+                        hitSlop={8}
+                      >
+                        <Ionicons name="close-circle-outline" size={18} color={Palette.textFaint} />
+                      </TouchableOpacity>
+                    )}
                   </View>
                 </View>
               );
@@ -957,6 +1107,87 @@ export default function GroupScreen() {
       </ScrollView>
 
       <Modal
+        visible={editModalVisible}
+        transparent
+        animationType="slide"
+        onRequestClose={() => setEditModalVisible(false)}
+      >
+        <KeyboardAvoidingView
+          style={styles.modalOverlay}
+          behavior={Platform.OS === "ios" ? "padding" : undefined}
+        >
+          <ScrollView style={styles.modal} keyboardShouldPersistTaps="handled">
+            <Text style={styles.modalTitle}>Edit Space</Text>
+            <Text style={styles.modalSubtitle}>
+              Fixing the date or time clears any &quot;flagged as outdated&quot; reports on this Space.
+            </Text>
+            <TextInput
+              style={styles.modalInput}
+              placeholder="Title"
+              placeholderTextColor={SpaceTheme.mutedOrbit}
+              value={editFilmName}
+              onChangeText={setEditFilmName}
+            />
+            <TextInput
+              style={styles.modalInput}
+              placeholder="Venue"
+              placeholderTextColor={SpaceTheme.mutedOrbit}
+              value={editCinemaName}
+              onChangeText={setEditCinemaName}
+            />
+            <TextInput
+              style={styles.modalInput}
+              placeholder="Date (e.g. Sat, Aug 16)"
+              placeholderTextColor={SpaceTheme.mutedOrbit}
+              value={editShowDate}
+              onChangeText={setEditShowDate}
+            />
+            <TextInput
+              style={styles.modalInput}
+              placeholder="Time (e.g. 7:30 PM)"
+              placeholderTextColor={SpaceTheme.mutedOrbit}
+              value={editShowTime}
+              onChangeText={setEditShowTime}
+            />
+            <TextInput
+              style={styles.modalInput}
+              placeholder="Max capacity"
+              placeholderTextColor={SpaceTheme.mutedOrbit}
+              value={editMaxCapacity}
+              onChangeText={setEditMaxCapacity}
+              keyboardType="number-pad"
+            />
+            {group.spaceType === "private_rental" && (
+              <TextInput
+                style={styles.modalInput}
+                placeholder="Total cost (optional)"
+                placeholderTextColor={SpaceTheme.mutedOrbit}
+                value={editTotalCost}
+                onChangeText={setEditTotalCost}
+                keyboardType="decimal-pad"
+              />
+            )}
+            <TouchableOpacity
+              activeOpacity={0.8}
+              style={styles.confirmButton}
+              onPress={handleSaveEdit}
+              disabled={saving}
+            >
+              <Text style={styles.buttonText}>{saving ? "Saving..." : "Save Changes"}</Text>
+            </TouchableOpacity>
+            <TouchableOpacity
+              activeOpacity={0.8}
+              style={styles.modalCancelButton}
+              onPress={() => setEditModalVisible(false)}
+              disabled={saving}
+            >
+              <Text style={styles.modalCancelButtonText}>Cancel</Text>
+            </TouchableOpacity>
+          </ScrollView>
+        </KeyboardAvoidingView>
+      </Modal>
+
+      <Modal
         visible={transferModalVisible}
         transparent
         animationType="slide"
@@ -979,7 +1210,7 @@ export default function GroupScreen() {
                   disabled={transferring}
                 >
                   <Text style={styles.memberName}>{item.name}</Text>
-                  <Text style={styles.reportLink}>{transferring ? "..." : "Make Host →"}</Text>
+                  <Text style={styles.reportLink}>{transferring ? "..." : "Make host"}</Text>
                 </TouchableOpacity>
               )}
             />
@@ -1056,16 +1287,44 @@ const styles = StyleSheet.create({
   },
   center: { flex: 1, justifyContent: "center", alignItems: "center" },
   notFoundText: { color: SpaceTheme.mutedOrbit, fontSize: 16 },
-  hero: { flexDirection: "row", gap: 14, marginBottom: 12, alignItems: "flex-start" },
+  hero: { flexDirection: "row", gap: 14, marginBottom: 20, alignItems: "flex-start" },
+  editButton: { padding: 4 },
   heroInfo: { flex: 1, justifyContent: "center" },
-  title: { fontSize: 26, color: SpaceTheme.starWhite },
-  subtitle: { fontSize: 14, color: SpaceTheme.mutedOrbit, marginTop: 4 },
-  heroDate: { fontSize: 13, color: SpaceTheme.glowCyan, fontWeight: "600", marginTop: 4 },
+  title: { ...Display.heading, color: Palette.text },
+  subtitle: { ...Type.small, color: Palette.textMuted, marginTop: 6 },
+  // One hairline underneath, not a border on both sides. Bracketing it top and
+  // bottom turned it into a detached slab; a single rule just separates it
+  // from what follows, which is what it's actually for.
+  whenWhere: {
+    borderBottomWidth: 1,
+    borderBottomColor: Palette.border,
+    paddingBottom: 16,
+    marginBottom: 20,
+  },
+  // baseline, not center — the three sizes on this row need to sit on a
+  // shared baseline or the smaller ones float mid-way up the big date.
+  whenRow: { flexDirection: "row", alignItems: "baseline", flexWrap: "wrap", gap: 10 },
+  whenDate: { ...Display.date, color: Palette.text },
+  // Muted, not amber. Amber is the accent — having the time *and* the
+  // relative label both in it meant two competing highlights inside one row.
+  whenTime: { ...Display.stat, color: Palette.textMuted },
+  whenRelative: {
+    ...Type.caption,
+    color: Palette.accent,
+    fontWeight: "700",
+    textTransform: "uppercase",
+    letterSpacing: 0.5,
+  },
+  whereRow: { flexDirection: "row", alignItems: "center", gap: 6, marginTop: 10 },
+  whereText: { ...Type.small, color: Palette.textMuted, flex: 1 },
   badgeRow: { flexDirection: "row", flexWrap: "wrap", gap: 6, marginTop: 6 },
   categoryBadge: {
+    flexDirection: "row",
+    alignItems: "center",
+    gap: 4,
     alignSelf: "flex-start",
     paddingHorizontal: 8,
-    paddingVertical: 2,
+    paddingVertical: 3,
     borderRadius: 6,
     backgroundColor: "rgba(255,255,255,0.06)",
   },
@@ -1078,9 +1337,9 @@ const styles = StyleSheet.create({
     paddingHorizontal: 8,
     paddingVertical: 2,
     borderRadius: 6,
-    backgroundColor: "rgba(245, 197, 24, 0.12)",
+    backgroundColor: Palette.accentDim,
     borderWidth: 1,
-    borderColor: "rgba(245, 197, 24, 0.35)",
+    borderColor: Palette.accentBorder,
   },
   privateBadgeText: { fontSize: 11, fontWeight: "700", color: SpaceTheme.accentGold },
   tvBadge: {
@@ -1088,9 +1347,9 @@ const styles = StyleSheet.create({
     alignItems: "center",
     gap: 5,
     alignSelf: "flex-start",
-    backgroundColor: "rgba(56, 189, 248, 0.15)",
+    backgroundColor: Palette.accentDim,
     borderWidth: 1,
-    borderColor: "rgba(56, 189, 248, 0.4)",
+    borderColor: Palette.accentBorder,
     borderRadius: 8,
     paddingVertical: 5,
     paddingHorizontal: 10,
@@ -1106,21 +1365,17 @@ const styles = StyleSheet.create({
   manualBadge: { fontSize: 12, color: SpaceTheme.mutedOrbit, fontWeight: "600" },
   reportRow: { flexDirection: "row", alignItems: "center", gap: 4 },
   reportLink: { fontSize: 12, color: SpaceTheme.mutedOrbit, fontWeight: "700" },
-  reportCountText: {
-    fontSize: 12,
-    color: SpaceTheme.supernovaPink,
-    marginBottom: 12,
-  },
+  reportCountText: { ...Type.caption, color: Palette.danger, marginBottom: 12 },
   hangoutCapsule: {
     borderWidth: 1,
     borderColor: "rgba(255, 255, 255, 0.08)",
-    backgroundColor: "rgba(244, 114, 182, 0.06)",
+    backgroundColor: Palette.accentDim,
     borderRadius: 12,
     padding: 14,
     marginBottom: 16,
   },
-  hangoutCapsuleHeader: { marginBottom: 8 },
-  hangoutCapsuleTitle: { fontSize: 14, fontWeight: "700", color: SpaceTheme.supernovaPink },
+  hangoutCapsuleHeader: { flexDirection: "row", alignItems: "center", gap: 6, marginBottom: 8 },
+  hangoutCapsuleTitle: { ...Type.small, fontWeight: "700", color: Palette.accent },
   hangoutNotesText: {
     fontSize: 13,
     color: SpaceTheme.starWhite,
@@ -1129,9 +1384,9 @@ const styles = StyleSheet.create({
   },
   afterRow: { flexDirection: "row", flexWrap: "wrap", gap: 8 },
   afterBadge: {
-    backgroundColor: "rgba(244, 114, 182, 0.12)",
+    backgroundColor: Palette.accentDim,
     borderWidth: 1,
-    borderColor: "rgba(244, 114, 182, 0.35)",
+    borderColor: Palette.accentBorder,
     borderRadius: 8,
     paddingVertical: 6,
     paddingHorizontal: 10,
@@ -1139,7 +1394,7 @@ const styles = StyleSheet.create({
   afterBadgeText: { fontSize: 12, fontWeight: "600", color: SpaceTheme.supernovaPink },
   rentalCard: {
     ...SpaceStyles.glassCard,
-    borderColor: "rgba(244, 114, 182, 0.3)",
+    borderColor: Palette.accentBorder,
     padding: 16,
     marginBottom: 16,
   },
@@ -1153,38 +1408,47 @@ const styles = StyleSheet.create({
   rentalCostText: { color: SpaceTheme.accentGold, fontSize: 20, fontWeight: "700" },
   rentalPerPersonText: { color: SpaceTheme.mutedOrbit, fontSize: 13, marginTop: 2 },
   freeBadge: {
+    flexDirection: "row",
+    alignItems: "center",
+    gap: 6,
     alignSelf: "flex-start",
-    backgroundColor: "rgba(74, 222, 128, 0.15)",
+    backgroundColor: "rgba(91, 191, 123, 0.14)",
     borderWidth: 1,
-    borderColor: "rgba(74, 222, 128, 0.4)",
-    borderRadius: 8,
+    borderColor: "rgba(91, 191, 123, 0.35)",
+    borderRadius: Radius.small,
     paddingVertical: 6,
     paddingHorizontal: 12,
   },
-  freeBadgeText: { color: "#4ADE80", fontWeight: "800", fontSize: 15 },
+  freeBadgeText: { ...Type.small, color: Palette.positive, fontWeight: "700" },
   rentalCapacityText: { color: SpaceTheme.glowCyan, fontSize: 13, fontWeight: "600", marginTop: 8 },
   section: {
     ...SpaceStyles.glassCard,
     padding: 16,
     marginBottom: 16,
   },
-  sectionTitle: { fontSize: 16, fontWeight: "700", color: SpaceTheme.starWhite, marginBottom: 12 },
+  sectionTitle: {
+    ...Display.section,
+    color: Palette.textMuted,
+    textTransform: "uppercase" as const,
+    marginBottom: 12,
+  },
   memberRow: {
     flexDirection: "row",
-    justifyContent: "space-between",
-    paddingVertical: 8,
+    alignItems: "center",
+    gap: 12,
+    paddingVertical: 10,
     borderBottomWidth: 1,
-    borderBottomColor: "rgba(255,255,255,0.08)",
+    borderBottomColor: Palette.border,
   },
-  membersHiddenText: { fontSize: 13, color: SpaceTheme.mutedOrbit, lineHeight: 18 },
-  memberNameBlock: { flex: 1, marginRight: 12 },
-  memberName: { fontSize: 16, color: SpaceTheme.starWhite },
-  guestTag: { fontSize: 11, color: SpaceTheme.mutedOrbit, marginTop: 2 },
+  membersHiddenText: { ...Type.small, color: Palette.textMuted },
+  memberNameBlock: { flex: 1 },
+  memberName: { ...Type.body, color: Palette.text },
+  guestTag: { ...Type.caption, color: Palette.textFaint, marginTop: 1 },
   memberRowRight: { flexDirection: "row", alignItems: "center", gap: 12 },
   addFriendText: { color: SpaceTheme.glowCyan, fontWeight: "700", fontSize: 13 },
   friendRequested: { color: SpaceTheme.mutedOrbit, fontSize: 13 },
-  confirmed: { color: "#4ADE80", fontWeight: "600" },
-  pending: { color: SpaceTheme.supernovaPink, fontWeight: "600" },
+  confirmed: { color: Palette.positive, fontWeight: "600" },
+  pending: { color: Palette.textMuted, fontWeight: "600" },
   joinButton: {
     backgroundColor: SpaceTheme.supernovaPink,
     padding: 16,
@@ -1198,7 +1462,7 @@ const styles = StyleSheet.create({
     elevation: 6,
   },
   confirmButton: {
-    backgroundColor: "#4ADE80",
+    backgroundColor: Palette.positive,
     padding: 14,
     borderRadius: 12,
     alignItems: "center",
@@ -1223,7 +1487,7 @@ const styles = StyleSheet.create({
     paddingVertical: 8,
     paddingHorizontal: 14,
     marginBottom: 14,
-    borderColor: "rgba(245, 197, 24, 0.35)",
+    borderColor: Palette.accentBorder,
   },
   spaceCodeLabel: { color: SpaceTheme.mutedOrbit, fontSize: 12, fontWeight: "600" },
   spaceCodeValue: {
@@ -1239,7 +1503,7 @@ const styles = StyleSheet.create({
     marginBottom: 20,
   },
   bookButton: {
-    backgroundColor: "#4ADE80",
+    backgroundColor: Palette.positive,
     padding: 14,
     borderRadius: 12,
     alignItems: "center",
@@ -1264,16 +1528,16 @@ const styles = StyleSheet.create({
   cancelledBanner: {
     flexDirection: "row",
     justifyContent: "center",
-    backgroundColor: "rgba(255, 59, 92, 0.12)",
+    backgroundColor: Palette.dangerDim,
     borderWidth: 1,
-    borderColor: SpaceTheme.supernovaPink,
+    borderColor: Palette.dangerBorder,
     borderRadius: 12,
     padding: 12,
     marginBottom: 12,
     alignItems: "center",
     gap: 6,
   },
-  cancelledBannerText: { color: SpaceTheme.supernovaPink, fontWeight: "700", fontSize: 14 },
+  cancelledBannerText: { ...Type.small, color: Palette.danger, fontWeight: "700" },
   leaveSpaceButton: {
     backgroundColor: "rgba(255, 255, 255, 0.08)",
     borderWidth: 1,
@@ -1308,11 +1572,11 @@ const styles = StyleSheet.create({
     alignSelf: "center",
     marginTop: 10,
   },
-  rentalSecuredBadgeText: { color: "#4ADE80", fontWeight: "700", fontSize: 13 },
+  rentalSecuredBadgeText: { color: Palette.positive, fontWeight: "700", fontSize: 13 },
   tentativeBanner: {
-    backgroundColor: "rgba(244, 114, 182, 0.1)",
+    backgroundColor: Palette.accentDim,
     borderWidth: 1,
-    borderColor: "rgba(244, 114, 182, 0.3)",
+    borderColor: Palette.accentBorder,
     borderRadius: 10,
     padding: 12,
     marginTop: 12,
@@ -1338,6 +1602,9 @@ const styles = StyleSheet.create({
   modal: {
     backgroundColor: SpaceTheme.deepSpace,
     padding: 24,
+    // Bounded so the edit modal's six fields can't push the sheet off the
+    // top of the screen on a smaller device — it scrolls internally instead.
+    maxHeight: "85%",
     borderTopLeftRadius: 20,
     borderTopRightRadius: 20,
     borderWidth: 1,

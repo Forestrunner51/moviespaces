@@ -14,8 +14,11 @@ import { Ionicons } from "@expo/vector-icons";
 import { FriendsPanel } from "@/frontend/components/friends-panel";
 import { Starfield } from "@/frontend/components/starfield";
 import { MoviePoster } from "@/frontend/components/movie-poster";
-import { SpaceTheme, SpaceStyles } from "@/frontend/constants/theme";
+import { SpaceTheme, SpaceStyles, Palette, Type, Radius, Display } from "@/frontend/constants/theme";
 import { useUnreadCounts } from "@/frontend/hooks/use-unread-counts";
+import { useProfiles } from "@/frontend/hooks/use-profiles";
+import { AvatarStack } from "@/frontend/components/avatar";
+import { formatEventDate } from "@/frontend/utils/event-date";
 import {
   EVENT_CATEGORIES,
   eventCategoryOf,
@@ -36,7 +39,9 @@ interface Space {
   spaceType: string;
   posterPath: string | null;
   eventCategory: string | null;
-  members: { id: string; name: string; confirmed: boolean }[];
+  // userId is needed to look up each attendee's avatar (see useProfiles) —
+  // the backend already returns it, this type just wasn't asking for it.
+  members: { id: string; name: string; confirmed: boolean; userId: string }[];
 }
 
 type Tab = "spaces" | "rent" | "friends";
@@ -59,6 +64,10 @@ function SpaceCard({
   unreadCount: number;
   past: boolean;
 }) {
+  const profiles = useProfiles(item.members.map((m) => m.userId));
+  // Relative labels ("Tonight", "In 3 days") read the real current time.
+  const eventDate = formatEventDate(item.screeningTime, item.showDate, item.showTime);
+
   return (
     <TouchableOpacity
       activeOpacity={0.8}
@@ -68,48 +77,69 @@ function SpaceCard({
       <MoviePoster
         uri={item.posterPath}
         width={60}
-        fallbackEmoji={EVENT_CATEGORIES[eventCategoryOf(item.spaceType, item.eventCategory)].emoji}
+        fallbackIcon={EVENT_CATEGORIES[eventCategoryOf(item.spaceType, item.eventCategory)].icon}
       />
       <View style={styles.cardBody}>
+        {/* Date leads. On an events list, when it happens is the thing being
+            scanned for — it used to sit third, at 12px, under the venue. */}
+        <View style={styles.dateRow}>
+          <Text style={styles.dateText}>{eventDate.date}</Text>
+          <Text style={styles.timeText}>{eventDate.time}</Text>
+          {!!eventDate.relative && !past && (
+            <Text style={styles.relativeText}>{eventDate.relative}</Text>
+          )}
+        </View>
+
         <View style={styles.cardHeader}>
-          <Text style={styles.filmName}>{item.filmName}</Text>
+          <Text style={styles.filmName} numberOfLines={1}>
+            {item.filmName}
+          </Text>
           {!!unreadCount && (
             <View style={styles.unreadBadge}>
-              <Text style={styles.unreadBadgeText}>
-                💬 {unreadCount > 9 ? "9+" : unreadCount} new
-              </Text>
+              <Text style={styles.unreadBadgeText}>{unreadCount > 9 ? "9+" : unreadCount}</Text>
             </View>
           )}
         </View>
+
+        <Text style={styles.details} numberOfLines={1}>
+          {item.cinemaName}
+        </Text>
+
         <View style={styles.badgeRow}>
           {item.spaceType === "private_rental" && (
             <View style={styles.categoryBadge}>
               <Text style={styles.categoryBadgeText}>
-                {EVENT_CATEGORIES[eventCategoryOf(item.spaceType, item.eventCategory)].emoji}{" "}
                 {EVENT_CATEGORIES[eventCategoryOf(item.spaceType, item.eventCategory)].label}
               </Text>
             </View>
           )}
           {item.isPrivate && (
             <View style={styles.privateBadge}>
-              <Ionicons name="lock-closed" size={11} color={SpaceTheme.accentGold} />
+              <Ionicons name="lock-closed" size={11} color={Palette.accent} />
               <Text style={styles.privateBadgeText}>Private</Text>
             </View>
           )}
+          {past && (
+            <View style={styles.pastBadge}>
+              <Text style={styles.pastBadgeText}>Passed</Text>
+            </View>
+          )}
         </View>
-        {past && (
-          <View style={styles.pastBadge}>
-            <Text style={styles.pastBadgeText}>⏳ This event has passed</Text>
-          </View>
-        )}
-        <Text style={styles.details}>
-          {item.cinemaName} • {item.showTime}
-        </Text>
-        <Text style={styles.date}>{item.showDate}</Text>
+
+        {/* Faces, not a count. "5 member(s)" is a database row; a row of
+            people is a gathering — which is the whole product. */}
         <View style={styles.footer}>
-          <Text style={styles.amount}>{item.members.length} member(s)</Text>
-          <Text style={item.status === "booked" ? styles.statusGood : styles.statusPending}>
-            {item.status === "booked" ? "✓ Booked" : "Pending"}
+          <AvatarStack
+            people={item.members.map((m) => ({
+              userId: m.userId,
+              name: m.name,
+              avatarUrl: profiles.get(m.userId)?.avatarUrl,
+            }))}
+            size={24}
+          />
+          <Text style={styles.goingText}>
+            {item.members.length} going
+            {item.status === "booked" ? " · Booked" : ""}
           </Text>
         </View>
       </View>
@@ -235,21 +265,26 @@ export default function MySpacesScreen() {
                     All
                   </Text>
                 </TouchableOpacity>
-                {(Object.entries(EVENT_CATEGORIES) as [EventCategory, { emoji: string; label: string }][]).map(
-                  ([key, { emoji, label }]) => (
+                {(Object.entries(EVENT_CATEGORIES) as [EventCategory, { icon: keyof typeof Ionicons.glyphMap; label: string }][]).map(
+                  ([key, { icon, label }]) => (
                     <TouchableOpacity
                       key={key}
                       activeOpacity={0.8}
                       style={[styles.categoryChip, rentCategoryFilter === key && styles.categoryChipActive]}
                       onPress={() => setRentCategoryFilter(key)}
                     >
+                      <Ionicons
+                        name={icon}
+                        size={13}
+                        color={rentCategoryFilter === key ? Palette.base : Palette.textMuted}
+                      />
                       <Text
                         style={[
                           styles.categoryChipText,
                           rentCategoryFilter === key && styles.categoryChipTextActive,
                         ]}
                       >
-                        {emoji} {label}
+                        {label}
                       </Text>
                     </TouchableOpacity>
                   ),
@@ -317,7 +352,7 @@ export default function MySpacesScreen() {
                       })
                     }
                   >
-                    <Text style={styles.emptyButtonText}>Find a Movie →</Text>
+                    <Text style={styles.emptyButtonText}>Find a Movie</Text>
                   </TouchableOpacity>
                 </View>
               }
@@ -359,9 +394,9 @@ const styles = StyleSheet.create({
     justifyContent: "center",
   },
   tabBarItemActive: {
-    backgroundColor: "rgba(56, 189, 248, 0.12)",
+    backgroundColor: Palette.accentDim,
     borderWidth: 1,
-    borderColor: "rgba(56, 189, 248, 0.4)",
+    borderColor: Palette.accentBorder,
   },
   tabBarLabel: { fontSize: 13, fontWeight: "600", color: SpaceTheme.mutedOrbit },
   tabBarLabelActive: { color: SpaceTheme.glowCyan },
@@ -395,17 +430,25 @@ const styles = StyleSheet.create({
   },
   filmName: {
     flex: 1,
-    fontSize: 18,
-    fontWeight: "700",
-    color: SpaceTheme.starWhite,
+    ...Type.body,
+    fontWeight: "600",
+    color: Palette.text,
   },
+  // Date block, the card's lead line.
+  dateRow: { flexDirection: "row", alignItems: "baseline", gap: 8, marginBottom: 2 },
+  dateText: { ...Display.dateCard, color: Palette.text },
+  timeText: { ...Type.small, color: Palette.textMuted },
+  relativeText: { ...Type.caption, color: Palette.accent, fontWeight: "700" },
+  // A count badge, not a chat bubble emoji + the word "new".
   unreadBadge: {
-    backgroundColor: SpaceTheme.supernovaPink,
-    borderRadius: 10,
-    paddingVertical: 3,
-    paddingHorizontal: 8,
+    backgroundColor: Palette.accent,
+    borderRadius: Radius.pill,
+    minWidth: 20,
+    alignItems: "center",
+    paddingVertical: 2,
+    paddingHorizontal: 6,
   },
-  unreadBadgeText: { color: SpaceTheme.backgroundVoid, fontSize: 11, fontWeight: "800" },
+  unreadBadgeText: { color: Palette.base, fontSize: 11, fontWeight: "800" },
   badgeRow: { flexDirection: "row", flexWrap: "wrap", gap: 6, marginBottom: 4 },
   categoryBadge: {
     alignSelf: "flex-start",
@@ -423,14 +466,17 @@ const styles = StyleSheet.create({
     paddingHorizontal: 8,
     paddingVertical: 2,
     borderRadius: 6,
-    backgroundColor: "rgba(245, 197, 24, 0.12)",
+    backgroundColor: Palette.accentDim,
     borderWidth: 1,
-    borderColor: "rgba(245, 197, 24, 0.35)",
+    borderColor: Palette.accentBorder,
   },
   privateBadgeText: { fontSize: 11, fontWeight: "700", color: SpaceTheme.accentGold },
   categoryFilterRow: { flexDirection: "row", flexWrap: "wrap", gap: 8, marginBottom: 12 },
   categoryChip: {
     ...SpaceStyles.glassCard,
+    flexDirection: "row",
+    alignItems: "center",
+    gap: 5,
     paddingVertical: 6,
     paddingHorizontal: 12,
   },
@@ -445,13 +491,10 @@ const styles = StyleSheet.create({
     paddingHorizontal: 8,
     marginBottom: 6,
   },
-  pastBadgeText: { color: SpaceTheme.mutedOrbit, fontSize: 11, fontWeight: "700" },
-  details: { fontSize: 14, color: SpaceTheme.mutedOrbit, marginBottom: 2 },
-  date: { fontSize: 12, color: SpaceTheme.mutedOrbit, marginBottom: 8 },
-  footer: { flexDirection: "row", justifyContent: "space-between", marginTop: 4 },
-  amount: { fontSize: 13, color: SpaceTheme.glowCyan, fontWeight: "600" },
-  statusGood: { fontSize: 13, color: "#4ADE80", fontWeight: "600" },
-  statusPending: { fontSize: 13, color: SpaceTheme.supernovaPink, fontWeight: "600" },
+  pastBadgeText: { color: Palette.textMuted, fontSize: 11, fontWeight: "700" },
+  details: { ...Type.small, color: Palette.textMuted, marginBottom: 6 },
+  footer: { flexDirection: "row", alignItems: "center", gap: 8, marginTop: 8 },
+  goingText: { ...Type.caption, color: Palette.textMuted },
   emptyState: {
     alignItems: "center",
     marginTop: 60,

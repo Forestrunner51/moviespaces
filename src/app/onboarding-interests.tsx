@@ -3,7 +3,7 @@ import { View, Text, TouchableOpacity, StyleSheet } from "react-native";
 import { router } from "expo-router";
 import { Ionicons } from "@expo/vector-icons";
 import { Starfield } from "@/frontend/components/starfield";
-import { SpaceTheme, SpaceStyles } from "@/frontend/constants/theme";
+import { SpaceTheme, SpaceStyles, Palette } from "@/frontend/constants/theme";
 import { completeOnboarding } from "@/frontend/services/onboarding";
 
 // Genres match seeded public Community Spaces' GenreCategory exactly (see
@@ -11,11 +11,11 @@ import { completeOnboarding } from "@/frontend/services/onboarding";
 // deliberately 1:1, not an open set. Adding a genre here without a matching
 // seeded club just means an empty discovery screen for that pick.
 const GENRES = [
-  { key: "Blockbusters", label: "Blockbusters", emoji: "🍿" },
-  { key: "Sci-Fi", label: "Sci-Fi", emoji: "🔮" },
-  { key: "Horror", label: "Horror", emoji: "🩸" },
-  { key: "Indie", label: "Indie / Arthouse", emoji: "🎨" },
-  { key: "Action", label: "Action", emoji: "⚡" },
+  { key: "Blockbusters", label: "Blockbusters", icon: "film-outline" },
+  { key: "Sci-Fi", label: "Sci-Fi", icon: "planet-outline" },
+  { key: "Horror", label: "Horror", icon: "skull-outline" },
+  { key: "Indie", label: "Indie / Arthouse", icon: "color-palette-outline" },
+  { key: "Action", label: "Action", icon: "flash-outline" },
 ] as const;
 
 // Shown once, right after auth succeeds (see auth.tsx). Solves the empty-room
@@ -46,7 +46,7 @@ export default function OnboardingInterestsScreen() {
         </Text>
 
         <View style={styles.pillRow}>
-          {GENRES.map(({ key, label, emoji }) => {
+          {GENRES.map(({ key, label, icon }) => {
             const active = selected.includes(key);
             return (
               <TouchableOpacity
@@ -55,9 +55,12 @@ export default function OnboardingInterestsScreen() {
                 style={[styles.pill, active && styles.pillActive]}
                 onPress={() => toggle(key)}
               >
-                <Text style={[styles.pillText, active && styles.pillTextActive]}>
-                  {emoji} {label}
-                </Text>
+                <Ionicons
+                  name={icon}
+                  size={14}
+                  color={active ? Palette.base : Palette.textMuted}
+                />
+                <Text style={[styles.pillText, active && styles.pillTextActive]}>{label}</Text>
               </TouchableOpacity>
             );
           })}
@@ -97,10 +100,17 @@ const styles = StyleSheet.create({
     marginBottom: 28,
   },
   pillRow: { flexDirection: "row", flexWrap: "wrap", gap: 10, justifyContent: "center", marginBottom: 32 },
-  pill: { ...SpaceStyles.glassCard, paddingVertical: 12, paddingHorizontal: 18 },
-  pillActive: { borderColor: SpaceTheme.glowCyan, backgroundColor: "rgba(56,189,248,0.14)" },
-  pillText: { color: SpaceTheme.mutedOrbit, fontSize: 15, fontWeight: "600" },
-  pillTextActive: { color: SpaceTheme.glowCyan, fontWeight: "700" },
+  pill: {
+    ...SpaceStyles.glassCard,
+    flexDirection: "row",
+    alignItems: "center",
+    gap: 7,
+    paddingVertical: 12,
+    paddingHorizontal: 18,
+  },
+  pillActive: { borderColor: Palette.accent, backgroundColor: Palette.accent },
+  pillText: { color: Palette.textMuted, fontSize: 15, fontWeight: "600" },
+  pillTextActive: { color: Palette.base, fontWeight: "700" },
   button: {
     width: "100%",
     backgroundColor: SpaceTheme.glowCyan,

@@ -11,9 +11,22 @@ import {
 import { router, useFocusEffect } from "expo-router";
 import { Ionicons } from "@expo/vector-icons";
 import { Starfield } from "@/frontend/components/starfield";
-import { SpaceTheme, SpaceStyles } from "@/frontend/constants/theme";
+import { SpaceStyles, Palette, Type, Display } from "@/frontend/constants/theme";
 import { MoviePoster } from "@/frontend/components/movie-poster";
+import { AvatarStack } from "@/frontend/components/avatar";
+import { useProfiles } from "@/frontend/hooks/use-profiles";
+import { formatEventDate } from "@/frontend/utils/event-date";
+import { EVENT_CATEGORIES, eventCategoryOf } from "@/frontend/constants/event-categories";
 import { authFetch } from "@/frontend/services/api";
+
+// Members carry userId so the cards can show attendee faces (see useProfiles)
+// — the API already returns them, these types just weren't asking.
+interface SpaceMember {
+  id: string;
+  name: string;
+  confirmed: boolean;
+  userId: string;
+}
 
 interface NearbySpace {
   id: string;
@@ -23,6 +36,10 @@ interface NearbySpace {
   posterPath: string | null;
   showDate: string;
   showTime: string;
+  screeningTime: string | null;
+  spaceType: string;
+  eventCategory: string | null;
+  members: SpaceMember[];
 }
 
 // Shape returned by GET /api/group/mine — a superset of NearbySpace, but
@@ -38,6 +55,91 @@ interface MySpace {
   screeningTime: string | null;
   isPublic: boolean;
   status: string;
+  spaceType: string;
+  eventCategory: string | null;
+  members: SpaceMember[];
+}
+
+// One carousel card, shared by "My Upcoming Spaces" and "Nearby Public
+// Gatherings" — they previously had two identical inline renderItems, both
+// showing poster + title + venue + a 12px date line. Now the date leads in
+// the display face and attendees appear as faces, matching the Spaces and
+// Explore lists. Its own component because the avatars need a hook, and a
+// FlatList renderItem can't hold one.
+function CarouselCard({
+  id,
+  filmName,
+  cinemaName,
+  posterPath,
+  showDate,
+  showTime,
+  screeningTime,
+  spaceType,
+  eventCategory,
+  members,
+  hostName,
+}: {
+  id: string;
+  filmName: string;
+  cinemaName: string;
+  posterPath: string | null;
+  showDate: string;
+  showTime: string;
+  screeningTime: string | null;
+  spaceType: string;
+  eventCategory: string | null;
+  members: SpaceMember[];
+  hostName?: string;
+}) {
+  const profiles = useProfiles(members.map((m) => m.userId));
+  // Relative labels ("Tonight", "In 3 days") read the real current time.
+  const eventDate = formatEventDate(screeningTime, showDate, showTime);
+
+  return (
+    <TouchableOpacity
+      activeOpacity={0.85}
+      style={styles.spaceCard}
+      onPress={() => router.push({ pathname: "/group", params: { groupId: id } })}
+    >
+      <MoviePoster
+        uri={posterPath}
+        width={132}
+        style={styles.spaceCardPoster}
+        fallbackIcon={EVENT_CATEGORIES[eventCategoryOf(spaceType, eventCategory)].icon}
+      />
+      <Text style={styles.spaceCardDate} numberOfLines={1}>
+        {eventDate.date}
+      </Text>
+      <View style={styles.spaceCardMetaRow}>
+        <Text style={styles.spaceCardTime}>{eventDate.time}</Text>
+        {!!eventDate.relative && (
+          <Text style={styles.spaceCardRelative} numberOfLines={1}>
+            {eventDate.relative}
+          </Text>
+        )}
+      </View>
+      <Text style={styles.spaceCardTitle} numberOfLines={1}>
+        {filmName}
+      </Text>
+      <Text style={styles.spaceCardSubtitle} numberOfLines={1}>
+        {hostName ? `${cinemaName} · ${hostName}` : cinemaName}
+      </Text>
+      {members.length > 0 && (
+        <View style={styles.spaceCardFooter}>
+          <AvatarStack
+            people={members.map((m) => ({
+              userId: m.userId,
+              name: m.name,
+              avatarUrl: profiles.get(m.userId)?.avatarUrl,
+            }))}
+            size={20}
+            max={3}
+          />
+          <Text style={styles.spaceCardGoing}>{members.length} going</Text>
+        </View>
+      )}
+    </TouchableOpacity>
+  );
 }
 
 // Shape returned by GET /api/group/community-spaces/discover, narrowed to
@@ -161,14 +263,14 @@ export default function HomeScreen() {
           style={styles.chooseCard}
           onPress={() => router.push({ pathname: "/(tabs)/explore" })}
         >
-          <Ionicons name="telescope-outline" size={28} color={SpaceTheme.accentGold} />
+          <Ionicons name="telescope-outline" size={28} color={Palette.accent} />
           <View style={{ flex: 1 }}>
             <Text style={styles.chooseCardTitle}>Find a Space to Join</Text>
             <Text style={styles.chooseCardSubtitle}>
               Browse public screenings and watch parties happening near you
             </Text>
           </View>
-          <Ionicons name="chevron-forward" size={20} color={SpaceTheme.mutedOrbit} />
+          <Ionicons name="chevron-forward" size={20} color={Palette.textMuted} />
         </TouchableOpacity>
 
         {/* Titles say where it happens, not just what you do — "Watch a
@@ -182,14 +284,14 @@ export default function HomeScreen() {
             router.push({ pathname: "/create-space", params: { spaceType: "public_gathering" } })
           }
         >
-          <Ionicons name="film-outline" size={28} color={SpaceTheme.glowCyan} />
+          <Ionicons name="film-outline" size={28} color={Palette.accent} />
           <View style={{ flex: 1 }}>
             <Text style={styles.chooseCardTitle}>See a Movie at a Theater</Text>
             <Text style={styles.chooseCardSubtitle}>
               Pick a showtime at a nearby theater and invite friends along
             </Text>
           </View>
-          <Ionicons name="chevron-forward" size={20} color={SpaceTheme.mutedOrbit} />
+          <Ionicons name="chevron-forward" size={20} color={Palette.textMuted} />
         </TouchableOpacity>
 
         <TouchableOpacity
@@ -197,14 +299,14 @@ export default function HomeScreen() {
           style={styles.chooseCard}
           onPress={() => router.push("/rent-a-theater")}
         >
-          <Ionicons name="storefront-outline" size={28} color={SpaceTheme.supernovaPink} />
+          <Ionicons name="storefront-outline" size={28} color={Palette.accent} />
           <View style={{ flex: 1 }}>
             <Text style={styles.chooseCardTitle}>Host at Your Own Venue</Text>
             <Text style={styles.chooseCardSubtitle}>
               Your place, a bar, or a rented space — movie night, fight night, or a finale
             </Text>
           </View>
-          <Ionicons name="chevron-forward" size={20} color={SpaceTheme.mutedOrbit} />
+          <Ionicons name="chevron-forward" size={20} color={Palette.textMuted} />
         </TouchableOpacity>
 
         <TouchableOpacity
@@ -212,7 +314,7 @@ export default function HomeScreen() {
           style={styles.codeEntryLink}
           onPress={() => router.push("/join-by-code")}
         >
-          <Ionicons name="key-outline" size={15} color={SpaceTheme.mutedOrbit} />
+          <Ionicons name="key-outline" size={15} color={Palette.textMuted} />
           <Text style={styles.codeEntryLinkText}>Have a Space code?</Text>
         </TouchableOpacity>
 
@@ -246,7 +348,7 @@ export default function HomeScreen() {
 
         <Text style={styles.sectionTitle}>My Upcoming Spaces</Text>
         {mySpacesLoading ? (
-          <ActivityIndicator color={SpaceTheme.glowCyan} style={styles.sectionLoading} />
+          <ActivityIndicator color={Palette.accent} style={styles.sectionLoading} />
         ) : mySpaces.length === 0 ? (
           <View style={styles.emptySection}>
             <Text style={styles.emptySectionText}>
@@ -261,29 +363,25 @@ export default function HomeScreen() {
             keyExtractor={(item) => item.id}
             contentContainerStyle={styles.carouselContent}
             renderItem={({ item }) => (
-              <TouchableOpacity
-                activeOpacity={0.85}
-                style={styles.spaceCard}
-                onPress={() => router.push({ pathname: "/group", params: { groupId: item.id } })}
-              >
-                <MoviePoster uri={item.posterPath} width={132} style={styles.spaceCardPoster} />
-                <Text style={styles.spaceCardTitle} numberOfLines={1}>
-                  {item.filmName}
-                </Text>
-                <Text style={styles.spaceCardSubtitle} numberOfLines={1}>
-                  {item.cinemaName}
-                </Text>
-                <Text style={styles.spaceCardTime} numberOfLines={1}>
-                  {item.showDate} • {item.showTime}
-                </Text>
-              </TouchableOpacity>
+              <CarouselCard
+                id={item.id}
+                filmName={item.filmName}
+                cinemaName={item.cinemaName}
+                posterPath={item.posterPath}
+                showDate={item.showDate}
+                showTime={item.showTime}
+                screeningTime={item.screeningTime}
+                spaceType={item.spaceType}
+                eventCategory={item.eventCategory}
+                members={item.members ?? []}
+              />
             )}
           />
         )}
 
         <Text style={styles.sectionTitle}>Nearby Public Gatherings</Text>
         {spacesLoading ? (
-          <ActivityIndicator color={SpaceTheme.glowCyan} style={styles.sectionLoading} />
+          <ActivityIndicator color={Palette.accent} style={styles.sectionLoading} />
         ) : nearbySpaces.length === 0 ? (
           <View style={styles.emptySection}>
             <Text style={styles.emptySectionText}>
@@ -293,7 +391,7 @@ export default function HomeScreen() {
               activeOpacity={0.8}
               onPress={() => router.push({ pathname: "/(tabs)/explore" })}
             >
-              <Text style={styles.emptySectionLink}>Go to Explore →</Text>
+              <Text style={styles.emptySectionLink}>Go to Explore</Text>
             </TouchableOpacity>
           </View>
         ) : (
@@ -304,25 +402,19 @@ export default function HomeScreen() {
             keyExtractor={(item) => item.id}
             contentContainerStyle={styles.carouselContent}
             renderItem={({ item }) => (
-              <TouchableOpacity
-                activeOpacity={0.85}
-                style={styles.spaceCard}
-                onPress={() => router.push({ pathname: "/group", params: { groupId: item.id } })}
-              >
-                <MoviePoster uri={item.posterPath} width={132} style={styles.spaceCardPoster} />
-                <Text style={styles.spaceCardTitle} numberOfLines={1}>
-                  {item.filmName}
-                </Text>
-                <Text style={styles.spaceCardSubtitle} numberOfLines={1}>
-                  {item.cinemaName}
-                </Text>
-                <Text style={styles.spaceCardTime} numberOfLines={1}>
-                  {item.showDate} • {item.showTime}
-                </Text>
-                <Text style={styles.spaceCardHost} numberOfLines={1}>
-                  Hosted by {item.hostName}
-                </Text>
-              </TouchableOpacity>
+              <CarouselCard
+                id={item.id}
+                filmName={item.filmName}
+                cinemaName={item.cinemaName}
+                posterPath={item.posterPath}
+                showDate={item.showDate}
+                showTime={item.showTime}
+                screeningTime={item.screeningTime}
+                spaceType={item.spaceType}
+                eventCategory={item.eventCategory}
+                members={item.members ?? []}
+                hostName={item.hostName}
+              />
             )}
           />
         )}
@@ -338,20 +430,16 @@ const styles = StyleSheet.create({
     paddingHorizontal: 16,
     paddingBottom: 40,
   },
-  title: {
-    fontSize: 28,
-    fontWeight: "bold",
-    color: SpaceTheme.starWhite,
-  },
-  titleSpacing: { marginBottom: 16 },
-  chooseSubtitle: { fontSize: 15, color: SpaceTheme.mutedOrbit, marginBottom: 20 },
+  title: { ...Display.heading, color: Palette.text },
+  titleSpacing: { marginBottom: 12 },
+  chooseSubtitle: { ...Type.small, color: Palette.textMuted, marginBottom: 20 },
   chooseCard: {
     ...SpaceStyles.glassCard,
     flexDirection: "row",
     alignItems: "center",
     gap: 14,
-    padding: 18,
-    marginBottom: 16,
+    padding: 16,
+    marginBottom: 12,
   },
   codeEntryLink: {
     flexDirection: "row",
@@ -361,25 +449,25 @@ const styles = StyleSheet.create({
     paddingVertical: 10,
     marginBottom: 6,
   },
-  codeEntryLinkText: { color: SpaceTheme.mutedOrbit, fontSize: 13, fontWeight: "600" },
+  codeEntryLinkText: { ...Type.small, color: Palette.textMuted, fontWeight: "600" },
   chooseCardTitle: {
-    fontSize: 17,
-    fontWeight: "700",
-    color: SpaceTheme.starWhite,
-    marginBottom: 4,
+    ...Type.body,
+    fontWeight: "600",
+    color: Palette.text,
+    marginBottom: 2,
   },
-  chooseCardSubtitle: { fontSize: 13, color: SpaceTheme.mutedOrbit, lineHeight: 18 },
+  chooseCardSubtitle: { ...Type.small, color: Palette.textMuted },
   sectionTitle: {
-    fontSize: 17,
-    fontWeight: "700",
-    color: SpaceTheme.starWhite,
-    marginTop: 12,
+    ...Display.section,
+    color: Palette.textMuted,
+    textTransform: "uppercase" as const,
+    marginTop: 16,
     marginBottom: 12,
   },
   sectionLoading: { marginBottom: 16, alignItems: "flex-start" },
   emptySection: { marginBottom: 20 },
-  emptySectionText: { fontSize: 13, color: SpaceTheme.mutedOrbit, marginBottom: 8 },
-  emptySectionLink: { fontSize: 13, color: SpaceTheme.glowCyan, fontWeight: "700" },
+  emptySectionText: { ...Type.small, color: Palette.textMuted, marginBottom: 8 },
+  emptySectionLink: { ...Type.small, color: Palette.accent, fontWeight: "700" },
   // flexGrow: 0 + alignItems: "flex-start" keeps items packed to the left of
   // the horizontal scroll area — without it, a short row (e.g. just one or
   // two cards) stretches to fill the FlatList's width and ends up looking
@@ -396,15 +484,31 @@ const styles = StyleSheet.create({
     padding: 14,
   },
   spaceCardPoster: { marginBottom: 10 },
-  spaceCardTitle: { fontSize: 15, fontWeight: "700", color: SpaceTheme.starWhite, marginBottom: 2 },
-  spaceCardSubtitle: { fontSize: 12, color: SpaceTheme.mutedOrbit, marginBottom: 4 },
-  spaceCardTime: { fontSize: 12, color: SpaceTheme.glowCyan, fontWeight: "600", marginBottom: 6 },
-  spaceCardHost: { fontSize: 11, color: SpaceTheme.mutedOrbit },
+  spaceCardDate: { ...Display.dateCard, color: Palette.text },
+  spaceCardMetaRow: {
+    flexDirection: "row",
+    alignItems: "baseline",
+    gap: 6,
+    marginBottom: 4,
+  },
+  spaceCardTime: { ...Type.caption, color: Palette.textMuted },
+  spaceCardRelative: {
+    ...Type.caption,
+    color: Palette.accent,
+    fontWeight: "700",
+    textTransform: "uppercase",
+    letterSpacing: 0.4,
+    flexShrink: 1,
+  },
+  spaceCardTitle: { ...Type.small, fontWeight: "600", color: Palette.text },
+  spaceCardSubtitle: { ...Type.caption, color: Palette.textMuted },
+  spaceCardFooter: { flexDirection: "row", alignItems: "center", gap: 6, marginTop: 10 },
+  spaceCardGoing: { ...Type.caption, color: Palette.textFaint },
   clubChip: {
     ...SpaceStyles.glassCard,
     width: 160,
     padding: 14,
   },
-  clubChipTitle: { fontSize: 14, fontWeight: "700", color: SpaceTheme.starWhite, marginBottom: 4 },
-  clubChipSubtitle: { fontSize: 12, color: SpaceTheme.mutedOrbit },
+  clubChipTitle: { ...Type.small, fontWeight: "600", color: Palette.text, marginBottom: 4 },
+  clubChipSubtitle: { ...Type.caption, color: Palette.textMuted },
 });

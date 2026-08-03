@@ -1,7 +1,7 @@
 import { useEffect, useState } from "react";
 import { View, Text, StyleSheet, TouchableOpacity, Share } from "react-native";
 import { Ionicons } from "@expo/vector-icons";
-import { SpaceTheme, SpaceStyles } from "@/frontend/constants/theme";
+import { SpaceTheme, SpaceStyles, Palette } from "@/frontend/constants/theme";
 import { formatCountdown, formatDuration } from "@/frontend/services/cinemind";
 
 interface LockedStateViewProps {
@@ -78,7 +78,7 @@ export function LockedStateView({
         </View>
         <View style={styles.statDivider} />
         <View style={styles.statBlock}>
-          <Text style={styles.statValue}>🔥 {streakCount}</Text>
+          <Text style={styles.statValue}>{streakCount}</Text>
           <Text style={styles.statLabel}>Streak</Text>
         </View>
       </View>
@@ -131,7 +131,7 @@ const styles = StyleSheet.create({
     paddingVertical: 20,
     width: "100%",
     marginTop: 16,
-    borderColor: "rgba(56, 189, 248, 0.3)",
+    borderColor: Palette.accentBorder,
   },
   countdownLabel: {
     fontSize: 12,
