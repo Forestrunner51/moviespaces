@@ -9,13 +9,13 @@ import {
   KeyboardAvoidingView,
   Platform,
   ActivityIndicator,
-  Image,
   Alert,
 } from "react-native";
 import { useLocalSearchParams, Stack } from "expo-router";
 import { useSafeAreaInsets } from "react-native-safe-area-context";
 import { Starfield } from "@/frontend/components/starfield";
-import { SpaceTheme, SpaceStyles } from "@/frontend/constants/theme";
+import { SpaceTheme, Palette, Type, Radius } from "@/frontend/constants/theme";
+import { Avatar } from "@/frontend/components/avatar";
 import { useGroupChat, GroupMessage, GroupChatType } from "@/frontend/hooks/use-group-chat";
 import { reportContent, blockUser, getBlockedUserIds } from "@/frontend/services/moderation";
 import { useFriends } from "@/frontend/hooks/use-friends";
@@ -134,7 +134,7 @@ export default function GroupChatScreen() {
     if (isMe) {
       return (
         <View style={[styles.bubble, styles.bubbleMe, { alignSelf: "flex-end" }]}>
-          <Text style={styles.bubbleText}>{item.content}</Text>
+          <Text style={[styles.bubbleText, styles.bubbleTextMe]}>{item.content}</Text>
         </View>
       );
     }
@@ -144,15 +144,7 @@ export default function GroupChatScreen() {
         onLongPress={() => handleLongPressMessage(item)}
         style={styles.rowThem}
       >
-        {item.sender_avatar_url ? (
-          <Image source={{ uri: item.sender_avatar_url }} style={styles.avatar} />
-        ) : (
-          <View style={styles.avatarFallback}>
-            <Text style={styles.avatarFallbackText}>
-              {(item.sender_name || "?").charAt(0).toUpperCase()}
-            </Text>
-          </View>
-        )}
+        <Avatar uri={item.sender_avatar_url} name={item.sender_name} size={28} />
         <View style={{ flex: 1 }}>
           <Text style={styles.senderName}>
             {item.sender_name || "Someone"}
@@ -181,7 +173,7 @@ export default function GroupChatScreen() {
         {(showTime || showDate || seasonEpisodeInfo) && (
           <View style={styles.contextBanner}>
             <Text style={styles.contextBannerText} numberOfLines={2}>
-              {seasonEpisodeInfo ? `📺 ${seasonEpisodeInfo} • ` : ""}
+              {seasonEpisodeInfo ? `${seasonEpisodeInfo} • ` : ""}
               {[showDate, showTime].filter(Boolean).join(" • ")}
             </Text>
           </View>
@@ -226,38 +218,31 @@ const styles = StyleSheet.create({
   contextBanner: {
     borderBottomWidth: 1,
     borderBottomColor: "rgba(255, 255, 255, 0.08)",
-    backgroundColor: "rgba(56, 189, 248, 0.08)",
+    backgroundColor: Palette.accentDim,
     paddingVertical: 8,
     paddingHorizontal: 16,
   },
-  contextBannerText: { color: SpaceTheme.glowCyan, fontSize: 12, fontWeight: "600" },
+  contextBannerText: { ...Type.caption, color: Palette.accent, fontWeight: "600" },
   list: { padding: 16, gap: 8 },
-  emptyText: { color: SpaceTheme.mutedOrbit, textAlign: "center", marginTop: 24 },
+  emptyText: { ...Type.small, color: Palette.textMuted, textAlign: "center", marginTop: 24 },
   bubble: {
-    maxWidth: "75%",
-    padding: 10,
-    borderRadius: 12,
+    maxWidth: "78%",
+    paddingHorizontal: 12,
+    paddingVertical: 9,
+    borderRadius: Radius.medium,
     marginBottom: 8,
   },
-  bubbleMe: { backgroundColor: SpaceTheme.supernovaPink },
-  bubbleThem: { ...SpaceStyles.glassCard },
-  bubbleText: { color: SpaceTheme.starWhite },
+  bubbleMe: { backgroundColor: Palette.accent },
+  // Raised surface, not a bordered card — bubbles stack directly on the
+  // background, so an outline on every one was pure noise.
+  bubbleThem: { backgroundColor: Palette.raised },
+  bubbleText: { ...Type.body, color: Palette.text },
+  // Your own bubble is filled with the amber accent, so its text has to be
+  // dark. Cream-on-amber measured about 2.2:1 — far under the 4.5:1 floor.
+  bubbleTextMe: { color: Palette.base },
   rowThem: { flexDirection: "row", alignItems: "flex-end", gap: 8, marginBottom: 8, maxWidth: "85%" },
-  avatar: { width: 28, height: 28, borderRadius: 14, marginBottom: 4 },
-  avatarFallback: {
-    width: 28,
-    height: 28,
-    borderRadius: 14,
-    marginBottom: 4,
-    backgroundColor: SpaceTheme.deepSpace,
-    borderWidth: 1,
-    borderColor: "rgba(255,255,255,0.15)",
-    alignItems: "center",
-    justifyContent: "center",
-  },
-  avatarFallbackText: { color: SpaceTheme.glowCyan, fontSize: 12, fontWeight: "700" },
-  senderName: { color: SpaceTheme.mutedOrbit, fontSize: 11, fontWeight: "600", marginBottom: 3, marginLeft: 2 },
-  senderUsername: { color: SpaceTheme.mutedOrbit, fontSize: 11, fontWeight: "400" },
+  senderName: { ...Type.caption, color: Palette.textMuted, fontWeight: "600", marginBottom: 3, marginLeft: 2 },
+  senderUsername: { ...Type.caption, color: Palette.textFaint, fontWeight: "400" },
   inputRow: {
     flexDirection: "row",
     alignItems: "flex-end",
@@ -266,19 +251,21 @@ const styles = StyleSheet.create({
   },
   input: {
     flex: 1,
-    borderRadius: 20,
+    borderRadius: Radius.pill,
     paddingHorizontal: 16,
     paddingVertical: 10,
-    fontSize: 16,
+    ...Type.body,
     maxHeight: 100,
-    backgroundColor: "rgba(255,255,255,0.08)",
-    color: SpaceTheme.starWhite,
+    backgroundColor: Palette.raised,
+    borderWidth: 1,
+    borderColor: Palette.border,
+    color: Palette.text,
   },
   sendButton: {
-    backgroundColor: SpaceTheme.glowCyan,
-    borderRadius: 20,
+    backgroundColor: Palette.accent,
+    borderRadius: Radius.pill,
     paddingHorizontal: 18,
     paddingVertical: 10,
   },
-  sendButtonText: { color: SpaceTheme.backgroundVoid, fontWeight: "700" },
+  sendButtonText: { ...Type.small, color: Palette.base, fontWeight: "700" },
 });

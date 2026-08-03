@@ -48,10 +48,17 @@ export function useUnreadCounts(groupIds: string[]) {
       // an unbounded fetch grows with the account's whole chat history. The
       // floor is the oldest "last read" across these Spaces; a Space never
       // opened falls back to the lookback window.
-      const lookbackFloor = new Date(Date.now() - UNREAD_LOOKBACK_DAYS * 86400_000).toISOString();
-      const floor = groupIds
-        .map((id) => lastReadByGroup[id] ?? lookbackFloor)
-        .reduce((min, cur) => (cur < min ? cur : min), new Date().toISOString());
+      //
+      // Epoch-number comparison, not string: PostgREST returns timestamptz as
+      // "…+00:00" while toISOString() emits "…Z", so taking a lexicographic
+      // min across the two formats isn't reliable.
+      const lookbackFloorMs = Date.now() - UNREAD_LOOKBACK_DAYS * 86400_000;
+      const floorMs = groupIds.reduce((min, id) => {
+        const read = lastReadByGroup[id];
+        const ms = read ? Date.parse(read) : lookbackFloorMs;
+        return ms < min ? ms : min;
+      }, Date.now());
+      const floor = new Date(floorMs).toISOString();
 
       const { data: messages } = await supabase
         .from("group_messages")

@@ -10,7 +10,9 @@ import {
   Alert,
 } from "react-native";
 import { router } from "expo-router";
-import { SpaceTheme, SpaceStyles } from "@/frontend/constants/theme";
+import { Ionicons } from "@expo/vector-icons";
+import { Avatar } from "@/frontend/components/avatar";
+import { SpaceTheme, SpaceStyles, Palette, Type, Radius, Display } from "@/frontend/constants/theme";
 import { useFriends, Profile } from "@/frontend/hooks/use-friends";
 import { useDmUnreadCounts } from "@/frontend/hooks/use-dm-unread-counts";
 import { blockUser } from "@/frontend/services/moderation";
@@ -152,6 +154,7 @@ export function FriendsPanel() {
           <Text style={styles.sectionLabel}>SEARCH RESULTS</Text>
           {results.map((user) => (
             <View key={user.id} style={styles.row}>
+              <Avatar uri={user.avatar_url} name={user.display_name} size={40} />
               <View style={styles.rowTextBlock}>
                 <Text style={styles.rowText} numberOfLines={1}>
                   {user.display_name}
@@ -188,6 +191,7 @@ export function FriendsPanel() {
           <Text style={styles.sectionLabel}>PENDING REQUESTS</Text>
           {pendingRequests.map((req) => (
             <View key={req.id} style={styles.row}>
+              <Avatar uri={req.requester.avatar_url} name={req.requester.display_name} size={40} />
               <View style={styles.rowTextBlock}>
                 <Text style={styles.rowText} numberOfLines={1}>
                   {req.requester.display_name}
@@ -246,6 +250,9 @@ export function FriendsPanel() {
                   })
                 }
               >
+                {/* avatar_url was already being fetched by useFriends and
+                    then discarded — a social list rendered as plain text. */}
+                <Avatar uri={item.avatar_url} name={item.display_name} size={40} />
                 <View style={styles.rowTextBlock}>
                   <View style={styles.rowNameLine}>
                     <Text style={styles.rowText} numberOfLines={1}>
@@ -266,7 +273,7 @@ export function FriendsPanel() {
                   )}
                 </View>
                 <View style={styles.friendActions}>
-                  <Text style={styles.rowSubtext}>Message</Text>
+                  <Ionicons name="chatbubble-outline" size={18} color={Palette.textMuted} />
                   <TouchableOpacity
                     hitSlop={10}
                     onPress={(e) => {
@@ -289,42 +296,51 @@ export function FriendsPanel() {
 const styles = StyleSheet.create({
   container: { flex: 1 },
   input: {
-    ...SpaceStyles.glassCard,
-    color: SpaceTheme.starWhite,
+    ...SpaceStyles.field,
+    color: Palette.text,
     padding: 14,
-    fontSize: 16,
+    ...Type.body,
     marginBottom: 8,
   },
-  section: { marginTop: 20 },
-  sectionLabel: { color: SpaceTheme.mutedOrbit, fontSize: 13, fontWeight: "700" },
+  section: { marginTop: 24 },
+  sectionLabel: {
+    ...Display.section,
+    color: Palette.textMuted,
+    textTransform: "uppercase" as const,
+    marginBottom: 6,
+  },
+  // A flat row with a hairline rule, not a card. A friends list is a
+  // sequence of people, not a set of discrete objects — stacking each one in
+  // its own bordered panel was what made every list in the app look the same.
   row: {
-    ...SpaceStyles.glassCard,
+    ...SpaceStyles.row,
     flexDirection: "row",
-    justifyContent: "space-between",
     alignItems: "center",
-    padding: 14,
-    marginTop: 8,
+    gap: 12,
+    paddingVertical: 12,
   },
   // Names are user-supplied and can be long — let the name block take the
   // slack and truncate, so the action side never gets pushed off the row.
-  rowTextBlock: { flex: 1, marginRight: 12 },
+  rowTextBlock: { flex: 1 },
   rowNameLine: { flexDirection: "row", alignItems: "center", gap: 8 },
-  rowText: { color: SpaceTheme.starWhite, fontSize: 16, flexShrink: 1 },
-  rowUsername: { color: SpaceTheme.mutedOrbit, fontSize: 12, marginTop: 1 },
+  rowText: { ...Type.body, color: Palette.text, flexShrink: 1 },
+  rowUsername: { ...Type.caption, color: Palette.textMuted, marginTop: 1 },
   unreadBadge: {
-    backgroundColor: SpaceTheme.supernovaPink,
-    borderRadius: 10,
+    backgroundColor: Palette.accent,
+    borderRadius: Radius.pill,
+    minWidth: 20,
+    alignItems: "center",
     paddingVertical: 2,
-    paddingHorizontal: 7,
+    paddingHorizontal: 6,
   },
-  unreadBadgeText: { color: SpaceTheme.backgroundVoid, fontSize: 11, fontWeight: "800" },
-  rowSubtext: { color: SpaceTheme.mutedOrbit, fontSize: 13 },
-  friendActions: { flexDirection: "row", alignItems: "center", gap: 14, flexShrink: 0 },
-  optionsLink: { color: SpaceTheme.mutedOrbit, fontSize: 20, fontWeight: "700", lineHeight: 22 },
-  cancelRequestText: { color: SpaceTheme.mutedOrbit, fontSize: 13, fontWeight: "600" },
-  emptyText: { color: SpaceTheme.mutedOrbit, marginTop: 12 },
-  requestActions: { flexDirection: "row", gap: 12, flexShrink: 0 },
+  unreadBadgeText: { color: Palette.base, fontSize: 11, fontWeight: "800" },
+  rowSubtext: { ...Type.small, color: Palette.textMuted },
+  friendActions: { flexDirection: "row", alignItems: "center", gap: 16, flexShrink: 0 },
+  optionsLink: { color: Palette.textMuted, fontSize: 20, fontWeight: "700", lineHeight: 22 },
+  cancelRequestText: { ...Type.small, color: Palette.textMuted, fontWeight: "600" },
+  emptyText: { ...Type.small, color: Palette.textMuted, marginTop: 12 },
+  requestActions: { flexDirection: "row", gap: 16, flexShrink: 0 },
   actionButton: { flexShrink: 0 },
-  actionButtonText: { color: SpaceTheme.glowCyan, fontWeight: "700", fontSize: 14 },
-  declineButtonText: { color: SpaceTheme.mutedOrbit, fontWeight: "700", fontSize: 14 },
+  actionButtonText: { ...Type.small, color: Palette.accent, fontWeight: "700" },
+  declineButtonText: { ...Type.small, color: Palette.textMuted, fontWeight: "700" },
 });

@@ -4,7 +4,7 @@ import { View, Text, FlatList, StyleSheet, ActivityIndicator, TouchableOpacity }
 import { Ionicons } from "@expo/vector-icons";
 import { router } from "expo-router";
 import { Starfield } from "@/frontend/components/starfield";
-import { SpaceTheme, SpaceStyles } from "@/frontend/constants/theme";
+import { SpaceTheme, SpaceStyles, Palette } from "@/frontend/constants/theme";
 import {
   getDeviceLocation,
   fetchNearbyTheaters,
@@ -109,7 +109,7 @@ export default function RentATheaterScreen() {
                   <View style={{ flex: 1 }}>
                     <Text style={styles.filmName}>{item.name}</Text>
                     <Text style={styles.details}>{item.address}</Text>
-                    <Text style={styles.cta}>Start a Space here →</Text>
+                    <Text style={styles.cta}>Start a Space here</Text>
                     {!!cinemaChain(item.name) && (
                       <TouchableOpacity
                         activeOpacity={0.7}
@@ -119,7 +119,7 @@ export default function RentATheaterScreen() {
                           handleViewRentalInfo(item);
                         }}
                       >
-                        <Text style={styles.rentalInfoLink}>View their rental info ↗</Text>
+                        <Text style={styles.rentalInfoLink}>View their rental info</Text>
                       </TouchableOpacity>
                     )}
                   </View>
@@ -174,7 +174,7 @@ const styles = StyleSheet.create({
     gap: 12,
     padding: 16,
     marginBottom: 16,
-    borderColor: "rgba(56, 189, 248, 0.3)",
+    borderColor: Palette.accentBorder,
   },
   rentCardRow: { flexDirection: "row", alignItems: "center", gap: 12 },
   filmName: {

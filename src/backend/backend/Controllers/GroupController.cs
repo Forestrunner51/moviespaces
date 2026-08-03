@@ -1044,6 +1044,117 @@ namespace Backend.Controllers
             return Ok(new { bookingUrl = group.BookingUrl });
         }
 
+        // Host-only: edits the core event details after creation. Previously
+        // the only mutations available post-creation were book/unbook/cancel/
+        // delete/transfer — nothing let a host fix a wrong showtime, correct a
+        // typo, raise capacity, or update the venue name. That made
+        // ShowtimeReportCount ("Flagged by N members as possibly outdated")
+        // pointless: members could flag a stale showtime, but the host had no
+        // way to actually correct it short of deleting the whole Space and
+        // losing every RSVP, the chat history, and the invite links already
+        // sent out.
+        //
+        // Every field is optional and only overwrites when present, so a
+        // partial edit (e.g. just fixing the time) doesn't require the client
+        // to resend everything else.
+        [HttpPost("{id}/edit")]
+        public async Task<IActionResult> EditGroup(Guid id, [FromBody] EditGroupRequest req)
+        {
+            var userId = GetUserId();
+            var group = await _db.Groups.FindAsync(id);
+            if (group == null) return NotFound();
+            if (group.UserId != userId) return Forbid();
+
+            if (req.MaxCapacity.HasValue)
+            {
+                if (req.MaxCapacity.Value < 1)
+                    return BadRequest(new { error = "Capacity must be at least 1." });
+                var memberCount = await _db.GroupMembers.CountAsync(m => m.GroupId == id);
+                if (req.MaxCapacity.Value < memberCount)
+                    return BadRequest(new { error = $"Capacity can't be less than the {memberCount} people already in this Space." });
+            }
+
+            if (req.TotalCostCents.HasValue && req.TotalCostCents.Value < 0)
+                return BadRequest(new { error = "Cost can't be negative." });
+
+            // A corrected showtime is exactly what ShowtimeReportCount exists to
+            // prompt — resetting it here is what makes fixing the flag
+            // actually visible, instead of the count staying stuck at whatever
+            // it was before the correction.
+            var showtimeChanged =
+                (req.ShowDate != null && req.ShowDate != group.ShowDate) ||
+                (req.ShowTime != null && req.ShowTime != group.ShowTime) ||
+                (req.ScreeningTime.HasValue && req.ScreeningTime != group.ScreeningTime);
+
+            if (req.FilmName != null)
+            {
+                // Same rule CreateGroup uses: only filter freeform titles (no
+                // real catalog id backing them). A real movie/TV title from
+                // OMDb should never be able to trip the profanity filter.
+                var filmNameIsFreeform = group.FilmId == null && group.TmdbMovieId == null;
+                group.FilmName = filmNameIsFreeform
+                    ? _profanityFilter.CleanOrFallback(req.FilmName, group.FilmName)
+                    : req.FilmName;
+            }
+            if (req.CinemaName != null) group.CinemaName = req.CinemaName.Trim();
+            if (req.ShowDate != null) group.ShowDate = req.ShowDate.Trim();
+            if (req.ShowTime != null) group.ShowTime = req.ShowTime.Trim();
+            if (req.ScreeningTime.HasValue) group.ScreeningTime = req.ScreeningTime;
+            if (req.MaxCapacity.HasValue) group.MaxCapacity = req.MaxCapacity.Value;
+            if (req.TotalCostCents.HasValue) group.TotalCostCents = req.TotalCostCents.Value;
+            if (req.HangoutNotes != null)
+            {
+                group.HangoutNotes = _profanityFilter.ContainsProfanity(req.HangoutNotes)
+                    ? group.HangoutNotes
+                    : req.HangoutNotes.Trim();
+            }
+
+            if (showtimeChanged) group.ShowtimeReportCount = 0;
+
+            await _db.SaveChangesAsync();
+
+            if (showtimeChanged)
+            {
+                await NotifyMembersAsync(
+                    id,
+                    "Showtime updated",
+                    $"{group.HostName} updated {group.FilmName}'s date/time to {group.ShowDate} at {group.ShowTime}.",
+                    excludeUserId: userId
+                );
+            }
+
+            return Ok(group);
+        }
+
+        // Host-only: removes someone from the Space without deleting or
+        // cancelling the whole thing. Previously the only member-removal path
+        // was the member leaving on their own (or blocking, which is
+        // account-level and only hides content — it was never actually
+        // possible for a host to remove someone from their own event.
+        [HttpPost("{id}/remove-member/{memberId}")]
+        public async Task<IActionResult> RemoveMember(Guid id, Guid memberId)
+        {
+            var userId = GetUserId();
+            var group = await _db.Groups.FindAsync(id);
+            if (group == null) return NotFound();
+            if (group.UserId != userId) return Forbid();
+
+            var member = await _db.GroupMembers
+                .FirstOrDefaultAsync(m => m.Id == memberId && m.GroupId == id);
+            if (member == null) return NotFound();
+
+            // A host removes members, not themselves — Cancel/Delete/Hand Off
+            // Ownership already cover every case of a host leaving their own
+            // Space, and removing the host row here would leave the Space
+            // with no owner.
+            if (member.UserId == group.UserId) return BadRequest(new { error = "The host can't be removed. Use Hand Off Ownership instead." });
+
+            _db.GroupMembers.Remove(member);
+            await _db.SaveChangesAsync();
+
+            return Ok();
+        }
+
         // Host-only: permanently deletes the Space. GroupMembers cascade-delete
         // via the FK (required relationship, EF's default Cascade behavior).
         // Note: group_messages (Supabase-direct, not EF-owned) has no FK back
@@ -1158,6 +1269,19 @@ namespace Backend.Controllers
     // gives accountless joiners something to de-dupe on other than their name.
     public record JoinGroupRequest(string Name, string? SpaceCode = null, string? GuestToken = null);
     public record UpdateBookingUrlRequest(string? BookingUrl);
+
+    // Every field optional — EditGroup only overwrites what's present, so a
+    // client can send just the one thing being fixed.
+    public record EditGroupRequest(
+        string? FilmName,
+        string? CinemaName,
+        string? ShowTime,
+        string? ShowDate,
+        DateTime? ScreeningTime,
+        int? MaxCapacity,
+        long? TotalCostCents,
+        string? HangoutNotes
+    );
     public record NotifyMessageRequest(string SenderName, string Preview);
     public record TransferOwnershipRequest(string NewHostUserId);
 }

@@ -51,10 +51,17 @@ export function useDmUnreadCounts(friendIds: string[]) {
       // The floor is the oldest "last read" across these friends; a friend
       // with no marker at all falls back to the lookback window, since an
       // unread badge for something months old isn't actionable anyway.
-      const lookbackFloor = new Date(Date.now() - UNREAD_LOOKBACK_DAYS * 86400_000).toISOString();
-      const floor = friendIds
-        .map((id) => lastReadByFriend[id] ?? lookbackFloor)
-        .reduce((min, cur) => (cur < min ? cur : min), new Date().toISOString());
+      //
+      // Compared as epoch numbers, not ISO strings: PostgREST returns
+      // timestamptz as "…+00:00" while toISOString() emits "…Z", so a
+      // lexicographic min between the two formats isn't reliable.
+      const lookbackFloorMs = Date.now() - UNREAD_LOOKBACK_DAYS * 86400_000;
+      const floorMs = friendIds.reduce((min, id) => {
+        const read = lastReadByFriend[id];
+        const ms = read ? Date.parse(read) : lookbackFloorMs;
+        return ms < min ? ms : min;
+      }, Date.now());
+      const floor = new Date(floorMs).toISOString();
 
       const { data: messages } = await supabase
         .from("messages")

@@ -60,15 +60,20 @@ export function useChat(chatTargetId: string) {
   // use-group-chat.ts did) left anything that landed mid-conversation counted
   // as unread — you'd read a reply live, leave, and still see a badge for it.
   //
-  // Keyed on the newest message's timestamp rather than firing on every 4s
-  // poll, so this writes at most once per genuinely new message.
+  // Keyed on conversation + newest message timestamp rather than firing on
+  // every 4s poll, so this writes at most once per genuinely new message. The
+  // conversation id is part of the key so switching to a different chat always
+  // re-marks, even in the edge case where both conversations' newest messages
+  // share a timestamp — that's why there's no separate "reset on change"
+  // effect, which would have run *after* this one and immediately undone it.
   const lastMarkedRef = useRef<string | null>(null);
   const latestMessageAt = messages.length ? messages[messages.length - 1].created_at : null;
+  const markKey = latestMessageAt ? `${chatTargetId}:${latestMessageAt}` : null;
 
   useEffect(() => {
-    if (!currentUserId || !chatTargetId || !latestMessageAt) return;
-    if (lastMarkedRef.current === latestMessageAt) return;
-    lastMarkedRef.current = latestMessageAt;
+    if (!currentUserId || !chatTargetId || !markKey) return;
+    if (lastMarkedRef.current === markKey) return;
+    lastMarkedRef.current = markKey;
 
     supabase
       .from("group_message_reads")
@@ -77,14 +82,14 @@ export function useChat(chatTargetId: string) {
         { onConflict: "user_id,group_type,group_id" },
       )
       .then(({ error }) => {
-        if (error) console.warn("Failed to mark DM as read:", error);
+        if (error) {
+          console.warn("Failed to mark DM as read:", error);
+          // Clear the key so the next poll retries instead of treating a
+          // failed write as done.
+          lastMarkedRef.current = null;
+        }
       });
-  }, [currentUserId, chatTargetId, latestMessageAt]);
-
-  // Reset the marker when switching conversations so the new one gets marked.
-  useEffect(() => {
-    lastMarkedRef.current = null;
-  }, [chatTargetId]);
+  }, [currentUserId, chatTargetId, markKey]);
 
   const notifyRecipient = async (preview: string) => {
     if (!currentUserId || !chatTargetId) return;

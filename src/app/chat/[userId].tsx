@@ -14,7 +14,7 @@ import {
 import { useLocalSearchParams, Stack } from "expo-router";
 import { useSafeAreaInsets } from "react-native-safe-area-context";
 import { Starfield } from "@/frontend/components/starfield";
-import { SpaceTheme, SpaceStyles } from "@/frontend/constants/theme";
+import { SpaceTheme, Palette, Type, Radius } from "@/frontend/constants/theme";
 import { useChat, Message } from "@/frontend/hooks/use-chat";
 
 export default function ChatScreen() {
@@ -67,7 +67,7 @@ export default function ChatScreen() {
           { alignSelf: isMe ? "flex-end" : "flex-start" },
         ]}
       >
-        <Text style={styles.bubbleText}>{item.content}</Text>
+        <Text style={[styles.bubbleText, isMe && styles.bubbleTextMe]}>{item.content}</Text>
       </View>
     );
   };
@@ -115,14 +115,20 @@ const styles = StyleSheet.create({
   container: { flex: 1 },
   list: { padding: 16, gap: 8 },
   bubble: {
-    maxWidth: "75%",
-    padding: 10,
-    borderRadius: 12,
+    maxWidth: "78%",
+    paddingHorizontal: 12,
+    paddingVertical: 9,
+    borderRadius: Radius.medium,
     marginBottom: 8,
   },
-  bubbleMe: { backgroundColor: SpaceTheme.supernovaPink },
-  bubbleThem: { ...SpaceStyles.glassCard },
-  bubbleText: { color: SpaceTheme.starWhite },
+  bubbleMe: { backgroundColor: Palette.accent },
+  // A received message is a raised surface, not a bordered card — bubbles sit
+  // directly on the background in a stack, so the extra outline just added
+  // noise at every message.
+  bubbleThem: { backgroundColor: Palette.raised },
+  bubbleText: { ...Type.body, color: Palette.text },
+  // Cream on the amber accent measures ~2.2:1 — well under the 4.5:1 floor.
+  bubbleTextMe: { color: Palette.base },
   inputRow: {
     flexDirection: "row",
     alignItems: "flex-end",
@@ -131,19 +137,21 @@ const styles = StyleSheet.create({
   },
   input: {
     flex: 1,
-    borderRadius: 20,
+    borderRadius: Radius.pill,
     paddingHorizontal: 16,
     paddingVertical: 10,
-    fontSize: 16,
+    ...Type.body,
     maxHeight: 100,
-    backgroundColor: "rgba(255,255,255,0.08)",
-    color: SpaceTheme.starWhite,
+    backgroundColor: Palette.raised,
+    borderWidth: 1,
+    borderColor: Palette.border,
+    color: Palette.text,
   },
   sendButton: {
-    backgroundColor: SpaceTheme.glowCyan,
-    borderRadius: 20,
+    backgroundColor: Palette.accent,
+    borderRadius: Radius.pill,
     paddingHorizontal: 18,
     paddingVertical: 10,
   },
-  sendButtonText: { color: SpaceTheme.backgroundVoid, fontWeight: "700" },
+  sendButtonText: { ...Type.small, color: Palette.base, fontWeight: "700" },
 });

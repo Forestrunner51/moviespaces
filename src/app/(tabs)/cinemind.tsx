@@ -19,7 +19,7 @@ import { MoviePoster } from "@/frontend/components/movie-poster";
 import { LockedStateView } from "@/frontend/components/locked-state-view";
 import { CineMindStatsCard } from "@/frontend/components/cinemind-stats";
 import { GlobalLeaderboardView } from "@/frontend/components/cinemind-global-leaderboard";
-import { SpaceTheme, SpaceStyles } from "@/frontend/constants/theme";
+import { SpaceTheme, SpaceStyles, Palette } from "@/frontend/constants/theme";
 import {
   fetchTodayPuzzle,
   fetchStats,
@@ -998,7 +998,7 @@ const styles = StyleSheet.create({
     gap: 8,
     paddingVertical: 14,
     marginTop: 12,
-    borderColor: "rgba(245, 197, 24, 0.4)",
+    borderColor: Palette.accentBorder,
   },
   secondaryButtonText: { color: SpaceTheme.accentGold, fontSize: 15, fontWeight: "700" },
   countdownText: {

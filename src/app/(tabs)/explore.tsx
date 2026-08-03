@@ -12,8 +12,11 @@ import {
 import { router } from "expo-router";
 import { Ionicons } from "@expo/vector-icons";
 import { Starfield } from "@/frontend/components/starfield";
-import { SpaceTheme, SpaceStyles } from "@/frontend/constants/theme";
-import { POST_ACTIVITIES, activityEmoji, activityLabel } from "@/frontend/constants/activities";
+import { SpaceTheme, SpaceStyles, Palette, Type, Display } from "@/frontend/constants/theme";
+import { AvatarStack } from "@/frontend/components/avatar";
+import { useProfiles } from "@/frontend/hooks/use-profiles";
+import { formatEventDate } from "@/frontend/utils/event-date";
+import { POST_ACTIVITIES } from "@/frontend/constants/activities";
 import { THEATER_CHAINS, cinemaChain } from "@/frontend/constants/theater-memberships";
 import { getDeviceLocation, Coordinates } from "@/frontend/services/nearby-theaters";
 import { distanceMiles } from "@/frontend/utils/distance";
@@ -39,7 +42,56 @@ interface OpenSpace {
   postActivities: string | null;
   posterPath: string | null;
   eventCategory: string | null;
-  members: { id: string; name: string; confirmed: boolean }[];
+  // userId drives the attendee avatars — already returned by the API.
+  members: { id: string; name: string; confirmed: boolean; userId: string }[];
+}
+
+// The body of an Explore card: when, what, where, who.
+//
+// Split out as its own component purely so it can call useProfiles — the
+// avatars need a hook, and the card is rendered inside a FlatList
+// renderItem, which isn't a component and can't hold hooks of its own.
+function ExploreCardMeta({ item, distanceMi }: { item: OpenSpace; distanceMi: number | null }) {
+  const profiles = useProfiles(item.members.map((m) => m.userId));
+  // Relative labels ("Tonight", "In 3 days") read the real current time.
+  const eventDate = formatEventDate(item.screeningTime, item.showDate, item.showTime);
+  const isFree = item.totalCostCents == null || item.totalCostCents === 0;
+
+  return (
+    <>
+      <View style={styles.cardDateRow}>
+        <Text style={styles.cardDate}>{eventDate.date}</Text>
+        <Text style={styles.cardTime}>{eventDate.time}</Text>
+        {!!eventDate.relative && <Text style={styles.cardRelative}>{eventDate.relative}</Text>}
+      </View>
+
+      <Text style={styles.spaceFilmName} numberOfLines={1}>
+        {item.filmName}
+      </Text>
+
+      <Text style={styles.spaceDetails} numberOfLines={1}>
+        {item.cinemaName}
+        {distanceMi != null ? ` · ${distanceMi.toFixed(1)} mi` : ""}
+      </Text>
+
+      <View style={styles.cardFooter}>
+        <AvatarStack
+          people={item.members.map((m) => ({
+            userId: m.userId,
+            name: m.name,
+            avatarUrl: profiles.get(m.userId)?.avatarUrl,
+          }))}
+          size={24}
+        />
+        <Text style={styles.spaceMembers} numberOfLines={1}>
+          {item.members.length}/{item.maxCapacity} · {item.hostName}
+        </Text>
+        {!isFree && (
+          <Text style={styles.spacePrice}>${(item.totalCostCents! / 100).toFixed(0)}</Text>
+        )}
+      </View>
+    </>
+  );
 }
 
 type TypeFilter = "all" | "public_gathering" | "private_rental";
@@ -47,10 +99,14 @@ type PriceFilter = "any" | "under50" | "50to150" | "150plus";
 type DistanceFilter = "any" | "5" | "10" | "25";
 type EventCategoryFilter = "all" | EventCategory;
 
-const EVENT_CATEGORY_OPTIONS: { key: EventCategoryFilter; emoji: string; label: string }[] = [
-  { key: "all", emoji: "", label: "All" },
-  ...(Object.entries(EVENT_CATEGORIES) as [EventCategory, { emoji: string; label: string }][]).map(
-    ([key, { emoji, label }]) => ({ key, emoji, label }),
+const EVENT_CATEGORY_OPTIONS: {
+  key: EventCategoryFilter;
+  icon: keyof typeof Ionicons.glyphMap | null;
+  label: string;
+}[] = [
+  { key: "all", icon: null, label: "All" },
+  ...(Object.entries(EVENT_CATEGORIES) as [EventCategory, { icon: keyof typeof Ionicons.glyphMap; label: string }][]).map(
+    ([key, { icon, label }]) => ({ key, icon, label }),
   ),
 ];
 
@@ -183,21 +239,11 @@ export default function ExploreScreen() {
     !knownDistances.some((d) => d <= 10) &&
     knownDistances.some((d) => d <= 30);
 
-  const confirmedCount = (space: OpenSpace) => space.members.filter((m) => m.confirmed).length;
-
-  const isFillingUpFast = (space: OpenSpace) =>
-    space.maxCapacity > 0 && confirmedCount(space) >= space.maxCapacity * 0.75;
-
-  const isHappeningTonight = (space: OpenSpace) => {
-    if (!space.screeningTime) return false;
-    const eventDate = new Date(space.screeningTime);
-    const now = new Date();
-    return (
-      eventDate.getFullYear() === now.getFullYear() &&
-      eventDate.getMonth() === now.getMonth() &&
-      eventDate.getDate() === now.getDate()
-    );
-  };
+  // isFillingUpFast / isHappeningTonight used to drive "🔥 Filling Up Fast"
+  // and "⚡ Happening Tonight" badges on every card. Both are gone: the card
+  // now shows the real attendee count against capacity and a relative date
+  // ("Tonight", "In 3 days"), which says the same thing without another two
+  // coloured pills competing for attention.
 
   if (loading) {
     return (
@@ -334,17 +380,26 @@ export default function ExploreScreen() {
 
                   <Text style={styles.filterLabel}>Event Type</Text>
                   <View style={styles.chipRow}>
-                    {EVENT_CATEGORY_OPTIONS.map(({ key, emoji, label }) => (
+                    {EVENT_CATEGORY_OPTIONS.map(({ key, icon, label }) => (
                       <TouchableOpacity
                         key={key}
                         activeOpacity={0.8}
                         style={[styles.chip, eventCategoryFilter === key && styles.chipActive]}
                         onPress={() => setEventCategoryFilter(key)}
                       >
+                        {!!icon && (
+                          <Ionicons
+                            name={icon}
+                            size={13}
+                            color={
+                              eventCategoryFilter === key ? Palette.base : Palette.textMuted
+                            }
+                          />
+                        )}
                         <Text
                           style={[styles.chipText, eventCategoryFilter === key && styles.chipTextActive]}
                         >
-                          {emoji ? `${emoji} ${label}` : label}
+                          {label}
                         </Text>
                       </TouchableOpacity>
                     ))}
@@ -484,106 +539,29 @@ export default function ExploreScreen() {
                 uri={item.posterPath}
                 width={72}
                 style={styles.spaceCardPoster}
-                fallbackEmoji={EVENT_CATEGORIES[eventCategoryOf(item.spaceType, item.eventCategory)].emoji}
+                fallbackIcon={EVENT_CATEGORIES[eventCategoryOf(item.spaceType, item.eventCategory)].icon}
               />
               <View style={styles.spaceCardBody}>
-              <View style={styles.spaceCardHeader}>
-                <Text style={styles.spaceFilmName} numberOfLines={1}>
-                  {item.filmName}
-                </Text>
-                <View
-                  style={[
-                    styles.typeBadge,
-                    item.spaceType === "private_rental" && styles.typeBadgePink,
-                  ]}
-                >
-                  <Text style={styles.typeBadgeText}>
-                    {item.spaceType === "private_rental" ? "Watch Party" : "MovieSpace"}
-                  </Text>
-                </View>
-              </View>
-              {item.spaceType === "private_rental" && (
-                <View style={styles.categoryRow}>
-                  <View style={styles.categoryBadge}>
-                    <Text style={styles.categoryBadgeText}>
-                      {EVENT_CATEGORIES[eventCategoryOf(item.spaceType, item.eventCategory)].emoji}{" "}
-                      {EVENT_CATEGORIES[eventCategoryOf(item.spaceType, item.eventCategory)].label}
-                    </Text>
-                  </View>
-                </View>
-              )}
-              <View style={styles.statusRow}>
-                {isHappeningTonight(item) && (
-                  <View style={[styles.statusBadge, styles.statusBadgeHot]}>
-                    <Text style={[styles.statusBadgeText, styles.statusBadgeHotText]}>
-                      ⚡ Happening Tonight
-                    </Text>
-                  </View>
-                )}
-                {isFillingUpFast(item) && (
-                  <View style={[styles.statusBadge, styles.statusBadgeHot]}>
-                    <Text style={[styles.statusBadgeText, styles.statusBadgeHotText]}>
-                      🔥 Filling Up Fast
-                    </Text>
-                  </View>
-                )}
-                {item.totalCostCents != null && item.totalCostCents > 0 ? (
-                  <View style={styles.statusBadge}>
-                    <Text style={styles.statusBadgeText}>🎟️ Cost-Split</Text>
-                  </View>
-                ) : (
-                  <View style={[styles.statusBadge, styles.statusBadgeFree]}>
-                    <Text style={styles.statusBadgeFreeText}>🎉 Free Event</Text>
-                  </View>
-                )}
-              </View>
-              {item.postActivities && (
-                <View style={styles.hangoutBadge}>
-                  <Text style={styles.hangoutBadgeText}>💬 + Hangout After</Text>
-                </View>
-              )}
-              <Text style={styles.spaceDetails} numberOfLines={1}>
-                {item.cinemaName}
-                {spaceDistance(item) != null ? ` • ${spaceDistance(item)!.toFixed(1)} mi` : ""}
-              </Text>
-              <Text style={styles.spaceDetails}>
-                {item.showDate} • {item.showTime}
-              </Text>
-              <Text style={styles.manualBadge}>👤 Manually scheduled by host</Text>
-              {item.totalCostCents != null && (
-                <Text style={styles.spacePrice}>
-                  ${(item.totalCostCents / 100).toFixed(0)} total
-                </Text>
-              )}
-              {item.postActivities && (
-                <View style={styles.afterRow}>
-                  {item.postActivities.split(",").map((key) => (
-                    <View key={key} style={styles.afterBadge}>
-                      <Text style={styles.afterBadgeText}>
-                        {activityEmoji(key)} {activityLabel(key)}
-                      </Text>
-                    </View>
-                  ))}
-                </View>
-              )}
-              <View style={styles.spaceFooter}>
-                <Text style={styles.spaceMembers}>
-                  👥 {item.members.length}/{item.maxCapacity} going
-                </Text>
-                <Text style={styles.spaceHost} numberOfLines={1}>
-                  by {item.hostName}
-                </Text>
+                {/* Date first, then title, then place. The card previously
+                    opened with the title and stacked up to six coloured
+                    badges — "Happening Tonight", "Filling Up Fast",
+                    "Cost-Split", "+ Hangout After", "Manually scheduled",
+                    a type pill — before ever saying when or where it was.
+                    At most one badge earns a place here now; the rest is
+                    detail that belongs on the Space itself. */}
+                <ExploreCardMeta item={item} distanceMi={spaceDistance(item)} />
+
                 <TouchableOpacity
                   activeOpacity={0.7}
                   hitSlop={8}
+                  style={styles.reportSpaceButton}
                   onPress={(e) => {
                     e.stopPropagation();
                     handleReportSpace(item.id);
                   }}
                 >
-                  <Text style={styles.reportSpaceLink}>🚩 Report</Text>
+                  <Ionicons name="flag-outline" size={13} color={Palette.textFaint} />
                 </TouchableOpacity>
-              </View>
               </View>
             </TouchableOpacity>
           )}
@@ -619,7 +597,7 @@ const styles = StyleSheet.create({
     paddingTop: 60,
     paddingHorizontal: 16,
   },
-  title: { fontSize: 28, fontWeight: "bold", color: SpaceTheme.starWhite },
+  title: { ...Display.heading, color: Palette.text },
   subtitle: { fontSize: 14, color: SpaceTheme.mutedOrbit, marginBottom: 16 },
   linkRow: {
     flexDirection: "row",
@@ -644,8 +622,8 @@ const styles = StyleSheet.create({
     paddingHorizontal: 12,
     borderRadius: 999,
     borderWidth: 1,
-    borderColor: "rgba(245, 197, 24, 0.35)",
-    backgroundColor: "rgba(245, 197, 24, 0.10)",
+    borderColor: Palette.accentBorder,
+    backgroundColor: Palette.accentDim,
   },
   clubsChipText: { color: SpaceTheme.accentGold, fontSize: 13, fontWeight: "700" },
   filters: { marginBottom: 8 },
@@ -734,23 +712,31 @@ const styles = StyleSheet.create({
     marginBottom: 4,
   },
   spaceFilmName: {
-    flex: 1,
-    fontSize: 16,
-    fontWeight: "700",
-    color: SpaceTheme.starWhite,
-    marginRight: 8,
+    ...Type.body,
+    fontWeight: "600",
+    color: Palette.text,
+    marginBottom: 2,
   },
+  // Date-led card header.
+  cardDateRow: { flexDirection: "row", alignItems: "baseline", gap: 8, marginBottom: 2 },
+  cardDate: { ...Display.dateCard, color: Palette.text },
+  cardTime: { ...Type.small, color: Palette.textMuted },
+  cardRelative: { ...Type.caption, color: Palette.accent, fontWeight: "700" },
+  cardFooter: { flexDirection: "row", alignItems: "center", gap: 8, marginTop: 10 },
+  // Icon-only, tucked top-right — reporting is a rare action and shouldn't
+  // sit inline with the attendee count competing for the same attention.
+  reportSpaceButton: { position: "absolute", top: 0, right: 0, padding: 4 },
   typeBadge: {
-    backgroundColor: "rgba(56, 189, 248, 0.15)",
+    backgroundColor: Palette.accentDim,
     borderWidth: 1,
-    borderColor: "rgba(56, 189, 248, 0.4)",
+    borderColor: Palette.accentBorder,
     borderRadius: 6,
     paddingVertical: 3,
     paddingHorizontal: 8,
   },
   typeBadgePink: {
-    backgroundColor: "rgba(244, 114, 182, 0.15)",
-    borderColor: "rgba(244, 114, 182, 0.4)",
+    backgroundColor: Palette.accentDim,
+    borderColor: Palette.accentBorder,
   },
   typeBadgeText: { fontSize: 11, fontWeight: "700", color: SpaceTheme.starWhite },
   categoryRow: { marginBottom: 4 },
@@ -762,14 +748,14 @@ const styles = StyleSheet.create({
     backgroundColor: "rgba(255,255,255,0.06)",
   },
   categoryBadgeText: { fontSize: 11, fontWeight: "600", color: SpaceTheme.mutedOrbit },
-  spaceDetails: { fontSize: 13, color: SpaceTheme.mutedOrbit, marginBottom: 2 },
+  spaceDetails: { ...Type.small, color: Palette.textMuted },
   manualBadge: { fontSize: 11, color: SpaceTheme.mutedOrbit, fontStyle: "italic", marginTop: 2 },
-  spacePrice: { fontSize: 13, color: SpaceTheme.accentGold, fontWeight: "700", marginTop: 4 },
+  spacePrice: { ...Type.caption, color: Palette.accent, fontWeight: "700" },
   hangoutBadge: {
     alignSelf: "flex-start",
-    backgroundColor: "rgba(244, 114, 182, 0.15)",
+    backgroundColor: Palette.accentDim,
     borderWidth: 1,
-    borderColor: "rgba(244, 114, 182, 0.4)",
+    borderColor: Palette.accentBorder,
     borderRadius: 6,
     paddingVertical: 3,
     paddingHorizontal: 8,
@@ -783,9 +769,9 @@ const styles = StyleSheet.create({
   hangoutBadgeText: { fontSize: 11, fontWeight: "700", color: SpaceTheme.supernovaPink },
   afterRow: { flexDirection: "row", flexWrap: "wrap", gap: 6, marginTop: 6 },
   afterBadge: {
-    backgroundColor: "rgba(244, 114, 182, 0.15)",
+    backgroundColor: Palette.accentDim,
     borderWidth: 1,
-    borderColor: "rgba(244, 114, 182, 0.4)",
+    borderColor: Palette.accentBorder,
     borderRadius: 6,
     paddingVertical: 3,
     paddingHorizontal: 8,
@@ -796,7 +782,7 @@ const styles = StyleSheet.create({
     justifyContent: "space-between",
     marginTop: 8,
   },
-  spaceMembers: { fontSize: 12, color: SpaceTheme.glowCyan, fontWeight: "600" },
+  spaceMembers: { ...Type.caption, color: Palette.textMuted, flex: 1 },
   spaceHost: { fontSize: 11, color: SpaceTheme.mutedOrbit, maxWidth: 120 },
   reportSpaceLink: { fontSize: 11, color: SpaceTheme.mutedOrbit },
   empty: { textAlign: "center", color: SpaceTheme.mutedOrbit, marginTop: 40, fontSize: 16 },
@@ -809,31 +795,31 @@ const styles = StyleSheet.create({
   },
   statusRow: { flexDirection: "row", flexWrap: "wrap", gap: 6, marginTop: 6 },
   statusBadge: {
-    backgroundColor: "rgba(56, 189, 248, 0.15)",
+    backgroundColor: Palette.accentDim,
     borderWidth: 1,
-    borderColor: "rgba(56, 189, 248, 0.4)",
+    borderColor: Palette.accentBorder,
     borderRadius: 6,
     paddingVertical: 3,
     paddingHorizontal: 8,
   },
   statusBadgeHot: {
-    backgroundColor: "rgba(245, 197, 24, 0.15)",
-    borderColor: "rgba(245, 197, 24, 0.45)",
+    backgroundColor: Palette.accentDim,
+    borderColor: Palette.accentBorder,
   },
   statusBadgeHotText: { color: SpaceTheme.accentGold },
   statusBadgeText: { fontSize: 11, fontWeight: "700", color: SpaceTheme.starWhite },
   statusBadgeFree: {
-    backgroundColor: "rgba(74, 222, 128, 0.15)",
-    borderColor: "rgba(74, 222, 128, 0.4)",
+    backgroundColor: Palette.positiveDim,
+    borderColor: Palette.positiveBorder,
   },
-  statusBadgeFreeText: { fontSize: 11, fontWeight: "700", color: "#4ADE80" },
+  statusBadgeFreeText: { fontSize: 11, fontWeight: "700", color: Palette.positive },
   ctaCard: {
     ...SpaceStyles.glassCard,
     alignItems: "center",
     padding: 20,
     marginTop: 8,
     marginBottom: 20,
-    borderColor: "rgba(56, 189, 248, 0.3)",
+    borderColor: Palette.accentBorder,
   },
   ctaCardTitle: {
     fontSize: 16,
