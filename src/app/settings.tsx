@@ -27,9 +27,21 @@ export default function SettingsScreen() {
   const [togglingNotif, setTogglingNotif] = useState(false);
   const [deletingAccount, setDeletingAccount] = useState(false);
   const [passwordModalVisible, setPasswordModalVisible] = useState(false);
+  const [currentPassword, setCurrentPassword] = useState("");
   const [newPassword, setNewPassword] = useState("");
   const [confirmPassword, setConfirmPassword] = useState("");
   const [changingPassword, setChangingPassword] = useState(false);
+  // Only accounts with an email/password identity can change a password.
+  // A Google/Apple SSO-only account has none, so offering the row would lead
+  // to a re-auth step they can never satisfy.
+  const [hasPasswordLogin, setHasPasswordLogin] = useState(false);
+
+  useEffect(() => {
+    supabase.auth.getUser().then(({ data: { user } }) => {
+      const identities = user?.identities ?? [];
+      setHasPasswordLogin(identities.some((i) => i.provider === "email"));
+    });
+  }, []);
 
   useEffect(() => {
     areNotificationsEnabled().then((enabled) => {
@@ -49,17 +61,27 @@ export default function SettingsScreen() {
   };
 
   const openPasswordModal = () => {
+    setCurrentPassword("");
     setNewPassword("");
     setConfirmPassword("");
     setPasswordModalVisible(true);
   };
 
-  // Direct supabase.auth.updateUser, not the reset-password.tsx email-code
-  // flow — that flow exists for someone who's signed out and doesn't know
-  // their current password. Here the user already has a live session, so
-  // Supabase lets the password be updated straight away with no extra
-  // verification step.
+  // Not the reset-password.tsx email-code flow — that exists for someone who's
+  // signed out and can't remember their password. Here the user has a live
+  // session, so the password can be set directly.
+  //
+  // The current password is re-verified first even though Supabase doesn't
+  // require it: without that step, anyone holding an unlocked phone could
+  // silently take over the account (change the password, and the real owner is
+  // locked out). signInWithPassword against the session's own email is the
+  // check — it fails on a wrong password and simply refreshes the existing
+  // session on success.
   const handleChangePassword = async () => {
+    if (!currentPassword) {
+      Alert.alert("Current password required", "Enter your current password to continue.");
+      return;
+    }
     if (newPassword.length < 6) {
       Alert.alert("Password too short", "Use at least 6 characters.");
       return;
@@ -68,9 +90,24 @@ export default function SettingsScreen() {
       Alert.alert("Passwords don't match", "Double-check both fields match.");
       return;
     }
+    if (newPassword === currentPassword) {
+      Alert.alert("Choose a different password", "The new password matches your current one.");
+      return;
+    }
 
     setChangingPassword(true);
     try {
+      const {
+        data: { user },
+      } = await supabase.auth.getUser();
+      if (!user?.email) throw new Error("Couldn't confirm your account. Please sign in again.");
+
+      const { error: reauthError } = await supabase.auth.signInWithPassword({
+        email: user.email,
+        password: currentPassword,
+      });
+      if (reauthError) throw new Error("That current password isn't right.");
+
       const { error } = await supabase.auth.updateUser({ password: newPassword });
       if (error) throw error;
       setPasswordModalVisible(false);
@@ -185,10 +222,18 @@ export default function SettingsScreen() {
 
         <Text style={styles.sectionLabel}>ACCOUNT</Text>
         <View style={styles.card}>
-          <TouchableOpacity activeOpacity={0.7} style={styles.linkRow} onPress={openPasswordModal}>
-            <Text style={styles.linkText}>Change Password</Text>
-          </TouchableOpacity>
-          <View style={styles.divider} />
+          {hasPasswordLogin && (
+            <>
+              <TouchableOpacity
+                activeOpacity={0.7}
+                style={styles.linkRow}
+                onPress={openPasswordModal}
+              >
+                <Text style={styles.linkText}>Change Password</Text>
+              </TouchableOpacity>
+              <View style={styles.divider} />
+            </>
+          )}
           <TouchableOpacity activeOpacity={0.7} style={styles.linkRow} onPress={handleSignOut}>
             <Text style={styles.linkText}>Sign Out</Text>
           </TouchableOpacity>
@@ -220,6 +265,15 @@ export default function SettingsScreen() {
         >
           <View style={styles.modal}>
             <Text style={styles.modalTitle}>Change Password</Text>
+            <TextInput
+              style={styles.modalInput}
+              placeholder="Current password"
+              placeholderTextColor={SpaceTheme.mutedOrbit}
+              value={currentPassword}
+              onChangeText={setCurrentPassword}
+              secureTextEntry
+              autoCapitalize="none"
+            />
             <TextInput
               style={styles.modalInput}
               placeholder="New password"

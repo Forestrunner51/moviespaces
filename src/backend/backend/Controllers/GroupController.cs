@@ -152,6 +152,15 @@ namespace Backend.Controllers
                 IsPrivate = req.IsPrivate ?? false,
             };
 
+            // Invariant: IsPrivate is only meaningful when there's a code to
+            // enforce it with. Every join path (JoinGroup, JoinGroupWeb, the
+            // /space/{id} gate) rejects unconditionally when SpaceCode is null,
+            // so a private Space without one would be permanently unjoinable by
+            // anyone but its host. GenerateUniqueSpaceCodeAsync always returns a
+            // value today — this makes that dependency explicit rather than
+            // incidental, so the pair can't drift apart later.
+            if (string.IsNullOrWhiteSpace(group.SpaceCode)) group.IsPrivate = false;
+
             group.Members.Add(new GroupMember
             {
                 GroupId = group.Id,
@@ -356,7 +365,7 @@ namespace Backend.Controllers
         }
 
         [HttpGet("{id}")]
-        public async Task<IActionResult> GetGroup(string id)
+        public async Task<IActionResult> GetGroup(string id, [FromQuery] string? code)
         {
             var group = await ResolveGroupAsync(id);
             if (group == null) return NotFound();
@@ -368,9 +377,30 @@ namespace Backend.Controllers
             // fetch the Space, read spaceCode, join. Only people already inside
             // (host or joined member) get to see the code they're meant to share.
             var userId = GetUserId();
-            var canSeeCode = !string.IsNullOrEmpty(userId)
+            var isInsider = !string.IsNullOrEmpty(userId)
                 && (group.UserId == userId || (group.Members?.Any(m => m.UserId == userId) ?? false));
-            if (!canSeeCode) group.SpaceCode = null;
+
+            // Captured before the redaction below nulls it — the attendee-list
+            // check still needs to compare against the real code.
+            var actualCode = group.SpaceCode;
+            var presentedCode = (code ?? "").Trim();
+            var presentedValidCode = !string.IsNullOrEmpty(presentedCode)
+                && string.Equals(presentedCode, actualCode, StringComparison.OrdinalIgnoreCase);
+
+            if (!isInsider) group.SpaceCode = null;
+
+            // The attendee list is gated the same way the public /space/{id}
+            // invite page is. Previously only that page was gated, so a private
+            // Space stayed fully readable — venue, host, and every attendee's
+            // name — to any signed-in user holding a forwarded groupId, which is
+            // precisely what IsPrivate is meant to prevent. Enough detail
+            // survives for an invited-but-not-yet-joined user to see what
+            // they're joining; who else is going does not.
+            if (group.IsPrivate && !isInsider && !presentedValidCode)
+            {
+                group.Members = new List<GroupMember>();
+                group.MembersHidden = true;
+            }
 
             return Ok(group);
         }
@@ -411,6 +441,11 @@ namespace Backend.Controllers
             var showTime = WebUtility.HtmlEncode(group.ShowTime);
             var showDate = WebUtility.HtmlEncode(group.ShowDate);
             var posterUrl = WebUtility.HtmlEncode(group.PosterPath ?? "");
+            // HTML-encoded only for the markup below. The copy of this value
+            // that goes into the inline <script> is JsonSerializer-encoded at
+            // the point of use instead — HtmlEncode is the wrong escaper for a
+            // JS string context, and only happened to be safe here because
+            // SpaceCode is drawn from a fixed [A-Z2-9] alphabet.
             var joinCode = WebUtility.HtmlEncode(group.SpaceCode ?? "");
             var iosStoreUrl = WebUtility.HtmlEncode(configuration["AppLinks:IosStoreUrl"] ?? "");
             var androidStoreUrl = WebUtility.HtmlEncode(configuration["AppLinks:AndroidStoreUrl"] ?? "");
@@ -521,7 +556,7 @@ namespace Backend.Controllers
                             headers: {{ 'Content-Type': 'application/json' }},
                             body: JSON.stringify({{
                                 name: name,
-                                spaceCode: {(string.IsNullOrEmpty(joinCode) ? "null" : $"'{joinCode}'")},
+                                spaceCode: {JsonSerializer.Serialize(group.SpaceCode)},
                                 guestToken: guestToken()
                             }})
                         }});

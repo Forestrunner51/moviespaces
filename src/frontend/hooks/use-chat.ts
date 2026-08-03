@@ -1,4 +1,4 @@
-import { useState, useEffect } from "react";
+import { useState, useEffect, useRef } from "react";
 import { supabase } from "@/frontend/config/supabase";
 import { authFetch } from "@/frontend/services/api";
 
@@ -55,13 +55,21 @@ export function useChat(chatTargetId: string) {
     }
   }, [currentUserId, chatTargetId]);
 
-  // Marks this DM as read as of now, once per screen visit — mirrors
-  // use-group-chat.ts's read marker so friends-panel.tsx's "N new" badge
-  // clears once you've actually opened the conversation. group_id here is
-  // the other person's user id (there's no separate DM/thread id), group_type
-  // "dm" distinguishes this row from a real group/Space with the same uuid.
+  // Marks this DM read, and keeps it marked as new messages arrive while the
+  // screen is open. Marking only on mount (the original approach, and what
+  // use-group-chat.ts did) left anything that landed mid-conversation counted
+  // as unread — you'd read a reply live, leave, and still see a badge for it.
+  //
+  // Keyed on the newest message's timestamp rather than firing on every 4s
+  // poll, so this writes at most once per genuinely new message.
+  const lastMarkedRef = useRef<string | null>(null);
+  const latestMessageAt = messages.length ? messages[messages.length - 1].created_at : null;
+
   useEffect(() => {
-    if (!currentUserId || !chatTargetId) return;
+    if (!currentUserId || !chatTargetId || !latestMessageAt) return;
+    if (lastMarkedRef.current === latestMessageAt) return;
+    lastMarkedRef.current = latestMessageAt;
+
     supabase
       .from("group_message_reads")
       .upsert(
@@ -71,7 +79,12 @@ export function useChat(chatTargetId: string) {
       .then(({ error }) => {
         if (error) console.warn("Failed to mark DM as read:", error);
       });
-  }, [currentUserId, chatTargetId]);
+  }, [currentUserId, chatTargetId, latestMessageAt]);
+
+  // Reset the marker when switching conversations so the new one gets marked.
+  useEffect(() => {
+    lastMarkedRef.current = null;
+  }, [chatTargetId]);
 
   const notifyRecipient = async (preview: string) => {
     if (!currentUserId || !chatTargetId) return;

@@ -2,6 +2,7 @@ using Backend.Data;
 using Backend.Services;
 using Microsoft.EntityFrameworkCore;
 using Microsoft.AspNetCore.Authentication.JwtBearer;
+using Microsoft.AspNetCore.HttpOverrides;
 using Microsoft.AspNetCore.RateLimiting;
 using Microsoft.IdentityModel.Tokens;
 using Sentry.AspNetCore;
@@ -37,6 +38,27 @@ builder.Services.AddCors(options =>
               .AllowAnyHeader()
               .AllowAnyMethod();
     });
+});
+
+// Render terminates TLS at its own proxy and forwards to this app, so without
+// this the per-connection RemoteIpAddress is the *proxy's* address for every
+// request. That matters specifically because the rate limiter below partitions
+// anonymous callers by IP: every anonymous request — including GET
+// /api/group/open, which Home and Explore both hit on plain fetch — would
+// otherwise share a single bucket and start 429ing real users under very
+// modest traffic.
+//
+// ForwardLimit 1 = trust exactly one hop (Render's proxy). The known-proxy
+// lists are cleared because a PaaS proxy has no stable address to pin. The
+// tradeoff is that X-Forwarded-For can be spoofed to dodge a rate limit; that
+// is strictly better than the alternative here, and rate limiting is not the
+// only control on any of these endpoints.
+builder.Services.Configure<ForwardedHeadersOptions>(options =>
+{
+    options.ForwardedHeaders = ForwardedHeaders.XForwardedFor | ForwardedHeaders.XForwardedProto;
+    options.ForwardLimit = 1;
+    options.KnownIPNetworks.Clear();
+    options.KnownProxies.Clear();
 });
 
 // --- RATE LIMITING ---
@@ -147,6 +169,10 @@ builder.Services.AddDbContext<AppDbContext>(options =>
     options.UseNpgsql(connectionString));
 
 var app = builder.Build();
+
+// Must run before anything that reads the client IP or scheme — notably the
+// rate limiter's anonymous partition key.
+app.UseForwardedHeaders();
 
 app.UseCors("AllowReactApp");
 app.UseAuthentication();

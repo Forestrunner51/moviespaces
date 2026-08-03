@@ -23,8 +23,14 @@ export default function SpaceRedirectScreen() {
     let cancelled = false;
     (async () => {
       try {
+        // The code travels with the lookup, not just onward to /group — a
+        // private Space hides its attendee list from anyone who can't present
+        // it (see GetGroup), and an invited user arriving by link should see
+        // the full picture rather than an empty member list.
         const res = await authFetch(
-          `${process.env.EXPO_PUBLIC_API_URL}/api/group/${id}`,
+          `${process.env.EXPO_PUBLIC_API_URL}/api/group/${id}${
+            code ? `?code=${encodeURIComponent(code)}` : ""
+          }`,
         );
         if (!res.ok) throw new Error("Space not found");
         const group = await res.json();
