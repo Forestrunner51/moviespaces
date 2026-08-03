@@ -19,7 +19,7 @@ import { router, useLocalSearchParams } from "expo-router";
 import AsyncStorage from "@react-native-async-storage/async-storage";
 import DateTimePicker from "@react-native-community/datetimepicker";
 import * as ImagePicker from "expo-image-picker";
-import { File } from "expo-file-system";
+import { uploadImage } from "@/frontend/services/image-upload";
 import { Ionicons } from "@expo/vector-icons";
 import { authFetch } from "@/frontend/services/api";
 import { supabase } from "@/frontend/config/supabase";
@@ -352,28 +352,18 @@ export default function CreateSpaceScreen() {
       } = await supabase.auth.getUser();
       if (!user) throw new Error("You need to be signed in to upload a photo.");
 
-      // NOT fetch(uri).blob() — React Native's Blob can't be built from an
-      // ArrayBuffer/ArrayBufferView (throws "Creating blobs from 'ArrayBuffer'
-      // and 'ArrayBufferView' are not supported"), which is exactly what
-      // supabase-js's upload path does under the hood. Reading the local file
-      // straight into a real ArrayBuffer via expo-file-system's File class
-      // sidesteps RN's Blob entirely — same fix as profile.tsx's avatar
-      // upload. (Not FileSystem.readAsStringAsync — that's the pre-SDK-54
-      // legacy API and throws at runtime in SDK 56.)
-      const arrayBuffer = await new File(result.assets[0].uri).arrayBuffer();
       // Namespaced under the uploader's own folder (not a groupId — the
       // Space doesn't exist yet at this point in the form) so Storage RLS
       // can scope write access to "your own folder" without needing a
       // groupId to check against. See 20260802_space_photo_storage.sql.
-      const path = `${user.id}/${Date.now()}.jpg`;
-
-      const { error: uploadError } = await supabase.storage
-        .from("space-photos")
-        .upload(path, arrayBuffer, { contentType: "image/jpeg" });
-      if (uploadError) throw uploadError;
-
-      const { data: publicUrlData } = supabase.storage.from("space-photos").getPublicUrl(path);
-      setPosterPath(publicUrlData.publicUrl);
+      // See services/image-upload.ts for why this can't just be
+      // fetch(uri).blob() on React Native.
+      const publicUrl = await uploadImage(
+        "space-photos",
+        `${user.id}/${Date.now()}.jpg`,
+        result.assets[0].uri,
+      );
+      setPosterPath(publicUrl);
     } catch (err: any) {
       Alert.alert("Couldn't upload photo", err.message || "Please try again.");
     } finally {

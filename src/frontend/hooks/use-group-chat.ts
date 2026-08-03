@@ -117,11 +117,22 @@ export function useGroupChat(groupType: GroupChatType, groupId: string) {
     }
   }, [currentUserId, groupId, groupType]);
 
-  // Marks the chat as read as of now, once per screen visit — actively
-  // viewing a chat means you're caught up, so the Spaces list's "N new
-  // messages" badge should clear once you've opened it.
+  // Marks the chat read, and keeps it marked as new messages arrive while the
+  // screen is open — actively viewing a chat means you're caught up, so the
+  // Spaces list's "N new messages" badge should clear and stay cleared.
+  //
+  // Marking only on mount left anything that landed mid-conversation still
+  // counted as unread: you'd watch a message come in, leave, and the badge
+  // would claim it was new. Keyed on the newest message's timestamp so this
+  // writes at most once per genuinely new message, not on every 4s poll.
+  const lastMarkedRef = useRef<string | null>(null);
+  const latestMessageAt = messages.length ? messages[messages.length - 1].created_at : null;
+
   useEffect(() => {
-    if (!currentUserId || !groupId) return;
+    if (!currentUserId || !groupId || !latestMessageAt) return;
+    if (lastMarkedRef.current === latestMessageAt) return;
+    lastMarkedRef.current = latestMessageAt;
+
     supabase
       .from("group_message_reads")
       .upsert(
@@ -131,7 +142,12 @@ export function useGroupChat(groupType: GroupChatType, groupId: string) {
       .then(({ error }) => {
         if (error) console.warn("Failed to mark chat as read:", error);
       });
-  }, [currentUserId, groupId, groupType]);
+  }, [currentUserId, groupId, groupType, latestMessageAt]);
+
+  // Reset when switching Spaces so the next one gets its own marker.
+  useEffect(() => {
+    lastMarkedRef.current = null;
+  }, [groupId]);
 
   const sendMessage = async (content: string) => {
     if (!currentUserId || !groupId || !content.trim()) return { success: false };

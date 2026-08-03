@@ -46,6 +46,10 @@ interface Group {
   spaceCode: string | null;
   isPublic: boolean;
   isPrivate: boolean;
+  // True when this is a private Space and the viewer is neither host nor
+  // member and didn't arrive with the invite code — `members` comes back
+  // empty in that case, which is not the same as "nobody is going."
+  membersHidden: boolean;
   genreCategory: string | null;
   userId: string;
   hostName: string;
@@ -108,8 +112,13 @@ export default function GroupScreen() {
 
   const fetchGroup = useCallback(async () => {
     try {
+      // Carries the invite code so a private Space returns its attendee list
+      // to someone who was actually invited (see GetGroup's MembersHidden
+      // gate) rather than an empty one.
       const res = await authFetch(
-        `${process.env.EXPO_PUBLIC_API_URL}/api/group/${groupId}`,
+        `${process.env.EXPO_PUBLIC_API_URL}/api/group/${groupId}${
+          code ? `?code=${encodeURIComponent(code)}` : ""
+        }`,
       );
       // On a non-OK response (deleted Space, transient 500 during the 5s
       // poll, etc.) leave the current state alone rather than clobbering
@@ -130,7 +139,7 @@ export default function GroupScreen() {
     } finally {
       setLoading(false);
     }
-  }, [groupId]);
+  }, [groupId, code]);
 
   useEffect(() => {
     fetchGroup();
@@ -747,8 +756,14 @@ export default function GroupScreen() {
 
         <View style={styles.section}>
           <Text style={styles.sectionTitle}>
-            Group Members ({groupMembers.length})
+            {group.membersHidden ? "Who's Going" : `Group Members (${groupMembers.length})`}
           </Text>
+          {group.membersHidden && (
+            <Text style={styles.membersHiddenText}>
+              This Space is private — the guest list is only visible to people who&apos;ve
+              joined.
+            </Text>
+          )}
           <FlatList
             data={groupMembers}
             scrollEnabled={false}
@@ -1161,6 +1176,7 @@ const styles = StyleSheet.create({
     borderBottomWidth: 1,
     borderBottomColor: "rgba(255,255,255,0.08)",
   },
+  membersHiddenText: { fontSize: 13, color: SpaceTheme.mutedOrbit, lineHeight: 18 },
   memberNameBlock: { flex: 1, marginRight: 12 },
   memberName: { fontSize: 16, color: SpaceTheme.starWhite },
   guestTag: { fontSize: 11, color: SpaceTheme.mutedOrbit, marginTop: 2 },

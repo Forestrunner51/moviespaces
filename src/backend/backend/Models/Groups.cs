@@ -174,6 +174,14 @@ namespace Backend.Models
 
         public DateTime CreatedAt { get; set; } = DateTime.UtcNow;
         public List<GroupMember> Members { get; set; } = new();
+
+        // Not persisted — set by GetGroup when a private Space is fetched by
+        // someone who is neither host nor member and didn't present the invite
+        // code. Members comes back empty in that case, and this is what lets
+        // the client say "hidden until you join" instead of rendering a
+        // truthful-looking "0 members".
+        [NotMapped]
+        public bool MembersHidden { get; set; } = false;
     }
 
     public class GroupMember
