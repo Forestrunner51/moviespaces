@@ -911,7 +911,11 @@ namespace Backend.Controllers
         // message on its own. The client calls this right after a successful
         // send so the (EF-owned) push token / membership data can be used to
         // notify everyone else in the Space.
+        // Rate-limited: this fans a push out to every member of the Space, so
+        // it's the highest-amplification endpoint in the app — one request
+        // becomes N notifications on N devices.
         [HttpPost("{id}/notify-message")]
+        [EnableRateLimiting("write-heavy")]
         public async Task<IActionResult> NotifyNewMessage(Guid id, [FromBody] NotifyMessageRequest req)
         {
             var senderId = GetUserId();
@@ -927,8 +931,12 @@ namespace Backend.Controllers
             var isMember = group.UserId == senderId || group.Members.Any(m => m.UserId == senderId);
             if (!isMember) return Forbid();
 
-            var preview = req.Preview.Length > 120 ? req.Preview.Substring(0, 120) + "…" : req.Preview;
-            await NotifyMembersAsync(id, $"💬 {req.SenderName}", preview, excludeUserId: senderId);
+            // Null-safe: both come straight off the request body, so a client
+            // omitting either shouldn't produce a 500.
+            var senderName = string.IsNullOrWhiteSpace(req.SenderName) ? "Someone" : req.SenderName;
+            var rawPreview = req.Preview ?? "";
+            var preview = rawPreview.Length > 120 ? rawPreview.Substring(0, 120) + "…" : rawPreview;
+            await NotifyMembersAsync(id, $"💬 {senderName}", preview, excludeUserId: senderId);
             return Ok();
         }
 
@@ -1109,7 +1117,19 @@ namespace Backend.Controllers
                     : req.HangoutNotes.Trim();
             }
 
-            if (showtimeChanged) group.ShowtimeReportCount = 0;
+            if (showtimeChanged)
+            {
+                group.ShowtimeReportCount = 0;
+
+                // ReminderSent is a one-way latch that ReminderBackgroundService
+                // sets after firing the "starting soon" push. That was safe while
+                // a Space's time couldn't change post-creation — now that it can,
+                // leaving it set means rescheduling an event whose reminder
+                // already went out silently gets no reminder at its new time.
+                // Resetting is safe: the service only picks up Spaces inside its
+                // 2-hour window, so a past or far-future time just won't match.
+                group.ReminderSent = false;
+            }
 
             await _db.SaveChangesAsync();
 

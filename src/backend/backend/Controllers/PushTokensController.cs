@@ -1,5 +1,6 @@
 using Microsoft.AspNetCore.Mvc;
 using Microsoft.AspNetCore.Authorization;
+using Microsoft.AspNetCore.RateLimiting;
 using Microsoft.EntityFrameworkCore;
 using Backend.Data;
 using Backend.Models;
@@ -86,7 +87,11 @@ namespace Backend.Controllers
         // friendship via a Supabase REST call (service role key) before
         // sending — otherwise any authenticated user could push-spam an
         // arbitrary user with a spoofed sender name.
+        // Rate-limited alongside the friendship check: the gate stops
+        // non-friends, but nothing stopped an actual friend from driving a
+        // push notification loop at someone.
         [HttpPost("notify-dm")]
+        [EnableRateLimiting("write-heavy")]
         public async Task<IActionResult> NotifyDirectMessage([FromBody] NotifyDmRequest req)
         {
             var senderId = GetUserId();
@@ -95,16 +100,47 @@ namespace Backend.Controllers
                 return BadRequest(new { error = "recipientUserId is required." });
             }
 
-            var isFriend = await AreFriendsAsync(senderId, req.RecipientUserId);
+            // SECURITY: RecipientUserId is attacker-controlled and gets
+            // interpolated into a PostgREST filter in AreFriendsAsync. Without
+            // this check it's a query-injection vector — a crafted value can
+            // break out of the `or=(...)` filter or append extra query params
+            // (e.g. overriding `status=eq.accepted`), which would make the
+            // friendship check pass for a non-friend and defeat the exact
+            // push-spam protection that method exists to provide.
+            //
+            // Every Supabase user id is a UUID, so requiring one here removes
+            // the whole class rather than trying to escape the payload.
+            if (!Guid.TryParse(req.RecipientUserId, out var recipientGuid))
+            {
+                return BadRequest(new { error = "recipientUserId must be a valid user id." });
+            }
+            var recipientUserId = recipientGuid.ToString();
+
+            var isFriend = await AreFriendsAsync(senderId, recipientUserId);
             if (!isFriend) return Forbid();
 
-            var preview = req.Preview.Length > 120 ? req.Preview.Substring(0, 120) + "…" : req.Preview;
-            await _pushNotificationService.NotifyUserAsync(_db, req.RecipientUserId, $"💬 {req.SenderName}", preview);
+            // Null-safe: both fields come straight off the request body, so a
+            // client omitting them shouldn't produce a 500.
+            var senderName = string.IsNullOrWhiteSpace(req.SenderName) ? "Someone" : req.SenderName;
+            var rawPreview = req.Preview ?? "";
+            var preview = rawPreview.Length > 120 ? rawPreview.Substring(0, 120) + "…" : rawPreview;
+            await _pushNotificationService.NotifyUserAsync(_db, recipientUserId, $"💬 {senderName}", preview);
             return Ok();
         }
 
+        // Both ids MUST already be validated as GUIDs by the caller — this
+        // builds a PostgREST filter by string interpolation, so anything that
+        // can contain a comma, parenthesis or ampersand changes the query's
+        // meaning. The parse below is a second gate rather than a substitute
+        // for validating at the entry point.
         private async Task<bool> AreFriendsAsync(string userIdA, string userIdB)
         {
+            if (!Guid.TryParse(userIdA, out _) || !Guid.TryParse(userIdB, out _))
+            {
+                _logger.LogWarning("Refusing friendship lookup for non-GUID user id.");
+                return false;
+            }
+
             var supabaseUrl = _configuration["Supabase:Url"];
             var serviceRoleKey = _configuration["Supabase:ServiceRoleKey"];
             if (string.IsNullOrEmpty(supabaseUrl) || string.IsNullOrEmpty(serviceRoleKey))
