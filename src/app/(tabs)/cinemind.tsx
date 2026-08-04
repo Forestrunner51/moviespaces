@@ -634,28 +634,78 @@ const MAX_ATTEMPTS_BY_DIFFICULTY: Record<MysteryDifficulty, number> = {
 
 type ClueField = "year" | "decade" | "director" | "genre" | "plot" | "cast" | "poster";
 
+// The order clues are revealed in, per difficulty. Earlier entries appear at
+// lower tiers; the ladder is filtered against what the puzzle actually
+// carries before any of it is sliced (see cluesForTier).
+const CLUE_LADDER: Record<MysteryDifficulty, ClueField[]> = {
+  // Hard means genuinely minimal information — no director/cast/poster ever.
+  hard: ["decade", "plot", "genre"],
+  // Deliberately a harder set than Easy at every tier: no poster, no director.
+  medium: ["year", "genre", "cast", "plot"],
+  easy: ["year", "director", "genre", "plot", "cast", "poster"],
+};
+
+// How many clues each tier reveals. These counts are the actual difficulty
+// contract — they're what the tier ladder used to encode implicitly, kept
+// identical here so balance is unchanged.
+//
+// Each array's length MUST equal that difficulty's MAX_ATTEMPTS_BY_DIFFICULTY:
+// one entry per attempt. A shorter array would silently clamp the final
+// attempts to the last tier's clue count (so the last guess reveals nothing
+// new); a longer one would define tiers no player can ever reach.
+const CLUE_COUNT_BY_TIER: Record<MysteryDifficulty, number[]> = {
+  hard: [2, 3],
+  medium: [2, 3, 4],
+  easy: [2, 3, 4, 6],
+};
+
+if (__DEV__) {
+  for (const difficulty of Object.keys(CLUE_COUNT_BY_TIER) as MysteryDifficulty[]) {
+    if (CLUE_COUNT_BY_TIER[difficulty].length !== MAX_ATTEMPTS_BY_DIFFICULTY[difficulty]) {
+      console.warn(
+        `CineMind: ${difficulty} has ${MAX_ATTEMPTS_BY_DIFFICULTY[difficulty]} attempts but ` +
+          `${CLUE_COUNT_BY_TIER[difficulty].length} clue tiers — these must match.`,
+      );
+    }
+  }
+}
+
 // Which fields are visible at a given tier, per difficulty. Every difficulty
 // still tops out at 100 pts (see GradeMysteryItem on the backend) — the
 // difference is entirely how much you're shown and how many tries you get,
 // never a bigger prize.
-function cluesForTier(difficulty: MysteryDifficulty, tier: number): Set<ClueField> {
-  if (difficulty === "hard") {
-    // 2 attempts: decade + vague plot, then + genre. No director/cast/poster
-    // ever — Hard means genuinely minimal information.
-    return new Set(tier >= 2 ? ["decade", "plot", "genre"] : ["decade", "plot"]);
-  }
-  if (difficulty === "medium") {
-    // 3 attempts: year + genre, then + cast, then + plot. No poster, no
-    // director — a deliberately harder set than Easy at every tier.
-    if (tier >= 3) return new Set(["year", "genre", "cast", "plot"]);
-    if (tier === 2) return new Set(["year", "genre", "cast"]);
-    return new Set(["year", "genre"]);
-  }
-  // Easy: 4 attempts, the full clue set.
-  if (tier >= 4) return new Set(["year", "director", "genre", "plot", "cast", "poster"]);
-  if (tier === 3) return new Set(["year", "director", "genre", "plot"]);
-  if (tier === 2) return new Set(["year", "director", "genre"]);
-  return new Set(["year", "director"]);
+//
+// `available` is what makes this correct rather than aspirational. The old
+// version returned a fixed field list per tier, so any clue the puzzle didn't
+// actually carry silently rendered as nothing and *consumed its tier slot*.
+// That was worst on Mystery TV, where the backend always sends a null
+// director (BuildMysteryTv passes null unconditionally): Easy tier 1 asked
+// for ["year", "director"] and the player saw only the year — one clue, while
+// the difficulty picker promised "4 tries, full clues". Same happened to any
+// film OMDb had no director for. Filtering first means a tier always reveals
+// the number of real clues it's supposed to.
+function cluesForTier(
+  difficulty: MysteryDifficulty,
+  tier: number,
+  available: Set<ClueField>,
+): Set<ClueField> {
+  const ladder = CLUE_LADDER[difficulty].filter((field) => available.has(field));
+  const counts = CLUE_COUNT_BY_TIER[difficulty];
+  const count = counts[Math.min(Math.max(tier, 1), counts.length) - 1];
+  return new Set(ladder.slice(0, count));
+}
+
+// What this particular puzzle can actually show. Year/decade are always
+// derivable from releaseYear; everything else depends on what the catalog
+// row had.
+function availableClues(clues: MysteryMovieView): Set<ClueField> {
+  const available = new Set<ClueField>(["year", "decade"]);
+  if (clues.director) available.add("director");
+  if (clues.genres.length > 0) available.add("genre");
+  if (clues.plot) available.add("plot");
+  if (clues.cast.length > 0) available.add("cast");
+  if (clues.posterPath) available.add("poster");
+  return available;
 }
 
 // Challenges 4 & 5 (movie and TV). Unlike the other three, this is a live
@@ -701,7 +751,7 @@ function MysteryChallenge({
   const isTv = clues.mediaType === "tv";
   const maxAttempts = MAX_ATTEMPTS_BY_DIFFICULTY[difficulty];
   const tier = Math.min(attemptsUsed + 1, maxAttempts);
-  const visibleClues = cluesForTier(difficulty, tier);
+  const visibleClues = cluesForTier(difficulty, tier, availableClues(clues));
   const decade = `${Math.floor(clues.releaseYear / 10) * 10}s`;
 
   const query = search.trim().toLowerCase();
@@ -763,15 +813,16 @@ function MysteryChallenge({
         </View>
       )}
 
+      {/* No per-row emptiness guards or "—" placeholders here: visibleClues
+          is already filtered to fields this puzzle actually has, so anything
+          in the set is guaranteed to render real content. */}
       <View style={styles.clueList}>
         {visibleClues.has("year") && <ClueRow label="Year" value={String(clues.releaseYear)} />}
         {visibleClues.has("decade") && <ClueRow label="Decade" value={decade} />}
-        {visibleClues.has("director") && !!clues.director && (
-          <ClueRow label="Director" value={clues.director} />
-        )}
-        {visibleClues.has("genre") && <ClueRow label="Genre" value={clues.genres.join(", ") || "—"} />}
-        {visibleClues.has("plot") && !!clues.plot && <ClueRow label="Plot" value={clues.plot} />}
-        {visibleClues.has("cast") && <ClueRow label="Cast" value={clues.cast.join(", ") || "—"} />}
+        {visibleClues.has("director") && <ClueRow label="Director" value={clues.director!} />}
+        {visibleClues.has("genre") && <ClueRow label="Genre" value={clues.genres.join(", ")} />}
+        {visibleClues.has("plot") && <ClueRow label="Plot" value={clues.plot!} />}
+        {visibleClues.has("cast") && <ClueRow label="Cast" value={clues.cast.join(", ")} />}
       </View>
 
       {history.map((entry, i) => (

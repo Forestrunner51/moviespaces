@@ -18,6 +18,7 @@ import {
 } from "react-native";
 import { useLocalSearchParams, router } from "expo-router";
 import AsyncStorage from "@react-native-async-storage/async-storage";
+import DateTimePicker from "@react-native-community/datetimepicker";
 import * as WebBrowser from "expo-web-browser";
 import * as Calendar from "expo-calendar";
 import { supabase } from "@/frontend/config/supabase";
@@ -36,6 +37,15 @@ import { reportContent } from "@/frontend/services/moderation";
 import { Avatar } from "@/frontend/components/avatar";
 import { useProfiles } from "@/frontend/hooks/use-profiles";
 import { formatEventDate } from "@/frontend/utils/event-date";
+
+// Display strings written alongside screeningTime on edit, so the free-text
+// columns never drift out of sync with the real timestamp. Matches the
+// format create-space.tsx writes at creation.
+const formatEditDate = (d: Date) =>
+  `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, "0")}-${String(d.getDate()).padStart(2, "0")}`;
+
+const formatEditTime = (d: Date) =>
+  d.toLocaleTimeString(undefined, { hour: "numeric", minute: "2-digit", hour12: true });
 
 interface Member {
   id: string;
@@ -423,26 +433,46 @@ export default function GroupScreen() {
   const [editModalVisible, setEditModalVisible] = useState(false);
   const [editFilmName, setEditFilmName] = useState("");
   const [editCinemaName, setEditCinemaName] = useState("");
-  const [editShowDate, setEditShowDate] = useState("");
-  const [editShowTime, setEditShowTime] = useState("");
   const [editMaxCapacity, setEditMaxCapacity] = useState("");
   const [editTotalCost, setEditTotalCost] = useState("");
   const [saving, setSaving] = useState(false);
+
+  // Real Date objects, not the display strings. ScreeningTime is what every
+  // consumer actually reads — formatEventDate prefers it over showDate/
+  // showTime, hasPassed compares against it, and the reminder service
+  // schedules off it. Editing only the strings (the first version of this
+  // modal) therefore changed nothing anyone could see and left the Space
+  // still "happening" at its original time.
+  const [editDateValue, setEditDateValue] = useState<Date | null>(null);
+  const [editTimeValue, setEditTimeValue] = useState<Date | null>(null);
+  const [editDatePickerVisible, setEditDatePickerVisible] = useState(false);
+  const [editTimePickerVisible, setEditTimePickerVisible] = useState(false);
 
   const openEditModal = () => {
     if (!group) return;
     setEditFilmName(group.filmName);
     setEditCinemaName(group.cinemaName);
-    setEditShowDate(group.showDate);
-    setEditShowTime(group.showTime);
     setEditMaxCapacity(String(group.maxCapacity));
     setEditTotalCost(group.totalCostCents != null ? String(group.totalCostCents / 100) : "");
+    // Legacy Spaces predate screeningTime and have only the free-text
+    // strings, which can't be parsed back into a Date — those start blank and
+    // the host picks a real date/time, which upgrades the row.
+    const existing = group.screeningTime ? new Date(group.screeningTime) : null;
+    const valid = existing && !Number.isNaN(existing.getTime()) ? existing : null;
+    setEditDateValue(valid);
+    setEditTimeValue(valid);
+    setEditDatePickerVisible(false);
+    setEditTimePickerVisible(false);
     setEditModalVisible(true);
   };
 
   const handleSaveEdit = async () => {
-    if (!editFilmName.trim() || !editCinemaName.trim() || !editShowDate.trim() || !editShowTime.trim()) {
-      Alert.alert("Missing info", "Title, venue, date, and time can't be blank.");
+    if (!editFilmName.trim() || !editCinemaName.trim()) {
+      Alert.alert("Missing info", "Title and venue can't be blank.");
+      return;
+    }
+    if (!editDateValue || !editTimeValue) {
+      Alert.alert("Missing info", "Pick a date and a time.");
       return;
     }
     const capacity = parseInt(editMaxCapacity, 10);
@@ -460,13 +490,21 @@ export default function GroupScreen() {
       totalCostCents = Math.round(dollars * 100);
     }
 
+    // Same combine-and-serialize as create-space: the date picker supplies
+    // the day and the time picker the clock time, merged into one instant.
+    const combined = new Date(editDateValue);
+    combined.setHours(editTimeValue.getHours(), editTimeValue.getMinutes(), 0, 0);
+
     setSaving(true);
     const ok = await runGroupAction("/edit", {
       body: JSON.stringify({
         filmName: editFilmName.trim(),
         cinemaName: editCinemaName.trim(),
-        showDate: editShowDate.trim(),
-        showTime: editShowTime.trim(),
+        // The display strings are kept in sync with the real timestamp rather
+        // than edited independently, so they can never disagree.
+        showDate: formatEditDate(combined),
+        showTime: formatEditTime(combined),
+        screeningTime: combined.toISOString(),
         maxCapacity: capacity,
         totalCostCents,
       }),
@@ -1135,20 +1173,60 @@ export default function GroupScreen() {
               value={editCinemaName}
               onChangeText={setEditCinemaName}
             />
-            <TextInput
-              style={styles.modalInput}
-              placeholder="Date (e.g. Sat, Aug 16)"
-              placeholderTextColor={SpaceTheme.mutedOrbit}
-              value={editShowDate}
-              onChangeText={setEditShowDate}
-            />
-            <TextInput
-              style={styles.modalInput}
-              placeholder="Time (e.g. 7:30 PM)"
-              placeholderTextColor={SpaceTheme.mutedOrbit}
-              value={editShowTime}
-              onChangeText={setEditShowTime}
-            />
+            {/* Pickers, not free-text. These set a real timestamp, which is
+                what formatEventDate / hasPassed / the reminder service all
+                read — hand-typed strings could never move any of those. */}
+            <TouchableOpacity
+              activeOpacity={0.8}
+              style={styles.modalPickerField}
+              onPress={() => setEditDatePickerVisible((v) => !v)}
+            >
+              <Ionicons name="calendar-outline" size={17} color={Palette.textMuted} />
+              <Text
+                style={[styles.modalPickerText, !editDateValue && styles.modalPickerPlaceholder]}
+              >
+                {editDateValue ? formatEditDate(editDateValue) : "Select date"}
+              </Text>
+            </TouchableOpacity>
+            {editDatePickerVisible && (
+              <DateTimePicker
+                value={editDateValue ?? new Date()}
+                mode="date"
+                display={Platform.OS === "ios" ? "spinner" : "default"}
+                themeVariant="dark"
+                onValueChange={(_event: any, selected: Date) => {
+                  if (Platform.OS === "android") setEditDatePickerVisible(false);
+                  setEditDateValue(selected);
+                }}
+                onDismiss={() => setEditDatePickerVisible(false)}
+              />
+            )}
+
+            <TouchableOpacity
+              activeOpacity={0.8}
+              style={styles.modalPickerField}
+              onPress={() => setEditTimePickerVisible((v) => !v)}
+            >
+              <Ionicons name="time-outline" size={17} color={Palette.textMuted} />
+              <Text
+                style={[styles.modalPickerText, !editTimeValue && styles.modalPickerPlaceholder]}
+              >
+                {editTimeValue ? formatEditTime(editTimeValue) : "Select time"}
+              </Text>
+            </TouchableOpacity>
+            {editTimePickerVisible && (
+              <DateTimePicker
+                value={editTimeValue ?? new Date()}
+                mode="time"
+                display={Platform.OS === "ios" ? "spinner" : "default"}
+                themeVariant="dark"
+                onValueChange={(_event: any, selected: Date) => {
+                  if (Platform.OS === "android") setEditTimePickerVisible(false);
+                  setEditTimeValue(selected);
+                }}
+                onDismiss={() => setEditTimePickerVisible(false)}
+              />
+            )}
             <TextInput
               style={styles.modalInput}
               placeholder="Max capacity"
@@ -1622,6 +1700,19 @@ const styles = StyleSheet.create({
     marginBottom: 16,
     color: SpaceTheme.starWhite,
   },
+  modalPickerField: {
+    flexDirection: "row",
+    alignItems: "center",
+    gap: 10,
+    borderWidth: 1,
+    borderColor: Palette.border,
+    borderRadius: Radius.small,
+    padding: 12,
+    backgroundColor: Palette.raised,
+    marginBottom: 12,
+  },
+  modalPickerText: { ...Type.body, color: Palette.text, flex: 1 },
+  modalPickerPlaceholder: { color: Palette.textMuted },
   modalCancelButton: { alignItems: "center", padding: 12 },
   modalCancelButtonText: { color: SpaceTheme.mutedOrbit, fontSize: 15 },
 });
