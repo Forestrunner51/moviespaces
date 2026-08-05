@@ -11,6 +11,8 @@ import {
   TextInput,
   KeyboardAvoidingView,
   Platform,
+  type StyleProp,
+  type ViewStyle,
 } from "react-native";
 import { router } from "expo-router";
 import { Ionicons } from "@expo/vector-icons";
@@ -827,7 +829,7 @@ function MysteryChallenge({
 
       {history.map((entry, i) => (
         <View key={i} style={styles.guessRow}>
-          <Text style={styles.guessRowMarker}>{entry.correct ? "🟩" : "🟥"}</Text>
+          <ResultDot correct={entry.correct} style={styles.guessRowMarker} />
           <View style={{ flex: 1 }}>
             <Text style={styles.guessRowTitle}>{entry.title}</Text>
             {!entry.correct && (
@@ -926,6 +928,20 @@ function DifficultySelector({
   );
 }
 
+// A small filled dot instead of 🟩/🟥 — same fix as the cinemind-result web
+// page: an emoji square renders differently per OS/font, can't take its
+// colour from the palette, and doesn't sit on the text baseline. Shared here
+// so the in-app guess history and the results screen use the identical mark;
+// `style` only ever carries size/spacing (guessRowMarker vs. the slightly
+// larger resultDot) — colour always comes from Palette.positive/danger below.
+function ResultDot({ correct, style }: { correct: boolean; style: StyleProp<ViewStyle> }) {
+  return (
+    <View
+      style={[style, { backgroundColor: correct ? Palette.positive : Palette.danger }]}
+    />
+  );
+}
+
 function ClueRow({ label, value }: { label: string; value: string }) {
   return (
     <View style={styles.clueRow}>
@@ -944,7 +960,7 @@ function ResultRow({
 }) {
   return (
     <View style={styles.resultRow}>
-      <Text style={styles.resultMarker}>{res.correct ? "🟩" : "🟥"}</Text>
+      <ResultDot correct={res.correct} style={styles.resultDot} />
       <View style={{ flex: 1 }}>
         <Text style={styles.resultLabel}>{label}</Text>
         {!res.correct && res.correctAnswer && (
@@ -1071,7 +1087,10 @@ const styles = StyleSheet.create({
   scoreLineMuted: { fontSize: 22, color: SpaceTheme.mutedOrbit },
   subtitle: { fontSize: 13, color: SpaceTheme.mutedOrbit, textAlign: "center", marginBottom: 20 },
   resultRow: { flexDirection: "row", alignItems: "center", gap: 10, paddingVertical: 10 },
-  resultMarker: { fontSize: 18 },
+  // Matches the cinemind-result web page's .dot exactly — same size ratio,
+  // same two colours (applied inline by ResultDot), so the in-app board and
+  // the page a friend opens from a shared link read as the same design.
+  resultDot: { width: 10, height: 10, borderRadius: 999 },
   resultLabel: { color: SpaceTheme.starWhite, fontSize: 15, fontWeight: "600" },
   resultAnswer: { color: SpaceTheme.mutedOrbit, fontSize: 12, marginTop: 2 },
   resultPoints: { color: SpaceTheme.glowCyan, fontSize: 14, fontWeight: "700" },
@@ -1118,7 +1137,11 @@ const styles = StyleSheet.create({
     borderTopWidth: 1,
     borderTopColor: "rgba(255,255,255,0.06)",
   },
-  guessRowMarker: { fontSize: 14, marginTop: 1 },
+  // flex-start on the row (see guessRow) pins this to the top so it sits
+  // beside the title's first line rather than drifting to the vertical
+  // center when feedback wraps to two lines — marginTop nudges it down to
+  // the title text's optical center instead of its very top edge.
+  guessRowMarker: { width: 8, height: 8, borderRadius: 999, marginTop: 5 },
   guessRowTitle: { color: SpaceTheme.starWhite, fontSize: 13, fontWeight: "600" },
   guessRowFeedback: { color: SpaceTheme.mutedOrbit, fontSize: 12, marginTop: 1 },
   mysteryInput: {

@@ -107,15 +107,78 @@ namespace Backend.Services
             "tt0120815", // Saving Private Ryan
             "tt0108052", // Schindler's List
             "tt0073486", // One Flew Over the Cuckoo's Nest
+
+            // Wes Anderson — recurring troupe (Murray, Schwartzman, Wilson)
+            "tt2278388", // The Grand Budapest Hotel
+            "tt0265666", // The Royal Tenenbaums
+            "tt5104604", // Isle of Dogs
+            "tt0130827", // Rushmore
+
+            // Coen Brothers
+            "tt0477348", // No Country for Old Men
+            "tt0116282", // Fargo
+            "tt0118715", // The Big Lebowski
+            "tt0190590", // O Brother, Where Art Thou?
+
+            // Fincher — beyond the two already listed above
+            "tt2267998", // Gone Girl
+            "tt0443706", // Zodiac
+            "tt1285016", // The Social Network
+
+            // Paul Thomas Anderson
+            "tt0469494", // There Will Be Blood
+            "tt0118749", // Boogie Nights
+            "tt5776858", // Phantom Thread
+
+            // Spielberg
+            "tt0107290", // Jurassic Park
+            "tt0083866", // E.T. the Extra-Terrestrial
+            "tt0073195", // Jaws
+            "tt0264464", // Catch Me If You Can
+
+            // Pixar / family — near-zero overlap with the rest of the catalog
+            // on purpose, so a Mystery Movie pick from here reads as a clean
+            // change of pace rather than another awards-cluster title.
+            "tt0114709", // Toy Story
+            "tt1049413", // Up
+            "tt2096673", // Inside Out
+            "tt2380307", // Coco
+            "tt0266543", // Finding Nemo
+
+            // Horror — its own dense little cluster (Peele, A24)
+            "tt5052448", // Get Out
+            "tt7784604", // Hereditary
+            "tt6644200", // A Quiet Place
+            "tt1396484", // It
+
+            // Harry Potter — same three leads across the run
+            "tt0241527", // Harry Potter and the Sorcerer's Stone
+            "tt0295297", // Harry Potter and the Chamber of Secrets
+            "tt1201607", // Harry Potter and the Deathly Hallows: Part 2
+
+            // Greta Gerwig
+            "tt4925292", // Lady Bird
+            "tt3281548", // Little Women
+
+            // A24 / modern indie
+            "tt5727208", // Uncut Gems
+            "tt8772262", // Midsommar
+            "tt4975722", // Moonlight
+
+            // Animation beyond Pixar
+            "tt4633694", // Spider-Man: Into the Spider-Verse
+            "tt0126029", // Shrek
+
+            // Recent awards — 2023/24 cycle, not yet represented
+            "tt5537002", // Killers of the Flower Moon
+            "tt14230458", // Poor Things
+            "tt14849194", // The Holdovers
         };
 
-        // TV track for Mystery Movie (Easy only, for now). Much shorter than
-        // the movie catalog on purpose — this only ever needs one unused show
-        // per day (unlike the movie catalog, which needs enough density for
-        // Connection/Chronos/CastDeduct too), so ~20 mainstream, widely-known
-        // shows is plenty to start. Will feel repetitive sooner than the
-        // movie catalog if never expanded — same disclosed tradeoff already
-        // accepted for the movie list at launch size.
+        // TV track for Mystery Movie (Easy only, for now). Shorter than the
+        // movie catalog on purpose — this only ever needs one unused show per
+        // day (unlike the movie catalog, which needs enough density for
+        // Connection/Chronos/CastDeduct too).
         private static readonly string[] SeedTvImdbIds =
         {
             "tt0903747", // Breaking Bad
@@ -138,6 +201,16 @@ namespace Backend.Services
             "tt2306299", // Vikings
             "tt1839578", // Peaky Blinders
             "tt0417299", // Avatar: The Last Airbender
+            "tt0121955", // South Park
+            "tt2707408", // Narcos
+            "tt1533395", // Modern Family
+            "tt0412142", // House
+            "tt1442437", // Curb Your Enthusiasm
+            "tt7366338", // Chernobyl
+            "tt9140554", // Cobra Kai
+            "tt5788792", // The Marvelous Mrs. Maisel
+            "tt7908628", // Bridgerton
+            "tt0121220", // Sex and the City
         };
 
         // Upserts every seed film. Idempotent and safe to re-run: existing
