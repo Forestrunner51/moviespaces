@@ -82,16 +82,13 @@ namespace Backend.Services
     // Challenge is one of ConnectionChallenge/ChronosChallenge/CastDeductChallenge
     // (holds the answer — server-side only, never returned to the client).
     //
-    // GenreScoped: false when a genre was requested but the challenge's other
-    // films had to come from the full catalog because the genre alone couldn't
-    // support any challenge type (see BuildPracticeSpinAsync). Always true when
-    // no genre was requested — there's nothing to have fallen back from.
-    public record PracticeSpin(
-        string SpinId, RouletteMovie Movie, string ChallengeType, object Challenge, bool GenreScoped);
+    // No "was this genre-pure?" flag: when a genre is requested, every film in
+    // the challenge comes from that genre or the spin isn't built at all (see
+    // BuildPracticeSpinAsync). There is no mixed-genre outcome to report.
+    public record PracticeSpin(string SpinId, RouletteMovie Movie, string ChallengeType, object Challenge);
 
     // Challenge here is the matching *View type (answer stripped).
-    public record PracticeSpinView(
-        RouletteMovie Movie, string ChallengeType, object Challenge, bool GenreScoped);
+    public record PracticeSpinView(RouletteMovie Movie, string ChallengeType, object Challenge);
 
     public record PracticeGradeRequest(string SpinId, SubmittedAnswers Answer);
 

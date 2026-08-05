@@ -58,17 +58,17 @@ namespace Backend.Controllers
             var spin = await _puzzles.BuildPracticeSpinAsync(_db, genre);
             if (spin == null)
             {
-                // Two different causes collapse to the same client message on
-                // purpose: whether the genre has zero films or the one
-                // randomly picked just didn't have enough connections, the
-                // correct next step for the player is identical — spin again
-                // or try a different genre. Distinguishing them wouldn't
-                // change what they should do.
+                // With a genre, this is now a deterministic fact about the
+                // catalog rather than bad luck: BuildPracticeSpinAsync tries
+                // every film in the genre before returning null, and never
+                // falls back to other genres. So "spin again" would be useless
+                // advice here — the same genre will fail the same way every
+                // time — and the message says to switch genres instead.
                 return NotFound(new
                 {
                     error = string.IsNullOrWhiteSpace(genre)
                         ? "Couldn't find a movie with enough connections to build a challenge. Try spinning again."
-                        : $"No luck finding a \"{genre}\" film with enough connections. Try another genre or spin again.",
+                        : $"There aren't enough \"{genre}\" films in the catalog yet to build a challenge without mixing in other genres. Try another genre.",
                 });
             }
 

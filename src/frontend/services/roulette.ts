@@ -40,11 +40,6 @@ export interface SpinResult {
     movie: RouletteMovie;
     challengeType: ChallengeType;
     challenge: RouletteConnectionChallenge | RouletteChronosChallenge | RouletteCastDeductChallenge;
-    // false when a genre was picked but the challenge's other films had to come
-    // from outside it — some genres in a curated catalog simply can't field
-    // four films sharing an actor. Surfaced in the UI rather than hidden, since
-    // silently mixing genres is what made the filter look broken.
-    genreScoped: boolean;
   };
 }
 

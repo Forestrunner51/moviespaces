@@ -173,6 +173,58 @@ namespace Backend.Services
             "tt5537002", // Killers of the Flower Moon
             "tt14230458", // Poor Things
             "tt14849194", // The Holdovers
+
+            // Animation, cast-dense — the original 7-title Animation genre had
+            // no franchise with 4+ films sharing a voice actor, so Roulette's
+            // "Animation" pill could never build a genre-pure Connection or
+            // Cast Deduct challenge (see BuildConnectionForMovie/
+            // BuildCastDeductForMovie's >=4-film and shared-cast requirements).
+            // These are franchises specifically, not just more animated films,
+            // so the same voice cast recurs across enough entries to clear
+            // that bar within the genre alone.
+            "tt0120363", // Toy Story 2 (Hanks/Allen)
+            "tt0435761", // Toy Story 3 (Hanks/Allen)
+            "tt1979376", // Toy Story 4 (Hanks/Allen)
+            "tt0298148", // Shrek 2 (Myers/Murphy/Diaz/Banderas)
+            "tt0413267", // Shrek the Third (Myers/Murphy/Diaz/Banderas)
+            "tt0892791", // Shrek Forever After (Myers/Murphy/Diaz/Banderas)
+            "tt1323594", // Despicable Me (Carell)
+            "tt1690953", // Despicable Me 2 (Carell)
+            "tt3469046", // Despicable Me 3 (Carell)
+            "tt2293640", // Minions (Carell cameo/franchise link)
+            "tt0441773", // Kung Fu Panda (Black/Jolie/Hoffman)
+            "tt1302011", // Kung Fu Panda 2 (Black/Jolie/Hoffman)
+            "tt2267968", // Kung Fu Panda 3 (Black/Jolie/Hoffman)
+            "tt2294629", // Frozen (Menzel/Bell/Groff)
+            "tt4520988", // Frozen II (Menzel/Bell/Groff)
+
+            // Comedy, cast-dense — the Apatow/Ferrell/Rogen circles reuse the
+            // same performers relentlessly, which is exactly what Connection
+            // and Cast Deduct need. Before these, Comedy leaned on the Wes
+            // Anderson and Coen clusters alone.
+            "tt0829482", // Superbad (Hill/Cera/Rogen)
+            "tt0478311", // Knocked Up (Rogen/Rudd)
+            "tt0405422", // The 40-Year-Old Virgin (Carell/Rogen/Rudd)
+            "tt0357413", // Anchorman (Ferrell/Carell/Rudd)
+            "tt0838283", // Step Brothers (Ferrell/Reilly)
+            "tt0415306", // Talladega Nights (Ferrell/Reilly)
+            "tt1245492", // This Is the End (Rogen/Hill/Franco)
+            "tt0942385", // Tropic Thunder (Stiller/Downey/Black)
+            "tt1478338", // Bridesmaids (Wiig/McCarthy)
+            "tt1119646", // The Hangover (Galifianakis/Cooper/Helms)
+
+            // Adventure, franchise-clustered — same reasoning: sequels
+            // guarantee the shared-cast density a one-off blockbuster can't.
+            "tt0082971", // Raiders of the Lost Ark (Ford)
+            "tt0087469", // Indiana Jones and the Temple of Doom (Ford)
+            "tt0097576", // Indiana Jones and the Last Crusade (Ford/Connery)
+            "tt0325980", // Pirates of the Caribbean: The Curse of the Black Pearl
+            "tt0383574", // Pirates of the Caribbean: Dead Man's Chest
+            "tt0449088", // Pirates of the Caribbean: At World's End
+            "tt0304141", // Harry Potter and the Prisoner of Azkaban
+            "tt0330373", // Harry Potter and the Goblet of Fire
+            "tt0903624", // The Hobbit: An Unexpected Journey
+            "tt0369610", // Jurassic World
         };
 
         // TV track for Mystery Movie (Easy only, for now). Shorter than the

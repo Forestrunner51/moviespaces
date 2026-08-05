@@ -373,56 +373,57 @@ namespace Backend.Services
             if (pool.Count == 0) return null;
 
             var rng = Random.Shared;
-            var target = pool[rng.Next(pool.Count)];
 
-            // The genre has to constrain the *whole* challenge, not just which
-            // film gets spun. Previously every builder took the full catalog,
-            // so picking "Animation" reliably produced one animated poster on
-            // the reveal card and three live-action films inside the challenge
-            // — which reads as the filter being broken, because from the
-            // player's side it is.
+            // A genre filter that silently includes films from other genres is
+            // not a genre filter, so `pool` is the ONLY source used below —
+            // there is deliberately no widening to the full catalog. The
+            // earlier version picked a single random target and, when that one
+            // film happened to have no in-genre connections, fell back to
+            // building the challenge from the whole catalog. For a thin genre
+            // like Animation that fallback fired on nearly every spin, so
+            // "Animation" reliably showed one animated poster on the reveal
+            // card and three live-action films inside the challenge.
             //
-            // Two passes, genre-scoped first: with a curated catalog some
-            // genres genuinely can't support some challenge types (there is no
-            // set of four animated films in this catalog sharing one voice
-            // actor), so falling back to the full catalog is the difference
-            // between a mixed-genre challenge and no spin at all. The fallback
-            // is reported to the client rather than hidden — see GenreScoped.
-            var sources = string.IsNullOrWhiteSpace(genre)
-                ? new[] { catalog }
-                : new[] { pool, catalog };
-
-            foreach (var source in sources)
+            // The right axis to widen is the *target*, not the genre: try
+            // every film in the genre, in random order, and take the first
+            // that can carry a challenge built entirely from its own genre.
+            // Shuffling first keeps the spin uniformly random rather than
+            // biased toward whatever sits early in the catalog — most films
+            // clear the bar (Chronos only needs three other in-genre films
+            // with distinct years), so in practice the first candidate wins
+            // and this is a single pass.
+            //
+            // Exhausting the pool now means the genre genuinely cannot support
+            // any challenge type at all, which is a fact about the catalog
+            // rather than bad luck — see RouletteController.Spin, which tells
+            // the player to pick another genre instead of spinning again.
+            foreach (var target in Shuffle(rng, pool))
             {
                 // Random order so a low-connectivity movie doesn't always fail
                 // (or succeed) on the same challenge type every time it's spun.
                 var challengeTypes = Shuffle(rng, new[] { "connection", "chronos", "castDeduct" });
                 foreach (var type in challengeTypes)
                 {
+                    // 4 films preferred, 3 accepted — a 3-film "which actor
+                    // links these?" is still an honest challenge, and a real
+                    // in-genre one beats a 4-film cross-genre one.
                     object? challenge = type switch
                     {
-                        "connection" => BuildConnectionForMovie(rng, source, target),
-                        "chronos" => BuildChronosForMovie(rng, source, target),
-                        "castDeduct" => BuildCastDeductForMovie(rng, source, target),
+                        "connection" => BuildConnectionForMovie(rng, pool, target, 4)
+                            ?? BuildConnectionForMovie(rng, pool, target, 3),
+                        "chronos" => BuildChronosForMovie(rng, pool, target, 4)
+                            ?? BuildChronosForMovie(rng, pool, target, 3),
+                        "castDeduct" => BuildCastDeductForMovie(rng, pool, target),
                         _ => null,
                     };
                     if (challenge != null)
                     {
                         var movie = new RouletteMovie(target.Movie.ImdbId, target.Movie.Title, target.Movie.PosterPath);
-                        return new PracticeSpin(
-                            Guid.NewGuid().ToString("N"),
-                            movie,
-                            type,
-                            challenge,
-                            GenreScoped: ReferenceEquals(source, pool));
+                        return new PracticeSpin(Guid.NewGuid().ToString("N"), movie, type, challenge);
                     }
                 }
             }
 
-            // This particular movie doesn't share enough cast/director/year
-            // overlap with anything else in the catalog for any challenge type
-            // — genuinely possible with a small, curated catalog. The caller
-            // spins again rather than treating this as an error.
             return null;
         }
 
@@ -430,7 +431,15 @@ namespace Backend.Services
         // people is restricted to target's own cast/director — anyone who
         // doesn't appear in target's film can't be the answer to a challenge
         // that's supposed to be about target.
-        private ConnectionChallenge? BuildConnectionForMovie(Random rng, List<CatalogEntry> catalog, CatalogEntry target)
+        //
+        // filmCount defaults to 4 (matching the daily puzzle's Connection) but
+        // the caller tries 3 as a fallback — see BuildPracticeSpinAsync. A
+        // 3-film "which actor links these three films?" is still an honest,
+        // fully genre-pure challenge; it's a meaningfully lower bar than 4,
+        // since it needs one fewer film sharing the same person out of
+        // whatever pool it's searching.
+        private ConnectionChallenge? BuildConnectionForMovie(
+            Random rng, List<CatalogEntry> catalog, CatalogEntry target, int filmCount = 4)
         {
             var byActor = new Dictionary<string, List<CatalogEntry>>(StringComparer.OrdinalIgnoreCase);
             foreach (var entry in catalog)
@@ -446,7 +455,7 @@ namespace Backend.Services
                 .ToDictionary(g => g.Key, g => g.ToList(), StringComparer.OrdinalIgnoreCase);
 
             var actorCandidates = target.Cast
-                .Where(a => byActor.TryGetValue(a, out var list) && list.Count >= 4)
+                .Where(a => byActor.TryGetValue(a, out var list) && list.Count >= filmCount)
                 .OrderBy(a => a, StringComparer.Ordinal)
                 .ToList();
 
@@ -461,7 +470,7 @@ namespace Backend.Services
             }
             else if (!string.IsNullOrWhiteSpace(target.Movie.Director)
                 && byDirector.TryGetValue(target.Movie.Director!, out var directorFilms)
-                && directorFilms.Count >= 4)
+                && directorFilms.Count >= filmCount)
             {
                 personKey = target.Movie.Director;
                 films = directorFilms;
@@ -471,7 +480,8 @@ namespace Backend.Services
 
             // target is guaranteed a member of `films` (that's how personKey
             // was chosen), so pin it in and fill the rest randomly.
-            var others = Shuffle(rng, films.Where(e => e.Movie.ImdbId != target.Movie.ImdbId)).Take(3).ToList();
+            var others = Shuffle(rng, films.Where(e => e.Movie.ImdbId != target.Movie.ImdbId))
+                .Take(filmCount - 1).ToList();
             var chosen = new List<CatalogEntry> { target }.Concat(others).ToList();
             var movies = Shuffle(rng, chosen).Select(ToPuzzleMovie).ToList();
 
@@ -492,16 +502,20 @@ namespace Backend.Services
             return new ConnectionChallenge(movies, personKey, useActor ? "actor" : "director", Shuffle(rng, options));
         }
 
-        private ChronosChallenge? BuildChronosForMovie(Random rng, List<CatalogEntry> catalog, CatalogEntry target)
+        // filmCount as in BuildConnectionForMovie — 4 preferred, 3 tried as a
+        // genre-pure fallback before the caller widens to the full catalog.
+        private ChronosChallenge? BuildChronosForMovie(
+            Random rng, List<CatalogEntry> catalog, CatalogEntry target, int filmCount = 4)
         {
             var others = catalog
                 .Where(e => e.Movie.ImdbId != target.Movie.ImdbId && e.Movie.ReleaseYear != target.Movie.ReleaseYear)
                 .GroupBy(e => e.Movie.ReleaseYear)
                 .Select(g => g.First())
                 .ToList();
-            if (others.Count < 3) return null;
+            if (others.Count < filmCount - 1) return null;
 
-            var chosen = new List<CatalogEntry> { target }.Concat(Shuffle(rng, others).Take(3)).ToList();
+            var chosen = new List<CatalogEntry> { target }
+                .Concat(Shuffle(rng, others).Take(filmCount - 1)).ToList();
             var correctOrder = chosen.OrderBy(e => e.Movie.ReleaseYear).Select(e => e.Movie.ImdbId).ToList();
 
             var presented = Shuffle(rng, chosen).Select(ToPuzzleMovie).ToList();
@@ -550,8 +564,7 @@ namespace Backend.Services
                 "chronos" => ToChronosView((ChronosChallenge)spin.Challenge),
                 "castDeduct" => ToCastDeductView((CastDeductChallenge)spin.Challenge),
                 _ => throw new ArgumentOutOfRangeException(nameof(spin), spin.ChallengeType, "Unknown challenge type"),
-            },
-            spin.GenreScoped);
+            });
 
         public ChallengeResult GradePracticeChallenge(string challengeType, object challenge, SubmittedAnswers answer) =>
             challengeType switch
