@@ -209,16 +209,6 @@ export default function RouletteScreen() {
               <Text style={styles.revealTitle}>{spin.view.movie.title}</Text>
             </View>
 
-            {/* `genre` is safe to read here rather than snapshotting it at
-                spin time: the pills only render in the picking/spinning
-                phases, so it can't change while a result is on screen. */}
-            {genre != null && !spin.view.genreScoped && (
-              <Text style={styles.genreFallbackNote}>
-                Not enough {genre} films in the catalog to build this challenge from {genre} alone —
-                the other films come from the full catalog.
-              </Text>
-            )}
-
             <ChallengeCard
               type={spin.view.challengeType}
               challenge={spin.view.challenge}
@@ -490,14 +480,6 @@ const styles = StyleSheet.create({
     color: SpaceTheme.starWhite,
     textAlign: "center",
     marginTop: 12,
-  },
-  genreFallbackNote: {
-    fontSize: 12,
-    color: SpaceTheme.mutedOrbit,
-    fontStyle: "italic",
-    lineHeight: 17,
-    marginBottom: 12,
-    textAlign: "center",
   },
   card: { ...SpaceStyles.glassCard, padding: 16, marginBottom: 16 },
   challengeTitle: { fontSize: 18, fontWeight: "700", color: SpaceTheme.starWhite },
