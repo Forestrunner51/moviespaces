@@ -21,6 +21,7 @@ import { router } from "expo-router";
 import { Ionicons } from "@expo/vector-icons";
 import { Starfield } from "@/frontend/components/starfield";
 import { MoviePoster } from "@/frontend/components/movie-poster";
+import { ResultDot } from "@/frontend/components/result-dot";
 import { SpaceTheme, SpaceStyles } from "@/frontend/constants/theme";
 import {
   spinRoulette,
@@ -208,6 +209,16 @@ export default function RouletteScreen() {
               <Text style={styles.revealTitle}>{spin.view.movie.title}</Text>
             </View>
 
+            {/* `genre` is safe to read here rather than snapshotting it at
+                spin time: the pills only render in the picking/spinning
+                phases, so it can't change while a result is on screen. */}
+            {genre != null && !spin.view.genreScoped && (
+              <Text style={styles.genreFallbackNote}>
+                Not enough {genre} films in the catalog to build this challenge from {genre} alone —
+                the other films come from the full catalog.
+              </Text>
+            )}
+
             <ChallengeCard
               type={spin.view.challengeType}
               challenge={spin.view.challenge}
@@ -233,9 +244,12 @@ export default function RouletteScreen() {
 
             {phase === "graded" && gradeResult && (
               <View style={styles.resultBanner}>
-                <Text style={styles.resultBannerText}>
-                  {gradeResult.correct ? "🟩 Correct!" : "🟥 Not quite"}
-                </Text>
+                <View style={styles.resultBannerRow}>
+                  <ResultDot correct={gradeResult.correct} style={styles.resultBannerDot} />
+                  <Text style={styles.resultBannerText}>
+                    {gradeResult.correct ? "Correct!" : "Not quite"}
+                  </Text>
+                </View>
                 {!gradeResult.correct && gradeResult.correctAnswer && (
                   <Text style={styles.resultAnswerText}>Answer: {gradeResult.correctAnswer}</Text>
                 )}
@@ -477,6 +491,14 @@ const styles = StyleSheet.create({
     textAlign: "center",
     marginTop: 12,
   },
+  genreFallbackNote: {
+    fontSize: 12,
+    color: SpaceTheme.mutedOrbit,
+    fontStyle: "italic",
+    lineHeight: 17,
+    marginBottom: 12,
+    textAlign: "center",
+  },
   card: { ...SpaceStyles.glassCard, padding: 16, marginBottom: 16 },
   challengeTitle: { fontSize: 18, fontWeight: "700", color: SpaceTheme.starWhite },
   challengeHint: { fontSize: 13, color: SpaceTheme.mutedOrbit, marginTop: 4, marginBottom: 14, lineHeight: 18 },
@@ -516,6 +538,8 @@ const styles = StyleSheet.create({
   orderBadgeTextActive: { color: SpaceTheme.backgroundVoid },
   orderTitle: { flex: 1, color: SpaceTheme.starWhite, fontSize: 14 },
   resultBanner: { alignItems: "center", marginBottom: 16 },
+  resultBannerRow: { flexDirection: "row", alignItems: "center", gap: 10 },
+  resultBannerDot: { width: 12, height: 12, borderRadius: 999 },
   resultBannerText: { fontSize: 20, fontWeight: "800", color: SpaceTheme.starWhite },
   resultAnswerText: { fontSize: 13, color: SpaceTheme.mutedOrbit, marginTop: 4 },
   practiceNote: { fontSize: 11, color: SpaceTheme.mutedOrbit, marginTop: 8, fontStyle: "italic" },
