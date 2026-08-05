@@ -3,7 +3,7 @@ import { View, Text, StyleSheet, ScrollView, TouchableOpacity, ActivityIndicator
 import { useLocalSearchParams, router } from "expo-router";
 import { Ionicons } from "@expo/vector-icons";
 import { Starfield } from "@/frontend/components/starfield";
-import { SpaceTheme, SpaceStyles, Palette } from "@/frontend/constants/theme";
+import { SpaceStyles, Palette, Type, Display, Radius } from "@/frontend/constants/theme";
 import { authFetch } from "@/frontend/services/api";
 import { completeOnboarding } from "@/frontend/services/onboarding";
 
@@ -92,7 +92,7 @@ export default function SpaceDiscoveryScreen() {
           {genres ? "Matching your picks" : "Every public Community Space"} — join any that look good.
         </Text>
 
-        {loading && <ActivityIndicator color={SpaceTheme.glowCyan} style={styles.loading} />}
+        {loading && <ActivityIndicator color={Palette.accent} style={styles.loading} />}
 
         {errorText && !loading && (
           <View style={styles.card}>
@@ -149,10 +149,10 @@ export default function SpaceDiscoveryScreen() {
                   disabled={space.isJoined || joiningId === space.id}
                 >
                   {joiningId === space.id ? (
-                    <ActivityIndicator size="small" color={SpaceTheme.backgroundVoid} />
+                    <ActivityIndicator size="small" color={Palette.base} />
                   ) : (
                     <Text style={[styles.joinButtonText, space.isJoined && styles.joinButtonTextJoined]}>
-                      {space.isJoined ? "Joined ✓" : "Join Space"}
+                      {space.isJoined ? "Joined" : "Join Space"}
                     </Text>
                   )}
                 </TouchableOpacity>
@@ -167,7 +167,7 @@ export default function SpaceDiscoveryScreen() {
           disabled={finishing}
         >
           {finishing ? (
-            <ActivityIndicator color={SpaceTheme.backgroundVoid} />
+            <ActivityIndicator color={Palette.base} />
           ) : (
             <Text style={styles.continueButtonText}>Continue</Text>
           )}
@@ -179,10 +179,10 @@ export default function SpaceDiscoveryScreen() {
 
 const styles = StyleSheet.create({
   content: { paddingTop: 60, paddingHorizontal: 16, paddingBottom: 40 },
-  title: { fontSize: 22, fontWeight: "700", color: SpaceTheme.starWhite, textAlign: "center" },
+  title: { ...Display.heading, color: Palette.text, textAlign: "center" },
   subtitle: {
-    fontSize: 13,
-    color: SpaceTheme.mutedOrbit,
+    ...Type.small,
+    color: Palette.textMuted,
     textAlign: "center",
     marginTop: 4,
     marginBottom: 24,
@@ -190,47 +190,46 @@ const styles = StyleSheet.create({
   loading: { marginVertical: 24 },
   card: { ...SpaceStyles.glassCard, padding: 16, marginBottom: 14 },
   cardHeader: { flexDirection: "row", alignItems: "center", gap: 12, marginBottom: 12 },
-  emoji: { fontSize: 30 },
-  cardTitle: { fontSize: 16, fontWeight: "700", color: SpaceTheme.starWhite },
+  cardTitle: { ...Type.body, fontWeight: "700", color: Palette.text },
   genreBadge: {
-    fontSize: 11,
-    color: SpaceTheme.glowCyan,
+    ...Type.caption,
+    color: Palette.accent,
     fontWeight: "700",
     textTransform: "uppercase",
     marginTop: 2,
   },
   statsRow: { flexDirection: "row", justifyContent: "space-between", marginBottom: 14 },
-  statText: { fontSize: 12, color: SpaceTheme.mutedOrbit },
+  statText: { ...Type.caption, color: Palette.textMuted },
   actionsRow: { flexDirection: "row", gap: 10 },
   previewButton: {
-    ...SpaceStyles.glassCard,
+    ...SpaceStyles.field,
     flex: 1,
     alignItems: "center",
     paddingVertical: 11,
   },
-  previewButtonText: { color: SpaceTheme.mutedOrbit, fontSize: 13, fontWeight: "700" },
+  previewButtonText: { ...Type.small, color: Palette.textMuted, fontWeight: "700" },
   joinButton: {
     flex: 1,
     alignItems: "center",
     justifyContent: "center",
-    backgroundColor: SpaceTheme.glowCyan,
-    borderRadius: 10,
+    backgroundColor: Palette.accent,
+    borderRadius: Radius.small,
     paddingVertical: 11,
   },
-  joinButtonJoined: { backgroundColor: "rgba(255,255,255,0.08)" },
-  joinButtonText: { color: SpaceTheme.backgroundVoid, fontSize: 13, fontWeight: "700" },
-  joinButtonTextJoined: { color: SpaceTheme.mutedOrbit },
-  errorText: { color: SpaceTheme.starWhite, fontSize: 14, textAlign: "center", marginBottom: 12 },
+  joinButtonJoined: { backgroundColor: Palette.surfaceHover },
+  joinButtonText: { ...Type.small, color: Palette.base, fontWeight: "700" },
+  joinButtonTextJoined: { color: Palette.textMuted },
+  errorText: { ...Type.small, color: Palette.text, textAlign: "center", marginBottom: 12 },
   retryButton: { alignSelf: "center", paddingVertical: 8, paddingHorizontal: 16 },
-  retryButtonText: { color: SpaceTheme.glowCyan, fontSize: 13, fontWeight: "700" },
-  emptyText: { color: SpaceTheme.mutedOrbit, fontSize: 14, textAlign: "center" },
+  retryButtonText: { ...Type.small, color: Palette.accent, fontWeight: "700" },
+  emptyText: { ...Type.small, color: Palette.textMuted, textAlign: "center" },
   continueButton: {
-    backgroundColor: SpaceTheme.accentGold,
-    borderRadius: 12,
+    backgroundColor: Palette.accent,
+    borderRadius: Radius.medium,
     paddingVertical: 15,
     alignItems: "center",
     marginTop: 8,
   },
   continueButtonDisabled: { opacity: 0.6 },
-  continueButtonText: { color: SpaceTheme.backgroundVoid, fontSize: 16, fontWeight: "700" },
+  continueButtonText: { ...Type.body, color: Palette.base, fontWeight: "700" },
 });

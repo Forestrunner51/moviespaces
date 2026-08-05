@@ -626,11 +626,20 @@ namespace Backend.Controllers
             var puzzleNumber = dailyPuzzle?.PuzzleNumber ?? 0;
             var isPerfect = progress.Score == DailyPuzzleService.MaxScore;
             var timeText = System.Net.WebUtility.HtmlEncode(FormatDuration(progress.TimeTakenMs));
+            var iosStoreUrl = System.Net.WebUtility.HtmlEncode(_configuration["AppLinks:IosStoreUrl"] ?? "");
+            var androidStoreUrl = System.Net.WebUtility.HtmlEncode(_configuration["AppLinks:AndroidStoreUrl"] ?? "");
 
+            // A small filled/outline dot instead of 🟩/🟥 — same reasoning as
+            // the rest of the app's emoji sweep: renders identically on every
+            // platform, takes its colour from the palette instead of a fixed
+            // emoji hue, and sits on the text baseline properly.
             string Row(string label, bool? correct) =>
                 correct == null
                     ? ""
-                    : $"<div class='row'><span>{(correct.Value ? "🟩" : "🟥")}</span> {label}</div>";
+                    : $@"<div class='row'>
+                            <span class='dot {(correct.Value ? "dot-yes" : "dot-no")}'></span>
+                            {System.Net.WebUtility.HtmlEncode(label)}
+                        </div>";
 
             var html = $@"
         <!DOCTYPE html>
@@ -643,28 +652,55 @@ namespace Backend.Controllers
             <meta property='og:description' content='A daily 3-minute movie puzzle. Can you beat this score?'>
             <style>
                 * {{ margin: 0; padding: 0; box-sizing: border-box; }}
-                body {{ font-family: -apple-system, sans-serif; background: #111; color: #fff; min-height: 100vh; display: flex; flex-direction: column; align-items: center; justify-content: center; padding: 24px; }}
-                .card {{ background: #1a1a1a; border-radius: 16px; padding: 32px; max-width: 400px; width: 100%; text-align: center; }}
-                .emoji {{ font-size: 40px; margin-bottom: 8px; }}
-                h1 {{ font-size: 18px; color: #888; font-weight: 600; letter-spacing: 1px; text-transform: uppercase; margin-bottom: 8px; }}
-                .score {{ font-size: 56px; font-weight: 800; margin-bottom: 4px; }}
-                .score span {{ font-size: 24px; color: #888; font-weight: 600; }}
-                .meta {{ color: #888; font-size: 14px; margin-bottom: 24px; }}
-                .rows {{ background: #222; border-radius: 8px; padding: 16px; margin-bottom: 24px; text-align: left; }}
-                .row {{ font-size: 15px; padding: 6px 0; }}
-                .perfect {{ color: #F5C518; font-weight: 700; margin-bottom: 16px; }}
-                .app-link {{ margin-top: 8px; font-size: 13px; color: #38BDF8; text-decoration: none; display: block; font-weight: 600; }}
-                .cta {{ display: block; background: #38BDF8; color: #111; font-weight: 700; padding: 14px; border-radius: 8px; text-decoration: none; margin-top: 8px; }}
+                body {{
+                    font-family: -apple-system, BlinkMacSystemFont, sans-serif;
+                    background: #16100D;
+                    color: #F7F0E8;
+                    min-height: 100vh;
+                    display: flex;
+                    flex-direction: column;
+                    align-items: center;
+                    justify-content: center;
+                    padding: 24px;
+                }}
+                .card {{ background: #221913; border: 1px solid rgba(247,240,232,0.10); border-radius: 20px; padding: 32px; max-width: 400px; width: 100%; text-align: center; }}
+                .eyebrow {{ font-size: 13px; color: #B3A296; font-weight: 700; letter-spacing: 1.5px; text-transform: uppercase; margin-bottom: 16px; }}
+                .score {{ font-size: 64px; font-weight: 800; line-height: 1; margin-bottom: 6px; }}
+                .score span {{ font-size: 26px; color: #B3A296; font-weight: 600; }}
+                .meta {{ color: #B3A296; font-size: 14px; margin-bottom: 20px; }}
+                .streak {{ color: #EF8A3C; font-weight: 700; }}
+                .perfect {{
+                    display: inline-block;
+                    color: #EF8A3C;
+                    font-weight: 700;
+                    font-size: 13px;
+                    letter-spacing: 0.5px;
+                    text-transform: uppercase;
+                    background: rgba(239,138,60,0.14);
+                    border: 1px solid rgba(239,138,60,0.38);
+                    border-radius: 999px;
+                    padding: 5px 14px;
+                    margin-bottom: 20px;
+                }}
+                .rows {{ background: #2B201A; border-radius: 12px; padding: 6px 16px; margin-bottom: 24px; text-align: left; }}
+                .row {{ display: flex; align-items: center; gap: 10px; font-size: 14px; padding: 10px 0; border-bottom: 1px solid rgba(247,240,232,0.08); }}
+                .row:last-child {{ border-bottom: none; }}
+                .dot {{ width: 9px; height: 9px; border-radius: 999px; flex-shrink: 0; }}
+                .dot-yes {{ background: #6FBF73; }}
+                .dot-no {{ background: #E0525F; }}
+                .divider {{ border-top: 1px solid rgba(247,240,232,0.10); margin: 4px 0 20px; }}
+                .get-app-title {{ font-size: 13px; color: #B3A296; margin-bottom: 12px; }}
+                .cta {{ display: block; background: #EF8A3C; color: #16100D; font-weight: 700; padding: 14px; border-radius: 10px; text-decoration: none; margin-bottom: 8px; }}
+                .store {{ display: block; padding: 13px; border-radius: 10px; background: #2B201A; color: #F7F0E8; text-decoration: none; font-size: 15px; font-weight: 600; margin-bottom: 8px; border: 1px solid rgba(247,240,232,0.10); }}
             </style>
         </head>
         <body>
             <div class='card'>
-                <div class='emoji'>🧠</div>
-                <h1>CineMind #{puzzleNumber}</h1>
+                <p class='eyebrow'>CineMind #{puzzleNumber}</p>
                 <div class='score'>{progress.Score}<span>/{DailyPuzzleService.MaxScore}</span></div>
-                <p class='meta'>{timeText}{(progress.StreakCount > 1 ? $" &middot; 🔥 {progress.StreakCount} day streak" : "")}</p>
+                <p class='meta'>{timeText}{(progress.StreakCount > 1 ? $" &middot; <span class='streak'>{progress.StreakCount} day streak</span>" : "")}</p>
 
-                {(isPerfect ? "<p class='perfect'>🏆 Perfect score!</p>" : "")}
+                {(isPerfect ? "<div class='perfect'>Perfect score</div>" : "")}
 
                 <div class='rows'>
                     {Row("The Connection", regraded?.Connection.Correct)}
@@ -675,7 +711,11 @@ namespace Backend.Controllers
                 </div>
 
                 <a href='moviespaces://cinemind' class='cta'>Play Today's CineMind</a>
-                <a href='moviespaces://cinemind' class='app-link'>Open in the MovieSpaces App</a>
+
+                <div class='divider'></div>
+                <p class='get-app-title'>New here? Get the app to play</p>
+                {(string.IsNullOrEmpty(iosStoreUrl) ? "" : $"<a href='{iosStoreUrl}' class='store'>Download for iPhone</a>")}
+                {(string.IsNullOrEmpty(androidStoreUrl) ? "" : $"<a href='{androidStoreUrl}' class='store'>Download for Android</a>")}
             </div>
         </body>
         </html>";

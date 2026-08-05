@@ -13,7 +13,7 @@ import {
 import { useRouter } from "expo-router";
 import { supabase } from "@/frontend/config/supabase";
 import { Starfield } from "@/frontend/components/starfield";
-import { SpaceTheme, SpaceStyles } from "@/frontend/constants/theme";
+import { SpaceStyles, Palette, Type, Display, Radius } from "@/frontend/constants/theme";
 
 // Uses Supabase's OTP recovery-code flow rather than the emailed-link flow:
 // the link flow needs deep-link redirect config + fragment parsing (fragile
@@ -91,7 +91,7 @@ export default function ResetPasswordScreen() {
         contentContainerStyle={styles.container}
         keyboardShouldPersistTaps="handled"
       >
-        <Text style={[styles.header, SpaceStyles.glowText, SpaceStyles.wordmark]}>Reset Password</Text>
+        <Text style={styles.header}>Reset Password</Text>
 
         {stage === "request" ? (
           <>
@@ -101,7 +101,7 @@ export default function ResetPasswordScreen() {
             <TextInput
               style={styles.input}
               placeholder="Email"
-              placeholderTextColor={SpaceTheme.mutedOrbit}
+              placeholderTextColor={Palette.textMuted}
               value={email}
               onChangeText={setEmail}
               autoCapitalize="none"
@@ -114,7 +114,7 @@ export default function ResetPasswordScreen() {
               disabled={loading}
             >
               {loading ? (
-                <ActivityIndicator color={SpaceTheme.backgroundVoid} />
+                <ActivityIndicator color={Palette.base} />
               ) : (
                 <Text style={styles.buttonText}>Send Reset Code</Text>
               )}
@@ -128,7 +128,7 @@ export default function ResetPasswordScreen() {
             <TextInput
               style={styles.input}
               placeholder="Reset code"
-              placeholderTextColor={SpaceTheme.mutedOrbit}
+              placeholderTextColor={Palette.textMuted}
               value={code}
               onChangeText={setCode}
               autoCapitalize="none"
@@ -137,7 +137,7 @@ export default function ResetPasswordScreen() {
             <TextInput
               style={styles.input}
               placeholder="New password"
-              placeholderTextColor={SpaceTheme.mutedOrbit}
+              placeholderTextColor={Palette.textMuted}
               value={newPassword}
               onChangeText={setNewPassword}
               secureTextEntry
@@ -150,7 +150,7 @@ export default function ResetPasswordScreen() {
               disabled={loading}
             >
               {loading ? (
-                <ActivityIndicator color={SpaceTheme.backgroundVoid} />
+                <ActivityIndicator color={Palette.base} />
               ) : (
                 <Text style={styles.buttonText}>Update Password</Text>
               )}
@@ -182,34 +182,32 @@ const styles = StyleSheet.create({
     padding: 24,
   },
   header: {
-    fontSize: 32,
-    fontWeight: "bold",
-    color: SpaceTheme.starWhite,
+    ...Display.heading,
+    color: Palette.text,
     textAlign: "center",
     marginBottom: 8,
   },
   subHeader: {
-    fontSize: 15,
-    color: SpaceTheme.mutedOrbit,
+    ...Type.small,
+    color: Palette.textMuted,
     textAlign: "center",
     marginBottom: 28,
-    lineHeight: 21,
   },
   input: {
-    ...SpaceStyles.glassCard,
-    color: SpaceTheme.starWhite,
+    ...SpaceStyles.field,
+    color: Palette.text,
     padding: 16,
-    fontSize: 16,
+    ...Type.body,
     marginBottom: 16,
   },
   button: {
-    backgroundColor: SpaceTheme.glowCyan,
+    backgroundColor: Palette.accent,
     padding: 16,
-    borderRadius: 12,
+    borderRadius: Radius.medium,
     alignItems: "center",
     marginTop: 8,
   },
-  buttonText: { color: SpaceTheme.backgroundVoid, fontSize: 18, fontWeight: "bold" },
+  buttonText: { ...Type.title, color: Palette.base, fontWeight: "700" },
   switchLink: { marginTop: 20, alignItems: "center" },
-  switchText: { color: SpaceTheme.mutedOrbit, fontSize: 14 },
+  switchText: { ...Type.small, color: Palette.textMuted },
 });

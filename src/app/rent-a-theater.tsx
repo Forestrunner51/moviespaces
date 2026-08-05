@@ -4,7 +4,7 @@ import { View, Text, FlatList, StyleSheet, ActivityIndicator, TouchableOpacity }
 import { Ionicons } from "@expo/vector-icons";
 import { router } from "expo-router";
 import { Starfield } from "@/frontend/components/starfield";
-import { SpaceTheme, SpaceStyles, Palette } from "@/frontend/constants/theme";
+import { SpaceStyles, Palette, Type, Display } from "@/frontend/constants/theme";
 import {
   getDeviceLocation,
   fetchNearbyTheaters,
@@ -70,7 +70,7 @@ export default function RentATheaterScreen() {
   return (
     <Starfield>
       <View style={styles.container}>
-        <Text style={[styles.title, SpaceStyles.glowText, SpaceStyles.wordmark]}>Host a Watch Party</Text>
+        <Text style={styles.title}>Host a Watch Party</Text>
         <Text style={styles.subtitle}>
           Pick a venue — a theater, bar, community space, or your own place — to start a Space
           with friends. MovieSpaces doesn&apos;t handle the booking itself; use the venue&apos;s own
@@ -84,16 +84,16 @@ export default function RentATheaterScreen() {
             router.push({ pathname: "/create-space", params: { spaceType: "private_rental" } })
           }
         >
-          <Ionicons name="location-outline" size={20} color={SpaceTheme.glowCyan} />
+          <Ionicons name="location-outline" size={20} color={Palette.accent} />
           <View style={{ flex: 1 }}>
             <Text style={styles.filmName}>Custom / Private Address</Text>
             <Text style={styles.details}>Backyard, someone&apos;s place, or anywhere not listed</Text>
           </View>
-          <Ionicons name="chevron-forward" size={20} color={SpaceTheme.mutedOrbit} />
+          <Ionicons name="chevron-forward" size={20} color={Palette.textMuted} />
         </TouchableOpacity>
 
         {loading ? (
-          <ActivityIndicator size="large" color={SpaceTheme.glowCyan} style={{ flex: 1 }} />
+          <ActivityIndicator size="large" color={Palette.accent} style={{ flex: 1 }} />
         ) : (
           <FlatList
             data={theaters}
@@ -105,7 +105,7 @@ export default function RentATheaterScreen() {
                 onPress={() => handleSelectTheater(item)}
               >
                 <View style={styles.rentCardRow}>
-                  <Ionicons name="storefront-outline" size={20} color={SpaceTheme.supernovaPink} />
+                  <Ionicons name="storefront-outline" size={20} color={Palette.accent} />
                   <View style={{ flex: 1 }}>
                     <Text style={styles.filmName}>{item.name}</Text>
                     <Text style={styles.details}>{item.address}</Text>
@@ -123,13 +123,13 @@ export default function RentATheaterScreen() {
                       </TouchableOpacity>
                     )}
                   </View>
-                  <Ionicons name="chevron-forward" size={20} color={SpaceTheme.mutedOrbit} />
+                  <Ionicons name="chevron-forward" size={20} color={Palette.textMuted} />
                 </View>
               </TouchableOpacity>
             )}
             ListEmptyComponent={
               <View style={styles.emptyState}>
-                <Ionicons name="storefront-outline" size={40} color={SpaceTheme.mutedOrbit} />
+                <Ionicons name="storefront-outline" size={40} color={Palette.textMuted} />
                 <Text style={styles.emptyTitle}>
                   {error ? "Couldn't load venues" : "No nearby venues found"}
                 </Text>
@@ -155,13 +155,8 @@ const styles = StyleSheet.create({
     paddingTop: 20,
     paddingHorizontal: 16,
   },
-  title: {
-    fontSize: 28,
-    fontWeight: "bold",
-    color: SpaceTheme.starWhite,
-    marginBottom: 4,
-  },
-  subtitle: { fontSize: 14, color: SpaceTheme.mutedOrbit, marginBottom: 16 },
+  title: { ...Display.heading, color: Palette.text, marginBottom: 4 },
+  subtitle: { ...Type.small, color: Palette.textMuted, marginBottom: 16 },
   card: {
     ...SpaceStyles.glassCard,
     padding: 16,
@@ -177,30 +172,25 @@ const styles = StyleSheet.create({
     borderColor: Palette.accentBorder,
   },
   rentCardRow: { flexDirection: "row", alignItems: "center", gap: 12 },
-  filmName: {
-    fontSize: 18,
-    fontWeight: "700",
-    color: SpaceTheme.starWhite,
-    marginBottom: 4,
-  },
-  details: { fontSize: 14, color: SpaceTheme.mutedOrbit, marginBottom: 2 },
-  cta: { fontSize: 13, color: SpaceTheme.supernovaPink, fontWeight: "600", marginTop: 6 },
-  rentalInfoLink: { fontSize: 12, color: SpaceTheme.mutedOrbit, marginTop: 6 },
+  filmName: { ...Type.title, fontWeight: "700", color: Palette.text, marginBottom: 4 },
+  details: { ...Type.small, color: Palette.textMuted, marginBottom: 2 },
+  cta: { ...Type.small, color: Palette.accent, fontWeight: "600", marginTop: 6 },
+  rentalInfoLink: { ...Type.caption, color: Palette.textMuted, marginTop: 6 },
   emptyState: {
     alignItems: "center",
     marginTop: 60,
     paddingHorizontal: 24,
   },
   emptyTitle: {
-    fontSize: 18,
+    ...Type.title,
     fontWeight: "700",
-    color: SpaceTheme.starWhite,
+    color: Palette.text,
     marginTop: 12,
     marginBottom: 6,
   },
   emptySubtitle: {
-    fontSize: 14,
-    color: SpaceTheme.mutedOrbit,
+    ...Type.small,
+    color: Palette.textMuted,
     textAlign: "center",
     marginBottom: 20,
   },
