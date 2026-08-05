@@ -11,14 +11,13 @@ import {
   TextInput,
   KeyboardAvoidingView,
   Platform,
-  type StyleProp,
-  type ViewStyle,
 } from "react-native";
 import { router } from "expo-router";
 import { Ionicons } from "@expo/vector-icons";
 import { Starfield } from "@/frontend/components/starfield";
 import { MoviePoster } from "@/frontend/components/movie-poster";
 import { LockedStateView } from "@/frontend/components/locked-state-view";
+import { ResultDot } from "@/frontend/components/result-dot";
 import { CineMindStatsCard } from "@/frontend/components/cinemind-stats";
 import { GlobalLeaderboardView } from "@/frontend/components/cinemind-global-leaderboard";
 import { SpaceTheme, SpaceStyles, Palette } from "@/frontend/constants/theme";
@@ -443,6 +442,12 @@ export default function CineMindScreen() {
               catalogLoading={catalogLoading}
               catalogError={catalogError}
               onRetryCatalog={loadCatalog}
+              onSkip={() => {
+                // No guess and no attempts consumed — grades as 0, same as
+                // exhausting attempts. The answer still reveals on submit.
+                setMysteryGuess(null);
+                setMysteryResolved(true);
+              }}
               attemptsUsed={mysteryAttemptsUsed}
               resolved={mysteryResolved}
               solvedGuess={mysteryGuess}
@@ -466,6 +471,10 @@ export default function CineMindScreen() {
               catalogLoading={tvCatalogLoading}
               catalogError={tvCatalogError}
               onRetryCatalog={loadTvCatalog}
+              onSkip={() => {
+                setMysteryTvGuess(null);
+                setMysteryTvResolved(true);
+              }}
               attemptsUsed={mysteryTvAttemptsUsed}
               resolved={mysteryTvResolved}
               solvedGuess={mysteryTvGuess}
@@ -726,6 +735,7 @@ function MysteryChallenge({
   catalogLoading,
   catalogError,
   onRetryCatalog,
+  onSkip,
   attemptsUsed,
   resolved,
   solvedGuess,
@@ -739,6 +749,8 @@ function MysteryChallenge({
   catalogLoading: boolean;
   catalogError: string | null;
   onRetryCatalog: () => void;
+  // Only offered when the catalog can't be loaded — not a general give-up.
+  onSkip: () => void;
   attemptsUsed: number;
   resolved: boolean;
   solvedGuess: string | null;
@@ -844,10 +856,19 @@ function MysteryChallenge({
           {solvedGuess ? "🏆 Solved!" : "Out of attempts — the answer reveals when you submit."}
         </Text>
       ) : catalogError ? (
+        // Retry alone used to be the only way out of here, which meant a
+        // catalog request that kept failing left the whole day's puzzle
+        // unfinishable: this challenge can't be answered without the list, and
+        // the Next/Submit button stays disabled until it resolves. Skipping
+        // scores this challenge 0 (the same as running out of attempts without
+        // getting it), but it lets the other four count.
         <View style={styles.mysteryErrorBox}>
           <Text style={styles.mysteryErrorText}>{catalogError}</Text>
           <TouchableOpacity activeOpacity={0.85} style={styles.mysteryRetryButton} onPress={onRetryCatalog}>
             <Text style={styles.mysteryRetryButtonText}>Try Again</Text>
+          </TouchableOpacity>
+          <TouchableOpacity activeOpacity={0.85} style={styles.mysterySkipButton} onPress={onSkip}>
+            <Text style={styles.mysterySkipButtonText}>Skip this challenge</Text>
           </TouchableOpacity>
         </View>
       ) : (
@@ -925,20 +946,6 @@ function DifficultySelector({
         );
       })}
     </View>
-  );
-}
-
-// A small filled dot instead of 🟩/🟥 — same fix as the cinemind-result web
-// page: an emoji square renders differently per OS/font, can't take its
-// colour from the palette, and doesn't sit on the text baseline. Shared here
-// so the in-app guess history and the results screen use the identical mark;
-// `style` only ever carries size/spacing (guessRowMarker vs. the slightly
-// larger resultDot) — colour always comes from Palette.positive/danger below.
-function ResultDot({ correct, style }: { correct: boolean; style: StyleProp<ViewStyle> }) {
-  return (
-    <View
-      style={[style, { backgroundColor: correct ? Palette.positive : Palette.danger }]}
-    />
   );
 }
 
@@ -1180,6 +1187,15 @@ const styles = StyleSheet.create({
     paddingHorizontal: 24,
   },
   mysteryRetryButtonText: { color: SpaceTheme.backgroundVoid, fontSize: 13, fontWeight: "700" },
+  // Deliberately plainer than the retry button next to it — retrying is the
+  // action we want taken; skipping is the escape hatch.
+  mysterySkipButton: { paddingVertical: 10, paddingHorizontal: 24 },
+  mysterySkipButtonText: {
+    color: SpaceTheme.mutedOrbit,
+    fontSize: 13,
+    fontWeight: "600",
+    textDecorationLine: "underline",
+  },
   mysteryAttemptsText: {
     color: SpaceTheme.mutedOrbit,
     fontSize: 11,

@@ -375,22 +375,47 @@ namespace Backend.Services
             var rng = Random.Shared;
             var target = pool[rng.Next(pool.Count)];
 
-            // Random order so a low-connectivity movie doesn't always fail (or
-            // succeed) on the same challenge type every time it's spun.
-            var challengeTypes = Shuffle(rng, new[] { "connection", "chronos", "castDeduct" });
-            foreach (var type in challengeTypes)
+            // The genre has to constrain the *whole* challenge, not just which
+            // film gets spun. Previously every builder took the full catalog,
+            // so picking "Animation" reliably produced one animated poster on
+            // the reveal card and three live-action films inside the challenge
+            // — which reads as the filter being broken, because from the
+            // player's side it is.
+            //
+            // Two passes, genre-scoped first: with a curated catalog some
+            // genres genuinely can't support some challenge types (there is no
+            // set of four animated films in this catalog sharing one voice
+            // actor), so falling back to the full catalog is the difference
+            // between a mixed-genre challenge and no spin at all. The fallback
+            // is reported to the client rather than hidden — see GenreScoped.
+            var sources = string.IsNullOrWhiteSpace(genre)
+                ? new[] { catalog }
+                : new[] { pool, catalog };
+
+            foreach (var source in sources)
             {
-                object? challenge = type switch
+                // Random order so a low-connectivity movie doesn't always fail
+                // (or succeed) on the same challenge type every time it's spun.
+                var challengeTypes = Shuffle(rng, new[] { "connection", "chronos", "castDeduct" });
+                foreach (var type in challengeTypes)
                 {
-                    "connection" => BuildConnectionForMovie(rng, catalog, target),
-                    "chronos" => BuildChronosForMovie(rng, catalog, target),
-                    "castDeduct" => BuildCastDeductForMovie(rng, catalog, target),
-                    _ => null,
-                };
-                if (challenge != null)
-                {
-                    var movie = new RouletteMovie(target.Movie.ImdbId, target.Movie.Title, target.Movie.PosterPath);
-                    return new PracticeSpin(Guid.NewGuid().ToString("N"), movie, type, challenge);
+                    object? challenge = type switch
+                    {
+                        "connection" => BuildConnectionForMovie(rng, source, target),
+                        "chronos" => BuildChronosForMovie(rng, source, target),
+                        "castDeduct" => BuildCastDeductForMovie(rng, source, target),
+                        _ => null,
+                    };
+                    if (challenge != null)
+                    {
+                        var movie = new RouletteMovie(target.Movie.ImdbId, target.Movie.Title, target.Movie.PosterPath);
+                        return new PracticeSpin(
+                            Guid.NewGuid().ToString("N"),
+                            movie,
+                            type,
+                            challenge,
+                            GenreScoped: ReferenceEquals(source, pool));
+                    }
                 }
             }
 
@@ -525,7 +550,8 @@ namespace Backend.Services
                 "chronos" => ToChronosView((ChronosChallenge)spin.Challenge),
                 "castDeduct" => ToCastDeductView((CastDeductChallenge)spin.Challenge),
                 _ => throw new ArgumentOutOfRangeException(nameof(spin), spin.ChallengeType, "Unknown challenge type"),
-            });
+            },
+            spin.GenreScoped);
 
         public ChallengeResult GradePracticeChallenge(string challengeType, object challenge, SubmittedAnswers answer) =>
             challengeType switch
