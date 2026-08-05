@@ -11,7 +11,7 @@ import {
 import { router } from "expo-router";
 import { Ionicons } from "@expo/vector-icons";
 import { Starfield } from "@/frontend/components/starfield";
-import { SpaceTheme, SpaceStyles } from "@/frontend/constants/theme";
+import { SpaceStyles, Palette, Type, Display, Radius } from "@/frontend/constants/theme";
 import { authFetch } from "@/frontend/services/api";
 
 // A code-based entry point alongside link sharing — mainly for private
@@ -50,7 +50,7 @@ export default function JoinByCodeScreen() {
   return (
     <Starfield>
       <View style={styles.container}>
-        <Ionicons name="key-outline" size={36} color={SpaceTheme.accentGold} />
+        <Ionicons name="key-outline" size={36} color={Palette.accent} />
         <Text style={styles.title}>Enter a Space Code</Text>
         <Text style={styles.subtitle}>Ask the host for their 6-character code</Text>
 
@@ -61,7 +61,7 @@ export default function JoinByCodeScreen() {
           // paste or autocapitalize-off keyboard still matches.
           onChangeText={(text) => setCode(text.toUpperCase())}
           placeholder="K7XPQ2"
-          placeholderTextColor={SpaceTheme.mutedOrbit}
+          placeholderTextColor={Palette.textMuted}
           autoCapitalize="characters"
           autoCorrect={false}
           maxLength={10}
@@ -76,7 +76,7 @@ export default function JoinByCodeScreen() {
           disabled={!code.trim() || loading}
         >
           {loading ? (
-            <ActivityIndicator color={SpaceTheme.backgroundVoid} />
+            <ActivityIndicator color={Palette.base} />
           ) : (
             <Text style={styles.buttonText}>Find Space</Text>
           )}
@@ -90,26 +90,27 @@ const styles = StyleSheet.create({
   // paddingTop stays modest — this screen keeps its native header, which
   // already clears the notch (see _layout.tsx).
   container: { flex: 1, alignItems: "center", padding: 24, paddingTop: 32, gap: 6 },
-  title: { fontSize: 22, fontWeight: "700", color: SpaceTheme.starWhite, marginTop: 12 },
-  subtitle: { fontSize: 14, color: SpaceTheme.mutedOrbit, marginBottom: 28, textAlign: "center" },
+  title: { ...Type.title, fontWeight: "700", color: Palette.text, marginTop: 12 },
+  subtitle: { ...Type.small, color: Palette.textMuted, marginBottom: 28, textAlign: "center" },
+  // The display face for the code itself — a code entry field is exactly the
+  // kind of short, numbers-and-letters content Display exists for.
   input: {
-    ...SpaceStyles.glassCard,
+    ...SpaceStyles.field,
+    ...Display.dateCard,
     width: "100%",
-    fontSize: 24,
-    fontWeight: "800",
-    letterSpacing: 4,
+    letterSpacing: 6,
     textAlign: "center",
-    color: SpaceTheme.starWhite,
+    color: Palette.text,
     paddingVertical: 16,
     marginBottom: 20,
   },
   button: {
     width: "100%",
-    backgroundColor: SpaceTheme.accentGold,
-    borderRadius: 12,
+    backgroundColor: Palette.accent,
+    borderRadius: Radius.medium,
     paddingVertical: 15,
     alignItems: "center",
   },
   buttonDisabled: { opacity: 0.5 },
-  buttonText: { color: SpaceTheme.backgroundVoid, fontSize: 16, fontWeight: "700" },
+  buttonText: { ...Type.body, color: Palette.base, fontWeight: "700" },
 });

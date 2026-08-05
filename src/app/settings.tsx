@@ -18,7 +18,7 @@ import Constants from "expo-constants";
 import { supabase } from "@/frontend/config/supabase";
 import { authFetch } from "@/frontend/services/api";
 import { Starfield } from "@/frontend/components/starfield";
-import { SpaceTheme, SpaceStyles } from "@/frontend/constants/theme";
+import { SpaceStyles, Palette, Type, Display, Radius } from "@/frontend/constants/theme";
 import { areNotificationsEnabled, setNotificationsEnabled } from "@/frontend/services/push-notifications";
 
 export default function SettingsScreen() {
@@ -195,8 +195,8 @@ export default function SettingsScreen() {
               value={notificationsOn}
               onValueChange={handleToggleNotifications}
               disabled={notifLoading || togglingNotif}
-              trackColor={{ false: "rgba(255,255,255,0.15)", true: SpaceTheme.glowCyan }}
-              thumbColor={SpaceTheme.starWhite}
+              trackColor={{ false: "rgba(255,255,255,0.15)", true: Palette.accent }}
+              thumbColor={Palette.text}
             />
           </View>
         </View>
@@ -268,7 +268,7 @@ export default function SettingsScreen() {
             <TextInput
               style={styles.modalInput}
               placeholder="Current password"
-              placeholderTextColor={SpaceTheme.mutedOrbit}
+              placeholderTextColor={Palette.textMuted}
               value={currentPassword}
               onChangeText={setCurrentPassword}
               secureTextEntry
@@ -277,7 +277,7 @@ export default function SettingsScreen() {
             <TextInput
               style={styles.modalInput}
               placeholder="New password"
-              placeholderTextColor={SpaceTheme.mutedOrbit}
+              placeholderTextColor={Palette.textMuted}
               value={newPassword}
               onChangeText={setNewPassword}
               secureTextEntry
@@ -286,7 +286,7 @@ export default function SettingsScreen() {
             <TextInput
               style={styles.modalInput}
               placeholder="Confirm new password"
-              placeholderTextColor={SpaceTheme.mutedOrbit}
+              placeholderTextColor={Palette.textMuted}
               value={confirmPassword}
               onChangeText={setConfirmPassword}
               secureTextEntry
@@ -299,7 +299,7 @@ export default function SettingsScreen() {
               disabled={changingPassword}
             >
               {changingPassword ? (
-                <ActivityIndicator color={SpaceTheme.backgroundVoid} />
+                <ActivityIndicator color={Palette.base} />
               ) : (
                 <Text style={styles.modalSaveButtonText}>Update Password</Text>
               )}
@@ -323,10 +323,8 @@ const styles = StyleSheet.create({
   container: { flex: 1 },
   content: { paddingTop: 20, paddingHorizontal: 16, paddingBottom: 40 },
   sectionLabel: {
-    fontSize: 12,
-    fontWeight: "700",
-    color: SpaceTheme.mutedOrbit,
-    textTransform: "uppercase",
+    ...Display.section,
+    color: Palette.textFaint,
     marginBottom: 8,
     marginTop: 20,
   },
@@ -341,16 +339,16 @@ const styles = StyleSheet.create({
     padding: 14,
   },
   rowTextBlock: { flex: 1, marginRight: 12 },
-  rowTitle: { fontSize: 16, fontWeight: "600", color: SpaceTheme.starWhite },
-  rowSubtitle: { fontSize: 12, color: SpaceTheme.mutedOrbit, marginTop: 2 },
+  rowTitle: { ...Type.body, fontWeight: "600", color: Palette.text },
+  rowSubtitle: { ...Type.caption, color: Palette.textMuted, marginTop: 2 },
   linkRow: { padding: 14 },
-  linkText: { fontSize: 16, color: SpaceTheme.starWhite },
-  dangerLinkText: { fontSize: 16, color: SpaceTheme.danger, fontWeight: "600" },
-  divider: { height: 1, backgroundColor: "rgba(255,255,255,0.08)", marginHorizontal: 14 },
+  linkText: { ...Type.body, color: Palette.text },
+  dangerLinkText: { ...Type.body, color: Palette.danger, fontWeight: "600" },
+  divider: { height: 1, backgroundColor: Palette.border, marginHorizontal: 14 },
   versionText: {
     textAlign: "center",
-    fontSize: 12,
-    color: SpaceTheme.mutedOrbit,
+    ...Type.caption,
+    color: Palette.textMuted,
     marginTop: 28,
   },
   modalOverlay: {
@@ -359,32 +357,29 @@ const styles = StyleSheet.create({
     justifyContent: "flex-end",
   },
   modal: {
-    backgroundColor: SpaceTheme.deepSpace,
+    backgroundColor: Palette.raised,
     padding: 24,
     borderTopLeftRadius: 20,
     borderTopRightRadius: 20,
     borderWidth: 1,
-    borderColor: "rgba(255, 255, 255, 0.08)",
+    borderColor: Palette.border,
   },
-  modalTitle: { fontSize: 20, fontWeight: "bold", color: SpaceTheme.starWhite, marginBottom: 20 },
+  modalTitle: { ...Type.title, fontWeight: "700", color: Palette.text, marginBottom: 20 },
   modalInput: {
-    borderWidth: 1,
-    borderColor: "rgba(255, 255, 255, 0.12)",
-    borderRadius: 8,
+    ...SpaceStyles.field,
     padding: 12,
-    fontSize: 16,
-    backgroundColor: "rgba(255, 255, 255, 0.05)",
+    ...Type.body,
     marginBottom: 12,
-    color: SpaceTheme.starWhite,
+    color: Palette.text,
   },
   modalSaveButton: {
-    backgroundColor: SpaceTheme.glowCyan,
+    backgroundColor: Palette.accent,
     padding: 14,
-    borderRadius: 12,
+    borderRadius: Radius.medium,
     alignItems: "center",
     marginTop: 4,
   },
-  modalSaveButtonText: { color: SpaceTheme.backgroundVoid, fontWeight: "700", fontSize: 16 },
+  modalSaveButtonText: { ...Type.body, color: Palette.base, fontWeight: "700" },
   modalCancelButton: { alignItems: "center", padding: 12 },
-  modalCancelButtonText: { color: SpaceTheme.mutedOrbit, fontSize: 15 },
+  modalCancelButtonText: { ...Type.small, color: Palette.textMuted },
 });

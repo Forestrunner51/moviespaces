@@ -16,7 +16,7 @@ import * as AppleAuthentication from "expo-apple-authentication";
 import { supabase } from "../frontend/config/supabase";
 import { useRouter } from "expo-router";
 import { Starfield } from "@/frontend/components/starfield";
-import { SpaceTheme, SpaceStyles } from "@/frontend/constants/theme";
+import { SpaceStyles, Palette, Type, Display, Radius } from "@/frontend/constants/theme";
 import { signInWithGoogle, signInWithApple, isAppleSignInAvailable } from "@/frontend/services/sso";
 import { hasOnboardedInterests, completeOnboarding } from "@/frontend/services/onboarding";
 
@@ -159,7 +159,7 @@ export default function AuthScreen() {
         contentContainerStyle={styles.container}
         keyboardShouldPersistTaps="handled"
       >
-        <Text style={[styles.header, SpaceStyles.glowText, SpaceStyles.wordmark]}>MovieSpaces</Text>
+        <Text style={styles.header}>MovieSpaces</Text>
         <Text style={styles.subHeader}>
           {isSignUp ? "Create a new account" : "Sign in to your account"}
         </Text>
@@ -181,7 +181,7 @@ export default function AuthScreen() {
           disabled={ssoLoading !== null || loading}
         >
           {ssoLoading === "google" ? (
-            <ActivityIndicator color={SpaceTheme.backgroundVoid} />
+            <ActivityIndicator color={Palette.base} />
           ) : (
             <Text style={styles.googleButtonText}>Continue with Google</Text>
           )}
@@ -197,7 +197,7 @@ export default function AuthScreen() {
           <TextInput
             style={styles.input}
             placeholder="Your name"
-            placeholderTextColor={SpaceTheme.mutedOrbit}
+            placeholderTextColor={Palette.textMuted}
             value={name}
             onChangeText={setName}
             autoCapitalize="words"
@@ -207,7 +207,7 @@ export default function AuthScreen() {
         <TextInput
           style={styles.input}
           placeholder="Email"
-          placeholderTextColor={SpaceTheme.mutedOrbit}
+          placeholderTextColor={Palette.textMuted}
           value={email}
           onChangeText={setEmail}
           autoCapitalize="none"
@@ -216,7 +216,7 @@ export default function AuthScreen() {
         <TextInput
           style={styles.input}
           placeholder="Password"
-          placeholderTextColor={SpaceTheme.mutedOrbit}
+          placeholderTextColor={Palette.textMuted}
           secureTextEntry
           value={password}
           onChangeText={setPassword}
@@ -229,7 +229,7 @@ export default function AuthScreen() {
           disabled={loading || ssoLoading !== null}
         >
           {loading ? (
-            <ActivityIndicator color={SpaceTheme.backgroundVoid} />
+            <ActivityIndicator color={Palette.base} />
           ) : (
             <Text style={styles.buttonText}>
               {isSignUp ? "Register" : "Login"}
@@ -283,15 +283,14 @@ const styles = StyleSheet.create({
     padding: 24,
   },
   header: {
-    fontSize: 32,
-    fontWeight: "bold",
-    color: SpaceTheme.starWhite,
+    ...Display.heading,
+    color: Palette.text,
     textAlign: "center",
     marginBottom: 8,
   },
   subHeader: {
-    fontSize: 16,
-    color: SpaceTheme.mutedOrbit,
+    ...Type.body,
+    color: Palette.textMuted,
     textAlign: "center",
     marginBottom: 32,
   },
@@ -301,50 +300,49 @@ const styles = StyleSheet.create({
     marginBottom: 12,
   },
   googleButton: {
-    ...SpaceStyles.glassCard,
+    ...SpaceStyles.field,
     height: 50,
     alignItems: "center",
     justifyContent: "center",
     marginBottom: 16,
   },
-  googleButtonText: { color: SpaceTheme.starWhite, fontSize: 16, fontWeight: "700" },
+  googleButtonText: { ...Type.body, color: Palette.text, fontWeight: "700" },
   dividerRow: {
     flexDirection: "row",
     alignItems: "center",
     marginBottom: 20,
   },
-  dividerLine: { flex: 1, height: 1, backgroundColor: "rgba(255,255,255,0.12)" },
+  dividerLine: { flex: 1, height: 1, backgroundColor: Palette.border },
   dividerText: {
-    color: SpaceTheme.mutedOrbit,
-    fontSize: 12,
+    ...Type.caption,
+    color: Palette.textMuted,
     fontWeight: "700",
     marginHorizontal: 12,
   },
   input: {
-    ...SpaceStyles.glassCard,
-    color: SpaceTheme.starWhite,
+    ...SpaceStyles.field,
+    color: Palette.text,
     padding: 16,
-    fontSize: 16,
+    ...Type.body,
     marginBottom: 16,
   },
   button: {
-    backgroundColor: SpaceTheme.glowCyan,
+    backgroundColor: Palette.accent,
     padding: 16,
-    borderRadius: 12,
+    borderRadius: Radius.medium,
     alignItems: "center",
     marginTop: 8,
   },
-  buttonText: { color: SpaceTheme.backgroundVoid, fontSize: 18, fontWeight: "bold" },
+  buttonText: { ...Type.title, color: Palette.base, fontWeight: "700" },
   switchLink: { marginTop: 24, alignItems: "center" },
-  switchText: { color: SpaceTheme.mutedOrbit, fontSize: 14 },
+  switchText: { ...Type.small, color: Palette.textMuted },
   forgotLink: { marginTop: 14, alignItems: "center" },
-  forgotText: { color: SpaceTheme.glowCyan, fontSize: 14, fontWeight: "600" },
+  forgotText: { ...Type.small, color: Palette.accent, fontWeight: "600" },
   legalText: {
     marginTop: 16,
-    fontSize: 12,
-    color: SpaceTheme.mutedOrbit,
+    ...Type.caption,
+    color: Palette.textMuted,
     textAlign: "center",
-    lineHeight: 18,
   },
-  legalLink: { color: SpaceTheme.glowCyan, fontWeight: "600" },
+  legalLink: { color: Palette.accent, fontWeight: "600" },
 });

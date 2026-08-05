@@ -3,7 +3,7 @@ import { View, Text, TouchableOpacity, StyleSheet } from "react-native";
 import { router } from "expo-router";
 import { Ionicons } from "@expo/vector-icons";
 import { Starfield } from "@/frontend/components/starfield";
-import { SpaceTheme, SpaceStyles, Palette } from "@/frontend/constants/theme";
+import { SpaceStyles, Palette, Type, Radius } from "@/frontend/constants/theme";
 import { completeOnboarding } from "@/frontend/services/onboarding";
 
 // Genres match seeded public Community Spaces' GenreCategory exactly (see
@@ -38,7 +38,7 @@ export default function OnboardingInterestsScreen() {
   return (
     <Starfield>
       <View style={styles.container}>
-        <Ionicons name="film-outline" size={40} color={SpaceTheme.glowCyan} />
+        <Ionicons name="film-outline" size={40} color={Palette.accent} />
         <Text style={styles.title}>What do you like to watch?</Text>
         <Text style={styles.subtitle}>
           Pick a few genres to find Community Spaces with people who watch the same stuff —
@@ -86,39 +86,39 @@ export default function OnboardingInterestsScreen() {
 const styles = StyleSheet.create({
   container: { flex: 1, alignItems: "center", padding: 24, paddingTop: 90, gap: 6 },
   title: {
-    fontSize: 22,
+    ...Type.title,
     fontWeight: "700",
-    color: SpaceTheme.starWhite,
+    color: Palette.text,
     marginTop: 14,
     textAlign: "center",
   },
   subtitle: {
-    fontSize: 14,
-    color: SpaceTheme.mutedOrbit,
+    ...Type.small,
+    color: Palette.textMuted,
     textAlign: "center",
-    lineHeight: 20,
     marginBottom: 28,
   },
   pillRow: { flexDirection: "row", flexWrap: "wrap", gap: 10, justifyContent: "center", marginBottom: 32 },
   pill: {
-    ...SpaceStyles.glassCard,
+    ...SpaceStyles.field,
     flexDirection: "row",
     alignItems: "center",
     gap: 7,
     paddingVertical: 12,
     paddingHorizontal: 18,
+    borderRadius: Radius.pill,
   },
   pillActive: { borderColor: Palette.accent, backgroundColor: Palette.accent },
-  pillText: { color: Palette.textMuted, fontSize: 15, fontWeight: "600" },
+  pillText: { ...Type.small, color: Palette.textMuted, fontWeight: "600" },
   pillTextActive: { color: Palette.base, fontWeight: "700" },
   button: {
     width: "100%",
-    backgroundColor: SpaceTheme.glowCyan,
-    borderRadius: 12,
+    backgroundColor: Palette.accent,
+    borderRadius: Radius.medium,
     paddingVertical: 15,
     alignItems: "center",
   },
   buttonDisabled: { opacity: 0.4 },
-  buttonText: { color: SpaceTheme.backgroundVoid, fontSize: 16, fontWeight: "700" },
-  skipText: { color: SpaceTheme.mutedOrbit, fontSize: 13, marginTop: 18, textDecorationLine: "underline" },
+  buttonText: { ...Type.body, color: Palette.base, fontWeight: "700" },
+  skipText: { ...Type.small, color: Palette.textMuted, marginTop: 18, textDecorationLine: "underline" },
 });

@@ -5,7 +5,7 @@ import AsyncStorage from "@react-native-async-storage/async-storage";
 import { authFetch } from "@/frontend/services/api";
 import { supabase } from "@/frontend/config/supabase";
 import { Starfield } from "@/frontend/components/starfield";
-import { SpaceTheme, SpaceStyles } from "@/frontend/constants/theme";
+import { Palette, Type, Display, Radius } from "@/frontend/constants/theme";
 
 // No name-entry screen anymore — resolves the user's real identity (same
 // sources as before: profile display_name, then auth metadata, then the
@@ -76,9 +76,7 @@ export default function JoinScreen() {
       <View style={styles.container}>
         {errorText ? (
           <>
-            <Text style={[styles.title, SpaceStyles.glowText, SpaceStyles.wordmark]}>
-              Couldn&apos;t join
-            </Text>
+            <Text style={styles.title}>Couldn&apos;t join</Text>
             <Text style={styles.subtitle}>{errorText}</Text>
             <TouchableOpacity activeOpacity={0.8} style={styles.button} onPress={() => router.back()}>
               <Text style={styles.buttonText}>Go Back</Text>
@@ -86,7 +84,7 @@ export default function JoinScreen() {
           </>
         ) : (
           <>
-            <ActivityIndicator size="large" color={SpaceTheme.glowCyan} />
+            <ActivityIndicator size="large" color={Palette.accent} />
             <Text style={styles.subtitle}>Joining...</Text>
           </>
         )}
@@ -103,14 +101,14 @@ const styles = StyleSheet.create({
     padding: 24,
     gap: 12,
   },
-  title: { fontSize: 24, fontWeight: "bold", color: SpaceTheme.starWhite, textAlign: "center" },
-  subtitle: { fontSize: 15, color: SpaceTheme.mutedOrbit, textAlign: "center" },
+  title: { ...Display.heading, color: Palette.text, textAlign: "center" },
+  subtitle: { ...Type.small, color: Palette.textMuted, textAlign: "center" },
   button: {
-    backgroundColor: SpaceTheme.glowCyan,
+    backgroundColor: Palette.accent,
     paddingVertical: 12,
     paddingHorizontal: 28,
-    borderRadius: 12,
+    borderRadius: Radius.medium,
     marginTop: 8,
   },
-  buttonText: { color: SpaceTheme.backgroundVoid, fontWeight: "700", fontSize: 16 },
+  buttonText: { ...Type.body, color: Palette.base, fontWeight: "700" },
 });
