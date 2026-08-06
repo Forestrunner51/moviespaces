@@ -72,7 +72,7 @@ export default function AuthScreen() {
     if (result.success) {
       await finishSsoLogin();
     } else if (!result.cancelled) {
-      showToast(result.error || "Please try again.");
+      showToast(result.error || "Couldn't sign in with Google. Please try again.");
     }
   };
 
@@ -86,7 +86,7 @@ export default function AuthScreen() {
     if (result.success) {
       await finishSsoLogin();
     } else if (!result.cancelled) {
-      showToast(result.error || "Please try again.");
+      showToast(result.error || "Couldn't sign in with Apple. Please try again.");
     }
   };
 

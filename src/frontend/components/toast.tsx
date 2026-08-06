@@ -1,5 +1,5 @@
 import { createContext, useCallback, useContext, useEffect, useRef, useState } from "react";
-import { StyleSheet, Text, View } from "react-native";
+import { AccessibilityInfo, Platform, StyleSheet, Text, View } from "react-native";
 import Animated, {
   useAnimatedStyle,
   useSharedValue,
@@ -47,6 +47,9 @@ export function useToast() {
 
 const VISIBLE_MS = 3200;
 
+// Approximate height of the native Stack header on both platforms.
+const HEADER_ALLOWANCE = 52;
+
 // Module scope, matching the pattern in roulette.tsx: React Compiler can't
 // verify that Reanimated's mutable `.value` assignment is safe inside a
 // component closure and flags it as an illegal mutation. Out here it's just a
@@ -91,6 +94,12 @@ function ToastBanner({ toast, onDone }: { toast: ToastState; onDone: () => void 
   }));
 
   useEffect(() => {
+    // accessibilityLiveRegion is Android-only. On iOS a view that simply
+    // appears is not announced, so without this an assistive-tech user on the
+    // app's primary launch platform would get silence where the old
+    // Alert.alert spoke — a straight downgrade. announceForAccessibility is
+    // the iOS equivalent and doesn't move focus.
+    if (Platform.OS === "ios") AccessibilityInfo.announceForAccessibility(toast.message);
     fadeIn(progress);
     const hide = setTimeout(() => fadeOut(progress), VISIBLE_MS);
     // Cleared separately from the fade so onDone always runs even if the fade
@@ -100,14 +109,21 @@ function ToastBanner({ toast, onDone }: { toast: ToastState; onDone: () => void 
       clearTimeout(hide);
       clearTimeout(done);
     };
-  }, [progress, onDone]);
+  }, [progress, onDone, toast.message]);
 
   const tone = TONE_STYLES[toast.tone];
 
   return (
     <Animated.View
       pointerEvents="none"
-      style={[styles.wrap, { top: insets.top + 8 }, style]}
+      // Cleared past a standard native header rather than sitting at the top
+      // of the safe area: most screens in this app render a Stack header
+      // (only auth/reset-password/the tab screens opt out), and anchoring to
+      // insets.top put the banner straight over the back button and title.
+      // pointerEvents="none" meant it never actually blocked a tap, but it
+      // covered the header for the full 3.2s it was visible. On the headerless
+      // screens this just reads as a slightly lower banner.
+      style={[styles.wrap, { top: insets.top + HEADER_ALLOWANCE }, style]}
       // Announced to VoiceOver/TalkBack without stealing focus — the whole
       // point is not interrupting, but a message nobody can hear is worse
       // than the alert this replaced.
