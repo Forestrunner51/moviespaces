@@ -120,7 +120,7 @@ export default function GroupScreen() {
     if (result.success || result.error?.includes("already exists")) {
       setRequestedFriendIds((prev) => new Set(prev).add(userId));
     } else {
-      showToast(result.error || "Please try again.");
+      showToast(result.error || "Couldn't send that friend request. Please try again.");
     }
   };
 
@@ -187,11 +187,14 @@ export default function GroupScreen() {
         }
         return true;
       } catch (err: any) {
-        showToast(err.message || "Please try again.");
+        showToast(err.message || "Couldn't complete that action. Please try again.");
         return false;
       }
     },
-    [groupId],
+    // showToast is stable (useCallback([]) in ToastProvider) so this can't
+    // churn the callback — listed to satisfy exhaustive-deps rather than
+    // silencing it.
+    [groupId, showToast],
   );
 
   // Fixed: Guarded share handler inside the component scope
@@ -315,7 +318,7 @@ export default function GroupScreen() {
       showToast("This watch party is now on your calendar.", "success");
     } catch (err) {
       console.error("Failed to add to calendar:", err);
-      showToast("Please try again.");
+      showToast("Couldn't add this to your calendar. Please try again.");
     } finally {
       setAddingToCalendar(false);
     }
@@ -363,7 +366,7 @@ export default function GroupScreen() {
       }
       await fetchGroup();
     } catch (err: any) {
-      showToast(err.message || "Please try again.");
+      showToast(err.message || "Couldn't join this Space. Please try again.");
     } finally {
       setJoining(false);
     }

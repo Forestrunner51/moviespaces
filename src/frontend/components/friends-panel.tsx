@@ -69,7 +69,7 @@ export function FriendsPanel() {
   const handleAdd = async (userId: string) => {
     const result = await sendFriendRequest(userId);
     if (!result.success && !result.error?.includes("already exists")) {
-      showToast(result.error || "Please try again.");
+      showToast(result.error || "Couldn't send that friend request. Please try again.");
     }
   };
 
@@ -77,7 +77,7 @@ export function FriendsPanel() {
   const handleCancelRequest = async (friendshipId: string) => {
     const result = await cancelFriendRequest(friendshipId);
     if (!result.success) {
-      showToast(result.error || "Please try again.");
+      showToast(result.error || "Couldn't cancel that request. Please try again.");
     }
   };
 
