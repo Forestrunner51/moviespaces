@@ -6,7 +6,6 @@ import {
   ScrollView,
   TouchableOpacity,
   ActivityIndicator,
-  Alert,
 } from "react-native";
 import Animated, {
   useSharedValue,
@@ -33,6 +32,7 @@ import {
   RouletteCastDeductChallenge,
 } from "@/frontend/services/roulette";
 import { ChallengeResult, PuzzleMovie } from "@/frontend/services/cinemind";
+import { useToast } from "@/frontend/components/toast";
 
 type Phase = "picking" | "spinning" | "revealed" | "graded";
 
@@ -72,6 +72,7 @@ function resetWheelSpin(wheel: SharedValue<number>) {
 // streak or a leaderboard, so it's safe to play any number of times, unlike
 // the once-a-day puzzle at /cinemind.
 export default function RouletteScreen() {
+  const { showToast } = useToast();
   const [phase, setPhase] = useState<Phase>("picking");
   const [genre, setGenre] = useState<string | null>(null);
   const [spin, setSpin] = useState<SpinResult | null>(null);
@@ -132,7 +133,7 @@ export default function RouletteScreen() {
       setGradeResult(result);
       setPhase("graded");
     } catch (err: any) {
-      Alert.alert("Couldn't check that", err?.message || "Please try again.");
+      showToast(err?.message || "Couldn't check that answer. Please try again.");
     } finally {
       grading.current = false;
     }

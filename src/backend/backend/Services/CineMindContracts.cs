@@ -55,39 +55,47 @@ namespace Backend.Services
         string? Plot,
         string? PosterPath);
 
-    // SchemaVersion defaults to CurrentSchemaVersion for every payload this
-    // process ever constructs, so nothing that calls `new DailyPuzzlePayload(...)`
-    // has to know this field exists. It only ever reads as something OTHER
-    // than CurrentSchemaVersion when System.Text.Json is deserializing a row
-    // written by an older version of this record shape — a row from before
-    // this field existed at all comes back as the default `int`, 0, which
-    // compares as stale against any real CurrentSchemaVersion (>= 1) with no
-    // extra handling needed.
-    //
-    // This exists because a JSON payload one field short of what this record
-    // currently declares does NOT fail to deserialize — System.Text.Json
-    // fills the missing property with null/default rather than throwing — so
-    // a puzzle payload stored before a field was added (Genres and the whole
+    // SchemaVersion exists because a JSON payload one field short of what this
+    // record currently declares does NOT fail to deserialize — System.Text.Json
+    // fills the missing property with null/default rather than throwing — so a
+    // puzzle payload stored before a field was added (Genres and the whole
     // MysteryTv track were both added mid-week) parses "successfully" into an
     // object with nulls a caller's C# types promise can't be there. That
-    // silently broke a feature (DailyPuzzleService.RecentlyUsedIds) that read
-    // six days of history back through Deserialize.
+    // silently broke DailyPuzzleService.RecentlyUsedIds, which reads six days
+    // of stored payloads back and 500'd every request to /puzzles/today.
     //
-    // The fix is at the type level rather than a hand-maintained "which
-    // fields might be missing" checklist (see DailyPuzzleService.IsComplete):
-    // any future change to this record's shape, or any nested challenge
-    // record's shape, just needs CurrentSchemaVersion bumped once, and every
-    // pre-existing row automatically stops being trusted — instead of relying
-    // on whoever adds the new field to also remember to update a separate
-    // completeness check.
+    // Tagging rows lets a future shape change invalidate every older row by
+    // bumping ONE constant, instead of relying on whoever adds a field to also
+    // remember to update a hand-maintained "which fields might be missing"
+    // checklist (DailyPuzzleService.IsComplete, now only the legacy fallback).
+    //
+    // ── Why the default is UntaggedSchemaVersion and not CurrentSchemaVersion ──
+    //
+    // It is tempting to default this to CurrentSchemaVersion so no construction
+    // site has to think about it. That silently defeats the entire mechanism,
+    // and did: System.Text.Json substitutes a constructor parameter's C#
+    // default for a property absent from the JSON, so an untagged legacy row
+    // deserialized as "current", the version check passed, and the completeness
+    // fallback never ran — leaving the exact null-dereference this was added to
+    // prevent still reachable. The default therefore has to be a sentinel that
+    // no real version ever equals. Covered by PayloadDeserializationTests.
+    //
+    // Forgetting to pass it at a construction site is a safe failure: the row
+    // reads as untagged and takes the slower structural-completeness path,
+    // rather than being wrongly trusted.
     public record DailyPuzzlePayload(
         ConnectionChallenge Connection,
         ChronosChallenge Chronos,
         CastDeductChallenge CastDeduct,
         MysteryMovieChallenge MysteryMovie,
         MysteryMovieChallenge MysteryTv,
-        int SchemaVersion = DailyPuzzlePayload.CurrentSchemaVersion)
+        int SchemaVersion = DailyPuzzlePayload.UntaggedSchemaVersion)
     {
+        // What a row written before this field existed deserializes as, and
+        // what an in-memory payload constructed without an explicit version
+        // carries. Must never equal CurrentSchemaVersion.
+        public const int UntaggedSchemaVersion = 0;
+
         // Bump this — and only this — whenever DailyPuzzlePayload or any
         // record it contains (ConnectionChallenge, ChronosChallenge,
         // CastDeductChallenge, MysteryMovieChallenge) gains, loses, or

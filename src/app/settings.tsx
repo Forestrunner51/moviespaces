@@ -20,8 +20,10 @@ import { authFetch } from "@/frontend/services/api";
 import { Starfield } from "@/frontend/components/starfield";
 import { SpaceStyles, Palette, Type, Display, Radius } from "@/frontend/constants/theme";
 import { areNotificationsEnabled, setNotificationsEnabled } from "@/frontend/services/push-notifications";
+import { useToast } from "@/frontend/components/toast";
 
 export default function SettingsScreen() {
+  const { showToast } = useToast();
   const [notificationsOn, setNotificationsOn] = useState(true);
   const [notifLoading, setNotifLoading] = useState(true);
   const [togglingNotif, setTogglingNotif] = useState(false);
@@ -79,19 +81,19 @@ export default function SettingsScreen() {
   // session on success.
   const handleChangePassword = async () => {
     if (!currentPassword) {
-      Alert.alert("Current password required", "Enter your current password to continue.");
+      showToast("Enter your current password to continue.");
       return;
     }
     if (newPassword.length < 6) {
-      Alert.alert("Password too short", "Use at least 6 characters.");
+      showToast("Use at least 6 characters.");
       return;
     }
     if (newPassword !== confirmPassword) {
-      Alert.alert("Passwords don't match", "Double-check both fields match.");
+      showToast("Those passwords don't match.");
       return;
     }
     if (newPassword === currentPassword) {
-      Alert.alert("Choose a different password", "The new password matches your current one.");
+      showToast("That's already your current password.");
       return;
     }
 
@@ -111,9 +113,9 @@ export default function SettingsScreen() {
       const { error } = await supabase.auth.updateUser({ password: newPassword });
       if (error) throw error;
       setPasswordModalVisible(false);
-      Alert.alert("Password updated", "Your password has been changed.");
+      showToast("Password updated.", "success");
     } catch (err: any) {
-      Alert.alert("Couldn't update password", err.message || "Please try again.");
+      showToast(err?.message || "Couldn't update your password. Please try again.");
     } finally {
       setChangingPassword(false);
     }
@@ -163,7 +165,7 @@ export default function SettingsScreen() {
                       await supabase.auth.signOut();
                       router.replace("/auth");
                     } catch (err: any) {
-                      Alert.alert("Couldn't delete account", err.message || "Please try again.");
+                      showToast(err?.message || "Couldn't delete your account. Please try again.");
                     } finally {
                       setDeletingAccount(false);
                     }

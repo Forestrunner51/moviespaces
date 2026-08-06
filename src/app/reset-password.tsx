@@ -14,6 +14,7 @@ import { useRouter } from "expo-router";
 import { supabase } from "@/frontend/config/supabase";
 import { Starfield } from "@/frontend/components/starfield";
 import { SpaceStyles, Palette, Type, Display, Radius } from "@/frontend/constants/theme";
+import { useToast } from "@/frontend/components/toast";
 
 // Uses Supabase's OTP recovery-code flow rather than the emailed-link flow:
 // the link flow needs deep-link redirect config + fragment parsing (fragile
@@ -21,6 +22,7 @@ import { SpaceStyles, Palette, Type, Display, Radius } from "@/frontend/constant
 // Supabase "Reset Password" email template to surface the code via
 // {{ .Token }} (see the note at the bottom of this file / the setup docs).
 export default function ResetPasswordScreen() {
+  const { showToast } = useToast();
   const router = useRouter();
   // "request" = ask for the email; "verify" = enter code + new password.
   const [stage, setStage] = useState<"request" | "verify">("request");
@@ -31,14 +33,14 @@ export default function ResetPasswordScreen() {
 
   const handleSendCode = async () => {
     if (!email.trim()) {
-      Alert.alert("Email required", "Enter the email tied to your account.");
+      showToast("Enter the email tied to your account.");
       return;
     }
     setLoading(true);
     const { error } = await supabase.auth.resetPasswordForEmail(email.trim());
     setLoading(false);
     if (error) {
-      Alert.alert("Couldn't send code", error.message);
+      showToast(error.message);
       return;
     }
     // Move on regardless of whether the address exists — revealing which
@@ -48,11 +50,11 @@ export default function ResetPasswordScreen() {
 
   const handleResetPassword = async () => {
     if (!code.trim() || !newPassword) {
-      Alert.alert("Missing info", "Enter the code from your email and a new password.");
+      showToast("Enter the code from your email and a new password.");
       return;
     }
     if (newPassword.length < 6) {
-      Alert.alert("Password too short", "Use at least 6 characters.");
+      showToast("Use at least 6 characters.");
       return;
     }
     setLoading(true);
@@ -75,7 +77,7 @@ export default function ResetPasswordScreen() {
         { text: "OK", onPress: () => router.replace("/") },
       ]);
     } catch (err: any) {
-      Alert.alert("Couldn't reset password", err.message || "Check the code and try again.");
+      showToast(err.message || "Check the code and try again.");
     } finally {
       setLoading(false);
     }

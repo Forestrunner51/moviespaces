@@ -554,6 +554,8 @@ export default function ExploreScreen() {
                 <TouchableOpacity
                   activeOpacity={0.7}
                   hitSlop={8}
+                  accessibilityRole="button"
+                  accessibilityLabel="Report this Space"
                   style={styles.reportSpaceButton}
                   onPress={(e) => {
                     e.stopPropagation();

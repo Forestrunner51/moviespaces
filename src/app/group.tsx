@@ -36,7 +36,9 @@ import { EVENT_CATEGORIES, eventCategoryOf } from "@/frontend/constants/event-ca
 import { reportContent } from "@/frontend/services/moderation";
 import { Avatar } from "@/frontend/components/avatar";
 import { useProfiles } from "@/frontend/hooks/use-profiles";
+import { useForegroundPoll } from "@/frontend/hooks/use-foreground-poll";
 import { formatEventDate } from "@/frontend/utils/event-date";
+import { useToast } from "@/frontend/components/toast";
 
 // Display strings written alongside screeningTime on edit, so the free-text
 // columns never drift out of sync with the real timestamp. Matches the
@@ -89,6 +91,7 @@ interface Group {
 }
 
 export default function GroupScreen() {
+  const { showToast } = useToast();
   const { groupId, hostName, code } = useLocalSearchParams<{
     groupId: string;
     hostName: string;
@@ -117,7 +120,7 @@ export default function GroupScreen() {
     if (result.success || result.error?.includes("already exists")) {
       setRequestedFriendIds((prev) => new Set(prev).add(userId));
     } else {
-      Alert.alert("Couldn't send request", result.error || "Please try again.");
+      showToast(result.error || "Please try again.");
     }
   };
 
@@ -158,11 +161,11 @@ export default function GroupScreen() {
     }
   }, [groupId, code]);
 
-  useEffect(() => {
-    fetchGroup();
-    const interval = setInterval(fetchGroup, 5000); // poll every 5 seconds
-    return () => clearInterval(interval);
-  }, [fetchGroup]);
+  // Every 5s while foregrounded only — a Space screen left open in the
+  // background used to keep refetching the whole group indefinitely. Refetches
+  // immediately on resume, so coming back to the app shows current RSVPs
+  // rather than a stale snapshot.
+  useForegroundPoll(fetchGroup, 5000, true, `${groupId}:${code}`);
 
   // Runs a mutating group action, surfaces the server's error message on
   // failure, and returns whether it succeeded — so callers can gate
@@ -184,7 +187,7 @@ export default function GroupScreen() {
         }
         return true;
       } catch (err: any) {
-        Alert.alert("Couldn't complete that action", err.message || "Please try again.");
+        showToast(err.message || "Please try again.");
         return false;
       }
     },
@@ -276,10 +279,7 @@ export default function GroupScreen() {
     // ScreeningTime is the only field with a real Date — ShowDate/ShowTime
     // are host-typed free text and can't be reliably parsed.
     if (!group.screeningTime) {
-      Alert.alert(
-        "Can't add to calendar",
-        "This Space doesn't have an exact date/time set, so it can't be added automatically.",
-      );
+      showToast("This Space doesn't have an exact date/time set, so it can't be added automatically.");
       return;
     }
 
@@ -287,7 +287,7 @@ export default function GroupScreen() {
     try {
       const { status } = await Calendar.requestCalendarPermissions();
       if (status !== "granted") {
-        Alert.alert("Permission needed", "Allow calendar access to add this watch party.");
+        showToast("Allow calendar access to add this watch party.");
         return;
       }
 
@@ -297,7 +297,7 @@ export default function GroupScreen() {
         calendars.find((c) => c.allowsModifications);
 
       if (!writableCalendar) {
-        Alert.alert("No calendar available", "Couldn't find a calendar to add this event to.");
+        showToast("Couldn't find a calendar to add this event to.");
         return;
       }
 
@@ -312,10 +312,10 @@ export default function GroupScreen() {
         notes: `MovieSpaces watch party hosted by ${group.hostName}`,
       });
 
-      Alert.alert("Added!", "This watch party is now on your calendar.");
+      showToast("This watch party is now on your calendar.", "success");
     } catch (err) {
       console.error("Failed to add to calendar:", err);
-      Alert.alert("Couldn't add to calendar", "Please try again.");
+      showToast("Please try again.");
     } finally {
       setAddingToCalendar(false);
     }
@@ -363,7 +363,7 @@ export default function GroupScreen() {
       }
       await fetchGroup();
     } catch (err: any) {
-      Alert.alert("Couldn't join", err.message || "Please try again.");
+      showToast(err.message || "Please try again.");
     } finally {
       setJoining(false);
     }
@@ -468,23 +468,23 @@ export default function GroupScreen() {
 
   const handleSaveEdit = async () => {
     if (!editFilmName.trim() || !editCinemaName.trim()) {
-      Alert.alert("Missing info", "Title and venue can't be blank.");
+      showToast("Title and venue can't be blank.");
       return;
     }
     if (!editDateValue || !editTimeValue) {
-      Alert.alert("Missing info", "Pick a date and a time.");
+      showToast("Pick a date and a time.");
       return;
     }
     const capacity = parseInt(editMaxCapacity, 10);
     if (!Number.isFinite(capacity) || capacity < 1) {
-      Alert.alert("Invalid capacity", "Enter a capacity of at least 1.");
+      showToast("Enter a capacity of at least 1.");
       return;
     }
     let totalCostCents: number | null = null;
     if (editTotalCost.trim()) {
       const dollars = parseFloat(editTotalCost);
       if (!Number.isFinite(dollars) || dollars < 0) {
-        Alert.alert("Invalid cost", "Enter a valid cost, or leave it blank.");
+        showToast("Enter a valid cost, or leave it blank.");
         return;
       }
       totalCostCents = Math.round(dollars * 100);
@@ -774,6 +774,8 @@ export default function GroupScreen() {
             <TouchableOpacity
               activeOpacity={0.8}
               onPress={openEditModal}
+              accessibilityRole="button"
+              accessibilityLabel="Edit this Space"
               hitSlop={8}
               style={styles.editButton}
             >
@@ -989,6 +991,8 @@ export default function GroupScreen() {
                       <TouchableOpacity
                         activeOpacity={0.8}
                         onPress={() => handleRemoveMember(item)}
+                        accessibilityRole="button"
+                        accessibilityLabel={`Remove ${item.name} from this Space`}
                         hitSlop={8}
                       >
                         <Ionicons name="close-circle-outline" size={18} color={Palette.textFaint} />

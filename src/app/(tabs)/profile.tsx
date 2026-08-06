@@ -6,7 +6,6 @@ import {
   TouchableOpacity,
   StyleSheet,
   ActivityIndicator,
-  Alert,
   ScrollView,
 } from "react-native";
 import { supabase } from "@/frontend/config/supabase";
@@ -21,6 +20,7 @@ import { SpaceStyles, Palette, Type, Display } from "@/frontend/constants/theme"
 import { THEATER_MEMBERSHIPS, membershipLabel } from "@/frontend/constants/theater-memberships";
 import { checkUsernameAvailable, normalizeUsername } from "@/frontend/services/username";
 import { useFriends } from "@/frontend/hooks/use-friends";
+import { useToast } from "@/frontend/components/toast";
 
 interface ProfileData {
   displayName: string;
@@ -44,6 +44,7 @@ interface MySpace {
 }
 
 export default function ProfileScreen() {
+  const { showToast } = useToast();
   const [userId, setUserId] = useState<string | null>(null);
   const [profile, setProfile] = useState<ProfileData | null>(null);
   const [loading, setLoading] = useState(true);
@@ -149,7 +150,7 @@ export default function ProfileScreen() {
   const pickAvatar = async () => {
     const permission = await ImagePicker.requestMediaLibraryPermissionsAsync();
     if (!permission.granted) {
-      Alert.alert("Permission needed", "Allow photo access to set a profile picture.");
+      showToast("Allow photo access to set a profile picture.");
       return;
     }
 
@@ -168,7 +169,7 @@ export default function ProfileScreen() {
   const handleSave = async () => {
     if (!userId) return;
     if (!nameInput.trim()) {
-      Alert.alert("Name required", "Please enter a display name.");
+      showToast("Please enter a display name.");
       return;
     }
 
@@ -176,7 +177,7 @@ export default function ProfileScreen() {
     const normalizedUsername = trimmedUsername ? normalizeUsername(trimmedUsername) : null;
     if (normalizedUsername && normalizedUsername !== profile?.username) {
       if (usernameCheck?.available === false) {
-        Alert.alert("Username unavailable", usernameCheck.message);
+        showToast(usernameCheck.message);
         return;
       }
       // Hasn't finished (or never ran) a check yet — verify right before
@@ -184,7 +185,7 @@ export default function ProfileScreen() {
       const result = await checkUsernameAvailable(normalizedUsername, userId);
       if (!result.available) {
         setUsernameCheck(result);
-        Alert.alert("Username unavailable", result.message);
+        showToast(result.message);
         return;
       }
     }
@@ -228,7 +229,7 @@ export default function ProfileScreen() {
       setEditing(false);
       setPendingAvatarUri(null);
     } catch (err: any) {
-      Alert.alert("Couldn't save changes", err.message || "Please try again.");
+      showToast(err?.message || "Couldn't save your changes. Please try again.");
     } finally {
       setSaving(false);
     }
@@ -281,6 +282,8 @@ export default function ProfileScreen() {
           <TouchableOpacity
             activeOpacity={0.7}
             hitSlop={10}
+            accessibilityRole="button"
+            accessibilityLabel="Settings"
             style={styles.settingsButton}
             onPress={() => router.push("/settings")}
           >

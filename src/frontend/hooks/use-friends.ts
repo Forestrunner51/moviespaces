@@ -1,5 +1,6 @@
 import { useState, useEffect } from "react";
 import { supabase } from "@/frontend/config/supabase";
+import { useForegroundPoll } from "@/frontend/hooks/use-foreground-poll";
 
 export interface Profile {
   id: string;
@@ -140,15 +141,9 @@ export function useFriends() {
     }
   };
 
-  useEffect(() => {
-    if (currentUserId) {
-      fetchFriendsAndRequests();
-
-      // Poll instead of using Supabase Realtime.
-      const interval = setInterval(fetchFriendsAndRequests, 15000);
-      return () => clearInterval(interval);
-    }
-  }, [currentUserId]);
+  // Poll instead of using Supabase Realtime — foreground-only, so friend
+  // requests stop being polled the moment the app is backgrounded.
+  useForegroundPoll(fetchFriendsAndRequests, 15000, Boolean(currentUserId), currentUserId ?? "");
 
   const sendFriendRequest = async (targetUserId: string) => {
     if (!currentUserId) return { success: false, error: "Not authenticated" };

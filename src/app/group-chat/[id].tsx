@@ -19,8 +19,10 @@ import { Avatar } from "@/frontend/components/avatar";
 import { useGroupChat, GroupMessage, GroupChatType } from "@/frontend/hooks/use-group-chat";
 import { reportContent, blockUser, getBlockedUserIds } from "@/frontend/services/moderation";
 import { useFriends } from "@/frontend/hooks/use-friends";
+import { useToast } from "@/frontend/components/toast";
 
 export default function GroupChatScreen() {
+  const { showToast } = useToast();
   const { id, type, title, showTime, showDate, seasonEpisodeInfo } = useLocalSearchParams<{
     id: string;
     type: GroupChatType;
@@ -57,13 +59,13 @@ export default function GroupChatScreen() {
 
   const handleAddFriend = async (userId: string, name: string) => {
     const result = await sendFriendRequest(userId);
-    Alert.alert(
-      result.success ? "Friend request sent" : "Couldn't send request",
+    showToast(
       result.success
         ? `We let ${name} know you'd like to be friends.`
         : result.error?.includes("already exists")
           ? `You've already got a friend request going with ${name}.`
-          : result.error || "Please try again.",
+          : result.error || "Couldn't send that friend request. Please try again.",
+      result.success ? "success" : "error",
     );
   };
 
@@ -81,10 +83,7 @@ export default function GroupChatScreen() {
       // was no indication anything went wrong. Restore the draft so nothing
       // typed is lost, and say why.
       setText(content);
-      Alert.alert(
-        "Message not sent",
-        result.error || "Still connecting — wait a moment and try again.",
-      );
+      showToast(result.error || "Message not sent — still connecting. Try again in a moment.");
       return;
     }
     listRef.current?.scrollToEnd({ animated: true });
@@ -106,11 +105,11 @@ export default function GroupChatScreen() {
         text: "Report Message",
         onPress: async () => {
           const result = await reportContent("message", item.id, item.content);
-          Alert.alert(
-            result.success ? "Reported" : "Couldn't report",
+          showToast(
             result.success
               ? "Thanks — our team will review this message."
-              : result.error || "Please try again.",
+              : result.error || "Couldn't report that. Please try again.",
+            result.success ? "success" : "error",
           );
         },
       },
@@ -122,7 +121,7 @@ export default function GroupChatScreen() {
           if (result.success) {
             setBlockedIds((prev) => [...prev, item.sender_id]);
           } else {
-            Alert.alert("Couldn't block user", result.error || "Please try again.");
+            showToast(result.error || "Couldn't block that person. Please try again.");
           }
         },
       },

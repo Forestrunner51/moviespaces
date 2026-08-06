@@ -9,15 +9,16 @@ import {
   KeyboardAvoidingView,
   Platform,
   ActivityIndicator,
-  Alert,
 } from "react-native";
 import { useLocalSearchParams, Stack } from "expo-router";
 import { useSafeAreaInsets } from "react-native-safe-area-context";
 import { Starfield } from "@/frontend/components/starfield";
 import { SpaceTheme, Palette, Type, Radius } from "@/frontend/constants/theme";
 import { useChat, Message } from "@/frontend/hooks/use-chat";
+import { useToast } from "@/frontend/components/toast";
 
 export default function ChatScreen() {
+  const { showToast } = useToast();
   const { userId, name } = useLocalSearchParams<{
     userId: string;
     name?: string;
@@ -47,10 +48,7 @@ export default function ChatScreen() {
       // The optimistic bubble is rolled back by the hook's fetchHistory; tell
       // the user why instead of letting the message just silently disappear
       // (most likely cause: you can only DM accepted friends).
-      Alert.alert(
-        "Message not sent",
-        "You can only message people you're friends with. Send them a friend request first.",
-      );
+      showToast("You can only message people you're friends with. Send them a friend request first.");
       setText(content);
       return;
     }

@@ -5,7 +5,6 @@ import {
   TextInput,
   TouchableOpacity,
   StyleSheet,
-  Alert,
   ActivityIndicator,
 } from "react-native";
 import { router } from "expo-router";
@@ -13,11 +12,13 @@ import { Ionicons } from "@expo/vector-icons";
 import { Starfield } from "@/frontend/components/starfield";
 import { SpaceStyles, Palette, Type, Display, Radius } from "@/frontend/constants/theme";
 import { authFetch } from "@/frontend/services/api";
+import { useToast } from "@/frontend/components/toast";
 
 // A code-based entry point alongside link sharing — mainly for private
 // rentals, which (unlike public gatherings) don't show up in Explore, so a
 // spoken or texted code is the only way in without the original invite link.
 export default function JoinByCodeScreen() {
+  const { showToast } = useToast();
   const [code, setCode] = useState("");
   const [loading, setLoading] = useState(false);
 
@@ -41,7 +42,7 @@ export default function JoinByCodeScreen() {
       // they landed on the group screen.
       router.push({ pathname: "/group", params: { groupId, code: trimmed } });
     } catch (err: any) {
-      Alert.alert("Couldn't find that Space", err?.message || "Please check the code and try again.");
+      showToast(err?.message || "Couldn't find that Space. Check the code and try again.");
     } finally {
       setLoading(false);
     }

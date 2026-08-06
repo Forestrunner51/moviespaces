@@ -30,11 +30,48 @@ builder.Services.AddSingleton<CineMindCatalogService>();
 builder.Services.AddHostedService<ReminderBackgroundService>();
 builder.Services.AddHostedService<CineMindReminderService>();
 
+// --- CORS ---
+//
+// This was AllowAnyOrigin(), which let any page on the internet call every
+// endpoint and *read the response*. Bearer-token auth means that isn't the
+// classic cookie-CSRF hole — a random site can't ride an existing session —
+// but it did mean a token leaked anywhere (a copy-pasted log, a malicious
+// in-app browser, an XSS on some unrelated page) could be driven against this
+// API straight from a web page, with the results readable.
+//
+// Restricting origins is safe for the mobile app specifically because CORS is
+// a *browser* mechanism: React Native's fetch sends no Origin header and
+// enforces no preflight, so iOS/Android are unaffected by anything here. The
+// backend's own server-rendered pages (/space/{id}, /cinemind-result/{id},
+// /legal/*) are same-origin — note the join-web fetch in GroupController uses
+// a relative URL — so they don't need an entry either.
+//
+// That leaves Expo's web dev server as the only genuine cross-origin caller.
+// Configurable so deploying an actual web build later is an env var
+// (Cors__AllowedOrigins__0=...) rather than a code change.
+var corsOrigins = builder.Configuration.GetSection("Cors:AllowedOrigins").Get<string[]>();
+if (corsOrigins == null || corsOrigins.Length == 0)
+{
+    // Expo web's default ports — 8081 for SDK 50+, 19006 for older/`--web`.
+    corsOrigins = new[]
+    {
+        "http://localhost:8081",
+        "http://localhost:19006",
+        "http://127.0.0.1:8081",
+        "http://127.0.0.1:19006",
+    };
+}
+
 builder.Services.AddCors(options =>
 {
     options.AddPolicy("AllowReactApp", policy =>
     {
-        policy.AllowAnyOrigin()
+        // AllowAnyHeader/AllowAnyMethod stay — the hole was the origin
+        // wildcard, and once the caller is pinned to a known origin those two
+        // grant nothing extra. Credentials are deliberately NOT allowed: auth
+        // is a bearer token in a header, so cookies are never needed, and
+        // leaving them off keeps this immune to cookie-based CSRF entirely.
+        policy.WithOrigins(corsOrigins)
               .AllowAnyHeader()
               .AllowAnyMethod();
     });
@@ -112,8 +149,39 @@ builder.Services.AddRateLimiter(options =>
             PermitLimit = 10,
             Window = TimeSpan.FromMinutes(1),
         }));
+
+    // Anonymous guest joins (POST /api/group/{id}/join-web). Writes a
+    // GroupMember row with no authentication at all, so the only partition key
+    // available is the caller's IP — which is also why this isn't just
+    // "write-heavy": that policy's limit of 10 is tuned for one authenticated
+    // user, and a group of friends joining from a single café/venue Wi-Fi all
+    // share one IP bucket here. 30/min stays comfortably above any plausible
+    // real-world group joining together while still making it impractical to
+    // fill someone's Space with junk guests.
+    //
+    // Capacity (MaxCapacity, enforced in JoinGroupWeb) bounds total rows per
+    // Space, so this isn't guarding unbounded DB growth — it's guarding
+    // against a targeted flood filling a real host's event in seconds.
+    options.AddPolicy("guest-join", http =>
+        RateLimitPartition.GetFixedWindowLimiter(LimitPartitionKey(http), _ => new FixedWindowRateLimiterOptions
+        {
+            PermitLimit = 30,
+            Window = TimeSpan.FromMinutes(1),
+        }));
 });
 // ---------------------
+
+// Nothing here accepts a file upload — images go to Supabase Storage directly
+// from the client, never through this API — so every request body is JSON that
+// should comfortably fit in a few KB. Kestrel's default ceiling is ~30MB,
+// which for a JSON-only API is just an invitation to POST 30MB of text at an
+// endpoint and make a single free-tier instance chew on it. 256KB is orders of
+// magnitude above the largest legitimate request (a Space with full notes) and
+// turns that into an immediate 413.
+builder.WebHost.ConfigureKestrel(options =>
+{
+    options.Limits.MaxRequestBodySize = 256 * 1024;
+});
 
 builder.Services.AddControllers();
 
