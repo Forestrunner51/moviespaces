@@ -64,6 +64,21 @@ namespace Backend.Models
         [Column("plot")]
         public string? Plot { get; set; }
 
+        // Whether this film is eligible for the home screen's "Surprise Me"
+        // carousel (MoviesController.NowPlaying), which picks 10 from the
+        // flagged set each week.
+        //
+        // A flag rather than reusing the whole catalog, because the two
+        // curations answer different questions. Catalog membership is chosen
+        // for cast-overlap density — Taxi Driver and Phantom Thread earn their
+        // place by making Connection/Cast Deduct generatable, not by being
+        // what someone wants to watch tonight. This column keeps that
+        // editorial split explicit while still holding one row per film, so
+        // the title/poster/year the carousel renders can't drift from the
+        // catalog's copy the way a second hardcoded id list did.
+        [Column("surprise_me")]
+        public bool SurpriseMe { get; set; }
+
         [Column("created_at")]
         public DateTime CreatedAt { get; set; } = DateTime.UtcNow;
     }
