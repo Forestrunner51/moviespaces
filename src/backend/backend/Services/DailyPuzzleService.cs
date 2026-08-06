@@ -601,12 +601,34 @@ namespace Backend.Services
                 var payload = Deserialize(row.ChallengePayloadJson);
                 if (payload == null) continue;
 
-                foreach (var m in payload.Connection.Movies) movies.Add(m.ImdbId);
-                foreach (var m in payload.Chronos.Movies) movies.Add(m.ImdbId);
-                movies.Add(payload.CastDeduct.MovieA.ImdbId);
-                movies.Add(payload.CastDeduct.MovieB.ImdbId);
-                movies.Add(payload.MysteryMovie.Answer);
-                tv.Add(payload.MysteryTv.Answer);
+                // Deserialize only guards against a JSON parse failure — a
+                // JSON that parses fine but predates a field this record now
+                // expects (Genres and the whole MysteryTv track were both
+                // added mid-week) leaves that property null rather than
+                // throwing. This is the first code path that reads PAST days'
+                // payloads on the hot path (ToClientView/Grade only ever
+                // touch TODAY's, which is always freshly generated against
+                // the current schema), so it's the first place an old-shaped
+                // row surfaces as a crash instead of silently never being
+                // read. Null-conditional here for the known-risky fields, and
+                // the whole row wrapped below as a second line of defense —
+                // this reads history of unpredictable shape, and one bad row
+                // must never take down puzzle generation for every player.
+                try
+                {
+                    foreach (var m in payload.Connection?.Movies ?? new()) movies.Add(m.ImdbId);
+                    foreach (var m in payload.Chronos?.Movies ?? new()) movies.Add(m.ImdbId);
+                    if (payload.CastDeduct?.MovieA?.ImdbId != null) movies.Add(payload.CastDeduct.MovieA.ImdbId);
+                    if (payload.CastDeduct?.MovieB?.ImdbId != null) movies.Add(payload.CastDeduct.MovieB.ImdbId);
+                    if (payload.MysteryMovie?.Answer != null) movies.Add(payload.MysteryMovie.Answer);
+                    if (payload.MysteryTv?.Answer != null) tv.Add(payload.MysteryTv.Answer);
+                }
+                catch (Exception ex)
+                {
+                    _logger.LogWarning(
+                        ex, "Couldn't read {Date}'s puzzle for repeat-avoidance; skipping that day.",
+                        row.PuzzleDate);
+                }
             }
 
             return (movies, tv);
