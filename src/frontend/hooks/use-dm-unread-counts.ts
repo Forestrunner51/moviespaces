@@ -1,5 +1,6 @@
-import { useEffect, useState } from "react";
+import { useCallback, useEffect, useRef, useState } from "react";
 import { supabase } from "@/frontend/config/supabase";
+import { useForegroundPoll } from "@/frontend/hooks/use-foreground-poll";
 
 // Same shape/purpose as use-unread-counts.ts (Spaces' "N new messages"
 // badge), but for DMs — which live in the separate `messages` table
@@ -16,15 +17,26 @@ export function useDmUnreadCounts(friendIds: string[]) {
   const [counts, setCounts] = useState<Record<string, number>>({});
   const friendIdsKey = friendIds.join(",");
 
+  // Guards the post-await setState after unmount — previously a `cancelled`
+  // flag scoped to the polling effect. `load` has to outlive that effect now
+  // (useForegroundPoll owns the interval), so the flag becomes a ref that a
+  // dedicated unmount effect flips.
+  const cancelledRef = useRef(false);
   useEffect(() => {
-    if (friendIds.length === 0) {
-      setCounts({});
-      return;
-    }
+    cancelledRef.current = false;
+    return () => {
+      cancelledRef.current = true;
+    };
+  }, []);
 
-    let cancelled = false;
+  useEffect(() => {
+    if (friendIds.length === 0) setCounts({});
+  }, [friendIdsKey]); // eslint-disable-line react-hooks/exhaustive-deps
 
-    const load = async () => {
+  const load = useCallback(
+    async () => {
+      if (friendIds.length === 0) return;
+
       const {
         data: { user },
       } = await supabase.auth.getUser();
@@ -37,7 +49,7 @@ export function useDmUnreadCounts(friendIds: string[]) {
         .eq("user_id", user.id)
         .in("group_id", friendIds);
 
-      if (cancelled) return;
+      if (cancelledRef.current) return;
 
       const lastReadByFriend: Record<string, string> = {};
       (reads || []).forEach((r) => {
@@ -70,7 +82,7 @@ export function useDmUnreadCounts(friendIds: string[]) {
         .in("sender_id", friendIds)
         .gt("created_at", floor);
 
-      if (cancelled) return;
+      if (cancelledRef.current) return;
 
       const next: Record<string, number> = {};
       (messages || []).forEach((m) => {
@@ -81,15 +93,14 @@ export function useDmUnreadCounts(friendIds: string[]) {
       });
 
       setCounts(next);
-    };
+    },
+    // friendIdsKey, not friendIds: an array literal's identity changes every
+    // render even when its contents don't, which would rebuild `load` (and
+    // restart the poll) constantly.
+    [friendIdsKey], // eslint-disable-line react-hooks/exhaustive-deps
+  );
 
-    load();
-    const interval = setInterval(load, 15000);
-    return () => {
-      cancelled = true;
-      clearInterval(interval);
-    };
-  }, [friendIdsKey]);
+  useForegroundPoll(load, 15000, friendIds.length > 0, friendIdsKey);
 
   return counts;
 }

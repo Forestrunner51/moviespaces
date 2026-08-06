@@ -16,8 +16,10 @@ import { SpaceTheme, SpaceStyles, Palette, Type, Radius, Display } from "@/front
 import { useFriends, Profile } from "@/frontend/hooks/use-friends";
 import { useDmUnreadCounts } from "@/frontend/hooks/use-dm-unread-counts";
 import { blockUser } from "@/frontend/services/moderation";
+import { useToast } from "@/frontend/components/toast";
 
 export function FriendsPanel() {
+  const { showToast } = useToast();
   const {
     friends,
     pendingRequests,
@@ -67,7 +69,7 @@ export function FriendsPanel() {
   const handleAdd = async (userId: string) => {
     const result = await sendFriendRequest(userId);
     if (!result.success && !result.error?.includes("already exists")) {
-      Alert.alert("Couldn't send request", result.error || "Please try again.");
+      showToast(result.error || "Please try again.");
     }
   };
 
@@ -75,7 +77,7 @@ export function FriendsPanel() {
   const handleCancelRequest = async (friendshipId: string) => {
     const result = await cancelFriendRequest(friendshipId);
     if (!result.success) {
-      Alert.alert("Couldn't cancel request", result.error || "Please try again.");
+      showToast(result.error || "Please try again.");
     }
   };
 

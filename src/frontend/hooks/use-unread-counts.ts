@@ -1,5 +1,6 @@
-import { useEffect, useState } from "react";
+import { useCallback, useEffect, useRef, useState } from "react";
 import { supabase } from "@/frontend/config/supabase";
+import { useForegroundPoll } from "@/frontend/hooks/use-foreground-poll";
 
 // Counts messages sent (by someone else) after the user's last read marker
 // for each group, so a Spaces list can show "N new messages" per card.
@@ -15,15 +16,26 @@ export function useUnreadCounts(groupIds: string[]) {
   // re-trigger this effect (and its poll interval) constantly.
   const groupIdsKey = groupIds.join(",");
 
+  // Guards the post-await setState after unmount — previously a `cancelled`
+  // flag scoped to the polling effect. `load` has to outlive that effect now
+  // (useForegroundPoll owns the interval), so the flag becomes a ref that a
+  // dedicated unmount effect flips.
+  const cancelledRef = useRef(false);
   useEffect(() => {
-    if (groupIds.length === 0) {
-      setCounts({});
-      return;
-    }
+    cancelledRef.current = false;
+    return () => {
+      cancelledRef.current = true;
+    };
+  }, []);
 
-    let cancelled = false;
+  useEffect(() => {
+    if (groupIds.length === 0) setCounts({});
+  }, [groupIdsKey]); // eslint-disable-line react-hooks/exhaustive-deps
 
-    const load = async () => {
+  const load = useCallback(
+    async () => {
+      if (groupIds.length === 0) return;
+
       const {
         data: { user },
       } = await supabase.auth.getUser();
@@ -36,7 +48,7 @@ export function useUnreadCounts(groupIds: string[]) {
         .eq("user_id", user.id)
         .in("group_id", groupIds);
 
-      if (cancelled) return;
+      if (cancelledRef.current) return;
 
       const lastReadByGroup: Record<string, string> = {};
       (reads || []).forEach((r) => {
@@ -68,7 +80,7 @@ export function useUnreadCounts(groupIds: string[]) {
         .neq("sender_id", user.id)
         .gt("created_at", floor);
 
-      if (cancelled) return;
+      if (cancelledRef.current) return;
 
       const next: Record<string, number> = {};
       (messages || []).forEach((m) => {
@@ -79,15 +91,15 @@ export function useUnreadCounts(groupIds: string[]) {
       });
 
       setCounts(next);
-    };
+    },
+    // groupIdsKey, not groupIds: an array literal's identity changes every
+    // render even when its contents don't, which would rebuild `load` (and
+    // restart the poll) constantly. Same reasoning as the original effect's
+    // dependency — see groupIdsKey above.
+    [groupIdsKey], // eslint-disable-line react-hooks/exhaustive-deps
+  );
 
-    load();
-    const interval = setInterval(load, 15000);
-    return () => {
-      cancelled = true;
-      clearInterval(interval);
-    };
-  }, [groupIdsKey]);
+  useForegroundPoll(load, 15000, groupIds.length > 0, groupIdsKey);
 
   return counts;
 }

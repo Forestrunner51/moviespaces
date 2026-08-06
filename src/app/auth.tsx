@@ -6,7 +6,6 @@ import {
   View,
   TouchableOpacity,
   ActivityIndicator,
-  Alert,
   KeyboardAvoidingView,
   ScrollView,
   Platform,
@@ -19,6 +18,7 @@ import { Starfield } from "@/frontend/components/starfield";
 import { SpaceStyles, Palette, Type, Display, Radius } from "@/frontend/constants/theme";
 import { signInWithGoogle, signInWithApple, isAppleSignInAvailable } from "@/frontend/services/sso";
 import { hasOnboardedInterests, completeOnboarding } from "@/frontend/services/onboarding";
+import { useToast } from "@/frontend/components/toast";
 
 // Routes to the one-time genre-picker onboarding flow instead of straight
 // into the app, unless this device has already been through it. Both branches
@@ -35,6 +35,7 @@ async function afterAuthSuccess(router: ReturnType<typeof useRouter>) {
 }
 
 export default function AuthScreen() {
+  const { showToast } = useToast();
   const router = useRouter();
   const [isSignUp, setIsSignUp] = useState(false);
   const [name, setName] = useState("");
@@ -71,7 +72,7 @@ export default function AuthScreen() {
     if (result.success) {
       await finishSsoLogin();
     } else if (!result.cancelled) {
-      Alert.alert("Couldn't sign in with Google", result.error || "Please try again.");
+      showToast(result.error || "Please try again.");
     }
   };
 
@@ -85,13 +86,13 @@ export default function AuthScreen() {
     if (result.success) {
       await finishSsoLogin();
     } else if (!result.cancelled) {
-      Alert.alert("Couldn't sign in with Apple", result.error || "Please try again.");
+      showToast(result.error || "Please try again.");
     }
   };
 
   async function handleAuth() {
     if (!email || !password || (isSignUp && !name)) {
-      Alert.alert("Error", "Please fill in all fields.");
+      showToast("Please fill in all fields.");
       return;
     }
     setLoading(true);
@@ -108,7 +109,7 @@ export default function AuthScreen() {
       });
 
       if (error) {
-        Alert.alert("Sign Up Error", error.message);
+        showToast(error.message);
       } else if (data.session) {
         // Email confirmation is OFF in Supabase — signUp returned a live
         // session, so drop them straight into the app.
@@ -121,9 +122,9 @@ export default function AuthScreen() {
         // redirects whenever there's no session), looking broken. Tell them
         // what to do and flip to the sign-in view for when they come back.
         await AsyncStorage.setItem("userName", name.trim());
-        Alert.alert(
-          "Check your email",
+        showToast(
           `We sent a confirmation link to ${email.trim()}. Tap it to activate your account, then sign in.`,
+          "success",
         );
         setIsSignUp(false);
       }
@@ -135,7 +136,7 @@ export default function AuthScreen() {
       });
 
       if (error) {
-        Alert.alert("Login Error", error.message);
+        showToast(error.message);
       } else {
         // Pull the name back out of user_metadata and cache it locally too,
         // so returning users on a new device also get their name pre-filled.

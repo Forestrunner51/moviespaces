@@ -1,10 +1,36 @@
 using System;
 using System.Collections.Generic;
+using System.ComponentModel.DataAnnotations;
 // 1. Add this namespace so the [Column] attribute works
 using System.ComponentModel.DataAnnotations.Schema;
 
 namespace Backend.Models
 {
+    // Length ceilings for host-supplied text.
+    //
+    // Every one of these columns was unbounded `text` with no model, server, or
+    // client validation — and FilmName/HostName/CinemaName are rendered into
+    // the PUBLIC, unauthenticated /space/{id} invite page. Encoding was already
+    // handled correctly there (see GroupController), so this was never an
+    // injection risk; it was free unbounded storage and a way to make a real
+    // host's shared invite link unusable by posting a megabyte of text into it.
+    //
+    // Deliberately generous — these exist to make abuse impractical, not to
+    // second-guess a host. The longest real film title in wide release is under
+    // 90 characters; 200 leaves room for a title plus a subtitle plus a year
+    // without anyone ever hitting it by accident. GroupController validates
+    // against these before the DB does, so an over-long value comes back as a
+    // clear 400 rather than a truncation or a DbUpdateException.
+    public static class GroupFieldLimits
+    {
+        public const int Name = 100;        // HostName, member Name
+        public const int Title = 200;       // FilmName, SeasonEpisodeInfo
+        public const int VenueName = 250;   // CinemaName / freeform address
+        public const int ShortLabel = 60;   // ShowDate, ShowTime display strings
+        public const int Notes = 1000;      // HangoutNotes
+        public const int Url = 2048;        // BookingUrl, PosterPath
+    }
+
     public class Group
     {
         public Guid Id { get; set; } = Guid.NewGuid();
@@ -15,6 +41,7 @@ namespace Backend.Models
         // just available for a friendlier share URL if/when wired up.
         // Nullable since legacy rows predate this column.
         [Column("slug")]
+        [MaxLength(150)]
         public string? Slug { get; set; }
 
         // Short, typeable invite code (e.g. "K7XPQ2") — for a host reading it
@@ -56,8 +83,10 @@ namespace Backend.Models
         // which club. Free text rather than an enum: new theme clubs should
         // be addable by seeding a row, not by shipping a code change.
         [Column("genre_category")]
+        [MaxLength(64)]
         public string? GenreCategory { get; set; }
 
+        [MaxLength(GroupFieldLimits.Name)]
         public string HostName { get; set; } = "";
 
         // 2. Map this property directly to lowercase snake_case
@@ -68,12 +97,18 @@ namespace Backend.Models
         // entry (the theater/showtime was booked independently, outside the
         // app), so these only have real values for Public Gatherings.
         public int? CinemaId { get; set; }
+        [MaxLength(GroupFieldLimits.VenueName)]
         public string CinemaName { get; set; } = "";
         public int? FilmId { get; set; }
+        [MaxLength(GroupFieldLimits.Title)]
         public string FilmName { get; set; } = "";
+        [MaxLength(GroupFieldLimits.ShortLabel)]
         public string ShowTime { get; set; } = "";
+        [MaxLength(GroupFieldLimits.ShortLabel)]
         public string ShowDate { get; set; } = "";
+        [MaxLength(GroupFieldLimits.Url)]
         public string BookingUrl { get; set; } = "";
+        [MaxLength(32)]
         public string Status { get; set; } = "pending";
 
         // 'public_gathering' | 'private_rental'
@@ -94,18 +129,21 @@ namespace Backend.Models
         // string rather than a Postgres array column to avoid EF/Npgsql
         // array-mapping complexity for what's just a handful of tags.
         [Column("post_activities")]
+        [MaxLength(500)]
         public string? PostActivities { get; set; }
 
         // Freeform detail alongside PostActivities (e.g. "Grabbing drinks at
         // the bar across the street") — only meaningful when at least one
         // activity tag is set.
         [Column("hangout_notes")]
+        [MaxLength(GroupFieldLimits.Notes)]
         public string? HangoutNotes { get; set; }
 
         // Google Places-sourced theater identity (replaces the old MovieGlu
         // numeric CinemaId, which stays around unused rather than being
         // dropped — no destructive column removal against live data).
         [Column("google_place_id")]
+        [MaxLength(200)]
         public string? GooglePlaceId { get; set; }
 
         [Column("theater_latitude")]
@@ -125,6 +163,7 @@ namespace Backend.Models
         // Space cards without an extra TMDb lookup per card. Nullable — legacy
         // Spaces and "other"-type events (no movie) have none.
         [Column("poster_path")]
+        [MaxLength(GroupFieldLimits.Url)]
         public string? PosterPath { get; set; }
 
         // Real chronological showtime, combining the host-picked date + time.
@@ -145,6 +184,7 @@ namespace Backend.Models
         // Only meaningful for TV watch parties (e.g. "Season 2 Premiere",
         // "Episodes 1 & 2 Double Feature").
         [Column("season_episode_info")]
+        [MaxLength(GroupFieldLimits.Title)]
         public string? SeasonEpisodeInfo { get; set; }
 
         // "movie" | "tv" | "sports" | "gaming" | "awards" | "other" — only
@@ -188,6 +228,7 @@ namespace Backend.Models
     {
         public Guid Id { get; set; } = Guid.NewGuid();
         public Guid GroupId { get; set; }
+        [MaxLength(GroupFieldLimits.Name)]
         public string Name { get; set; } = "";
 
         // 3. Map this property directly to lowercase snake_case as well
@@ -200,6 +241,7 @@ namespace Backend.Models
         // collapsed into one membership (the second got the first's memberId and
         // never actually joined), while one guest typing "alex" then "Alex Smith"
         // created two rows. Null for app members, who key on UserId instead.
+        [MaxLength(200)]
         public string? GuestToken { get; set; }
 
         public bool Confirmed { get; set; } = false;

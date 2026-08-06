@@ -6,6 +6,7 @@ import { authFetch } from "@/frontend/services/api";
 import { supabase } from "@/frontend/config/supabase";
 import { Starfield } from "@/frontend/components/starfield";
 import { Palette, Type, Display, Radius } from "@/frontend/constants/theme";
+import { useToast } from "@/frontend/components/toast";
 
 // No name-entry screen anymore — resolves the user's real identity (same
 // sources as before: profile display_name, then auth metadata, then the
@@ -14,6 +15,7 @@ import { Palette, Type, Display, Radius } from "@/frontend/constants/theme";
 // Movie Fan" for an empty/invalid name, so there's no dead end even for a
 // brand-new user with no profile row yet.
 export default function JoinScreen() {
+  const { showToast } = useToast();
   const { groupId, code } = useLocalSearchParams<{ groupId: string; code?: string }>();
   const [errorText, setErrorText] = useState<string | null>(null);
   // Guards against the join firing twice — e.g. a fast re-render while the
@@ -68,7 +70,7 @@ export default function JoinScreen() {
   }, [groupId, code]);
 
   useEffect(() => {
-    if (errorText) Alert.alert("Couldn't join", errorText);
+    if (errorText) showToast(errorText);
   }, [errorText]);
 
   return (

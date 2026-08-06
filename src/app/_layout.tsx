@@ -11,6 +11,7 @@ import { supabase } from "@/frontend/config/supabase";
 import { SpaceTheme } from "@/frontend/constants/theme";
 import { registerForPushNotifications } from "@/frontend/services/push-notifications";
 import { setPendingRedirect } from "@/frontend/services/pending-redirect";
+import { ToastProvider } from "@/frontend/components/toast";
 
 // Every screen uses the cosmic theme now, regardless of system light/dark
 // mode — so the native header (back button, title bar) should match rather
@@ -130,4 +131,15 @@ function Layout() {
   );
 }
 
-export default Sentry.wrap(Layout);
+// ToastProvider wraps the navigator rather than living inside a screen so a
+// toast survives navigation and renders above the header, and so every screen
+// can reach useToast() without threading props.
+function RootLayout() {
+  return (
+    <ToastProvider>
+      <Layout />
+    </ToastProvider>
+  );
+}
+
+export default Sentry.wrap(RootLayout);

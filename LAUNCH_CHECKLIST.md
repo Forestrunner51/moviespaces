@@ -42,11 +42,16 @@ Everything native only becomes real here: SSO, the "MovieSpaces" name, Bebas Neu
 - [ ] Test each: Google sign-in, Apple sign-in, email signup, email login, forgot-password end-to-end on a real build
 
 ## PHASE 3 — Backend / infra production readiness
+- [x] **CORS locked to explicit origins** (`Program.cs`) — was `AllowAnyOrigin()`, meaning any page on the internet could call every endpoint and read the response. Mobile is unaffected (React Native sends no `Origin` header; CORS is browser-only). Override with `Cors__AllowedOrigins__0` if a web build is ever deployed.
+- [x] **Pollers gated to foreground** (`use-foreground-poll.ts`) — chat/4s, Space/5s and three 15s pollers used to keep running while backgrounded, burning battery and hammering the single Render instance.
+- [x] **Backend test suite added** (`src/backend/backend.Tests`, 42 tests) — run with `npm test`, or everything at once with `npm run check`. Covers payload schema-versioning, answer redaction, and scoring.
+- [ ] **Rotate the Supabase `JwtSecret`** — it was committed in `appsettings.json` and is in git history. Currently unused by the code (auth validates asymmetrically via JWKS), so this is precautionary, but rotate it in Supabase and delete the key from the file.
 - [ ] Render backend env vars set in production: `Omdb__ApiKey` (OMDb — replaced TMDb/MoviesDatabase; double underscore so .NET maps it to `Omdb:ApiKey`), `GooglePlaces:ApiKey`, `Supabase:ServiceRoleKey`, `Supabase:Url`, `PostgresConnection`, `Sentry:Dsn` (optional)
+- [ ] **Re-run `POST /api/game/catalog/seed`** (header `x-admin-secret`) — needed to populate `surprise_me` flags for the home carousel and to pull the ~45 films added for Roulette's genre coverage. Also run `catalog/seed-tv` if the TV picker list is empty.
 - [ ] All Supabase migrations applied to the production DB (friends-only DM policy, reports/blocks, etc.)
 - [ ] Confirm the `AddGroupPosterPath` EF migration ran (poster feature) — the backend auto-migrates on boot
 - [ ] Render cold-start awareness: free tier sleeps after inactivity → first request after idle is slow. Decide if a paid/always-on instance is needed for launch, or accept the cold start
-- [ ] Set the client `EXPO_PUBLIC_SENTRY_DSN` (currently empty) so you get crash reports post-launch
+- [ ] **Set `EXPO_PUBLIC_SENTRY_DSN` in `eas.json`'s production profile** — currently absent, and `sentry.ts` no-ops without it, so a released build reports **no client crashes at all**. Single highest-value item on this list: one env var between you and total blindness post-launch.
 - [ ] Load-sanity: nothing here needs to scale huge, but confirm the DB and API respond under a few concurrent users
 
 ## PHASE 4 — QA: test every flow on a real device

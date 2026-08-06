@@ -9,7 +9,6 @@ import {
   ScrollView,
   KeyboardAvoidingView,
   Platform,
-  Alert,
   Modal,
   FlatList,
   InputAccessoryView,
@@ -28,6 +27,7 @@ import { MoviePoster } from "@/frontend/components/movie-poster";
 import { SpaceStyles, Palette, Type } from "@/frontend/constants/theme";
 import { POST_ACTIVITIES } from "@/frontend/constants/activities";
 import { useFriends } from "@/frontend/hooks/use-friends";
+import { useToast } from "@/frontend/components/toast";
 import { searchMovies, searchTvShows, getNowPlaying, Movie } from "@/frontend/services/movies";
 import * as WebBrowser from "expo-web-browser";
 import { buildGoogleShowtimesUrl } from "@/frontend/services/ticket-links";
@@ -229,6 +229,7 @@ export default function CreateSpaceScreen() {
   const [movieSearchError, setMovieSearchError] = useState<string | null>(null);
   const [movieSearchNotice, setMovieSearchNotice] = useState<string | null>(null);
   const [showtimeConfirmed, setShowtimeConfirmed] = useState(false);
+  const { showToast } = useToast();
   const [nowPlaying, setNowPlaying] = useState<Movie[]>([]);
   const [nowPlayingTv, setNowPlayingTv] = useState<Movie[]>([]);
 
@@ -346,7 +347,7 @@ export default function CreateSpaceScreen() {
   const handlePickEventPhoto = async () => {
     const permission = await ImagePicker.requestMediaLibraryPermissionsAsync();
     if (!permission.granted) {
-      Alert.alert("Permission needed", "Allow photo access to add a cover photo.");
+      showToast("Allow photo access to add a cover photo.");
       return;
     }
 
@@ -378,7 +379,7 @@ export default function CreateSpaceScreen() {
       );
       setPosterPath(publicUrl);
     } catch (err: any) {
-      Alert.alert("Couldn't upload photo", err.message || "Please try again.");
+      showToast(err?.message || "Couldn't upload that photo. Please try again.");
     } finally {
       setUploadingEventPhoto(false);
     }
@@ -490,25 +491,29 @@ export default function CreateSpaceScreen() {
 
   const handleSubmit = async () => {
     if (uploadingEventPhoto) {
-      Alert.alert("Still uploading", "Give the cover photo a moment to finish uploading.");
+      showToast("Give the cover photo a moment to finish uploading.");
       return;
     }
     const mediaLabel = isFreeformActivity ? "event" : searchingTv ? "show" : "movie";
     const venueLabel = venueMode === "home" ? "address" : "theater";
     if (!theaterName.trim() || !movieName.trim() || !showDate.trim() || !showTime.trim()) {
-      Alert.alert("Missing info", `Please fill in your ${venueLabel}, ${mediaLabel}, date, and time.`);
+      showToast(`Please fill in your ${venueLabel}, ${mediaLabel}, date, and time.`);
       return;
     }
 
-    // Theater hours only make sense for an actual theater — a Home watch
-    // party legitimately might start at 3am (a fight card airing overseas, a
-    // same-day anime simulcast), so this check would otherwise block a
-    // perfectly real submission for that venue mode.
-    if (venueMode === "theater" && timeValue && isOutsideBusinessHours(timeValue)) {
-      Alert.alert(
-        "Check your showtime",
-        "Theaters don't typically run showings between 2:00 AM and 10:30 AM — double-check the time you picked.",
-      );
+    // Theater hours only make sense for an actual movie theater — a
+    // public_gathering is always a real Google Places theater (enforced
+    // above, where switching to it forces venueMode back to "theater"), but
+    // venueMode "theater" ALSO covers Watch Party/Custom Venue's "In-Person /
+    // Venue" option, which is any in-person location, not necessarily a
+    // theater: a private screening room, a rented space for a fight card
+    // airing overseas, a same-day anime simulcast. Those legitimately start
+    // at 3am the same way a Home watch party does (see setVenueMode("home")
+    // below), so gating on spaceType rather than venueMode is what actually
+    // scopes this to "is this a real theater," not "did the host pick the
+    // venue-with-an-address UI."
+    if (spaceType === "public_gathering" && timeValue && isOutsideBusinessHours(timeValue)) {
+      showToast("Theaters don't typically run showings between 2:00 AM and 10:30 AM — double-check the time you picked.");
       return;
     }
 
@@ -517,10 +522,7 @@ export default function CreateSpaceScreen() {
     // playing at this theater at this time, so we require the host to
     // attest to it instead of silently allowing bogus/expired listings.
     if (spaceType === "public_gathering" && !showtimeConfirmed) {
-      Alert.alert(
-        "Confirm the showtime",
-        "Please check the box confirming this movie is actually playing at this theater at the date/time you picked.",
-      );
+      showToast("Please tick the box confirming this is actually playing at that theater, date and time.");
       return;
     }
 
@@ -528,7 +530,7 @@ export default function CreateSpaceScreen() {
     if (spaceType === "private_rental" && totalCost.trim()) {
       const amount = parseFloat(totalCost);
       if (isNaN(amount) || amount < 0) {
-        Alert.alert("Invalid cost", "Please enter a valid cost, or leave it blank for a free event.");
+        showToast("Enter a valid cost, or leave it blank for a free event.");
         return;
       }
       totalCostCents = amount > 0 ? Math.round(amount * 100) : null;
@@ -584,7 +586,7 @@ export default function CreateSpaceScreen() {
       });
     } catch (err: any) {
       setCreating(false);
-      Alert.alert("Couldn't create space", err.message || "Please try again.");
+      showToast(err?.message || "Couldn't create the Space. Please try again.");
     }
   };
 
@@ -718,6 +720,7 @@ export default function CreateSpaceScreen() {
               placeholderTextColor={Palette.textMuted}
               value={theaterName}
               onChangeText={setTheaterName}
+              maxLength={250}
             />
           )}
 
@@ -850,6 +853,7 @@ export default function CreateSpaceScreen() {
                 placeholderTextColor={Palette.textMuted}
                 value={movieName}
                 onChangeText={setMovieName}
+              maxLength={200}
               />
               <TouchableOpacity
                 activeOpacity={0.8}
@@ -895,6 +899,7 @@ export default function CreateSpaceScreen() {
               placeholderTextColor={Palette.textMuted}
               value={seasonEpisodeInfo}
               onChangeText={setSeasonEpisodeInfo}
+              maxLength={200}
             />
           )}
 
@@ -1039,6 +1044,7 @@ export default function CreateSpaceScreen() {
                 placeholderTextColor={Palette.textMuted}
                 value={bookingUrl}
                 onChangeText={setBookingUrl}
+              maxLength={2048}
                 autoCapitalize="none"
                 keyboardType="url"
               />
@@ -1112,12 +1118,15 @@ export default function CreateSpaceScreen() {
               placeholderTextColor={Palette.textMuted}
               value={customActivityInput}
               onChangeText={setCustomActivityInput}
+              maxLength={60}
               onSubmitEditing={addCustomActivity}
               returnKeyType="done"
             />
             <TouchableOpacity
               activeOpacity={0.8}
               style={styles.customActivityAddButton}
+              accessibilityRole="button"
+              accessibilityLabel="Add this activity"
               onPress={addCustomActivity}
             >
               <Ionicons name="add" size={20} color={Palette.base} />
@@ -1131,6 +1140,7 @@ export default function CreateSpaceScreen() {
               placeholderTextColor={Palette.textMuted}
               value={hangoutNotes}
               onChangeText={setHangoutNotes}
+              maxLength={1000}
               multiline
             />
           )}
@@ -1265,7 +1275,12 @@ export default function CreateSpaceScreen() {
               <Text style={styles.modalTitle}>
                 {spaceType === "private_rental" ? "Select a Location" : "Select a Theater"}
               </Text>
-              <TouchableOpacity onPress={() => setTheaterModalVisible(false)} hitSlop={10}>
+              <TouchableOpacity
+                onPress={() => setTheaterModalVisible(false)}
+                accessibilityRole="button"
+                accessibilityLabel="Close"
+                hitSlop={10}
+              >
                 <Ionicons name="close" size={24} color={Palette.textMuted} />
               </TouchableOpacity>
             </View>
@@ -1362,7 +1377,12 @@ export default function CreateSpaceScreen() {
                     ? "Search for a Showing"
                     : "Search for a Movie"}
               </Text>
-              <TouchableOpacity onPress={() => setMovieModalVisible(false)} hitSlop={10}>
+              <TouchableOpacity
+                onPress={() => setMovieModalVisible(false)}
+                accessibilityRole="button"
+                accessibilityLabel="Close"
+                hitSlop={10}
+              >
                 <Ionicons name="close" size={24} color={Palette.textMuted} />
               </TouchableOpacity>
             </View>
@@ -1483,7 +1503,12 @@ export default function CreateSpaceScreen() {
           <View style={styles.modalSheet}>
             <View style={styles.modalHeader}>
               <Text style={styles.modalTitle}>Invite Friends</Text>
-              <TouchableOpacity onPress={() => setFriendsModalVisible(false)} hitSlop={10}>
+              <TouchableOpacity
+                onPress={() => setFriendsModalVisible(false)}
+                accessibilityRole="button"
+                accessibilityLabel="Close"
+                hitSlop={10}
+              >
                 <Ionicons name="close" size={24} color={Palette.textMuted} />
               </TouchableOpacity>
             </View>

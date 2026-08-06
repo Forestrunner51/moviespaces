@@ -57,7 +57,9 @@
     "android": "expo run:android",
     "ios": "EXPO_PACKAGER_HOSTNAME=127.0.0.1 REACT_NATIVE_PACKAGER_HOSTNAME=127.0.0.1 NODE_OPTIONS=--dns-result-order=ipv4first expo run:ios",
     "web": "expo start --web",
-    "lint": "expo lint"
+    "lint": "expo lint",
+    "test": "dotnet test src/backend/Moviespaces.slnx",
+    "check": "npx tsc --noEmit && npm run lint && npm test"
   },
   "private": true
 }

@@ -1,6 +1,7 @@
 import { useState, useEffect, useRef } from "react";
 import { supabase } from "@/frontend/config/supabase";
 import { authFetch } from "@/frontend/services/api";
+import { useForegroundPoll } from "@/frontend/hooks/use-foreground-poll";
 
 export interface Message {
   id: string;
@@ -45,15 +46,9 @@ export function useChat(chatTargetId: string) {
     }
   };
 
-  useEffect(() => {
-    if (currentUserId && chatTargetId) {
-      fetchHistory();
-
-      // Poll instead of using Supabase Realtime.
-      const interval = setInterval(fetchHistory, 4000);
-      return () => clearInterval(interval);
-    }
-  }, [currentUserId, chatTargetId]);
+  // Poll instead of using Supabase Realtime — but only while foregrounded, so
+  // a DM left open in the background stops hitting Supabase every 4s.
+  useForegroundPoll(fetchHistory, 4000, Boolean(currentUserId && chatTargetId), chatTargetId);
 
   // Marks this DM read, and keeps it marked as new messages arrive while the
   // screen is open. Marking only on mount (the original approach, and what

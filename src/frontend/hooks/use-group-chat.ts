@@ -1,6 +1,7 @@
 import { useState, useEffect, useRef } from "react";
 import { supabase } from "@/frontend/config/supabase";
 import { authFetch } from "@/frontend/services/api";
+import { useForegroundPoll } from "@/frontend/hooks/use-foreground-poll";
 
 // Only "group" is ever written now — the "crowdfund" group_type value in the
 // DB check constraint is a leftover from the removed Stripe-based feature,
@@ -109,13 +110,15 @@ export function useGroupChat(groupType: GroupChatType, groupId: string) {
     }
   };
 
-  useEffect(() => {
-    if (currentUserId && groupId) {
-      fetchHistory();
-      const interval = setInterval(fetchHistory, 4000);
-      return () => clearInterval(interval);
-    }
-  }, [currentUserId, groupId, groupType]);
+  // Foreground-only: a backgrounded chat screen used to keep polling every 4s
+  // indefinitely. Fires immediately on mount and again on resume, so the
+  // behaviour on screen is unchanged — see useForegroundPoll.
+  useForegroundPoll(
+    fetchHistory,
+    4000,
+    Boolean(currentUserId && groupId),
+    `${groupType}:${groupId}`,
+  );
 
   // Marks the chat read, and keeps it marked as new messages arrive while the
   // screen is open — actively viewing a chat means you're caught up, so the

@@ -6,7 +6,6 @@ import {
   ScrollView,
   TouchableOpacity,
   ActivityIndicator,
-  Alert,
   Share,
   TextInput,
   KeyboardAvoidingView,
@@ -38,10 +37,12 @@ import {
   TodayResponse,
 } from "@/frontend/services/cinemind";
 import { generateShareGrid } from "@/frontend/utils/generateShareGrid";
+import { useToast } from "@/frontend/components/toast";
 
 type Phase = "loading" | "playing" | "locked" | "results" | "error";
 
 export default function CineMindScreen() {
+  const { showToast } = useToast();
   // Global leaderboard used to be its own tab/route (/leaderboard) — now a
   // mode within this tab, switched via LeaderboardLink, so it works whether
   // today's puzzle is loading, locked, in progress, or already submitted.
@@ -208,7 +209,7 @@ export default function CineMindScreen() {
       // and shouldn't delay showing someone their score.
       setStats(await fetchStats());
     } catch (err: any) {
-      Alert.alert("Couldn't submit", err?.message || "Please try again.");
+      showToast(err?.message || "Couldn't submit your answers. Please try again.");
     } finally {
       submitting.current = false;
     }

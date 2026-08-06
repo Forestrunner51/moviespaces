@@ -39,6 +39,31 @@ namespace Backend.Controllers
             _profanityFilter = profanityFilter;
         }
 
+        // Returns a message for the first host-supplied field exceeding its
+        // column limit, or null if everything fits. See GroupFieldLimits for
+        // why the ceilings exist and why they're this generous.
+        //
+        // Reports one field at a time rather than collecting all of them: the
+        // realistic case is a single pasted blob, and a one-line message is
+        // more actionable in an alert than a list.
+        private static string? FirstFieldOverLimit(CreateGroupRequest req)
+        {
+            static string? Check(string? value, int limit, string label) =>
+                (value?.Length ?? 0) > limit
+                    ? $"{label} is too long (max {limit} characters)."
+                    : null;
+
+            return Check(req.HostName, GroupFieldLimits.Name, "Your name")
+                ?? Check(req.FilmName, GroupFieldLimits.Title, "The title")
+                ?? Check(req.CinemaName, GroupFieldLimits.VenueName, "The venue name")
+                ?? Check(req.ShowDate, GroupFieldLimits.ShortLabel, "The date")
+                ?? Check(req.ShowTime, GroupFieldLimits.ShortLabel, "The time")
+                ?? Check(req.HangoutNotes, GroupFieldLimits.Notes, "The notes")
+                ?? Check(req.BookingUrl, GroupFieldLimits.Url, "The booking link")
+                ?? Check(req.PosterPath, GroupFieldLimits.Url, "The poster link")
+                ?? Check(req.SeasonEpisodeInfo, GroupFieldLimits.Title, "The season/episode info");
+        }
+
         // Human-readable share id, e.g. "friday-movie-night-a8f1". The random
         // suffix makes collisions negligible without a uniqueness retry loop
         // — good enough for a purely additive, non-critical identifier.
@@ -110,6 +135,14 @@ namespace Backend.Controllers
             // are never filtered: a legitimate title landing on the blocklist
             // would be a false positive we can't let block a real search
             // result, and titles aren't identity the way a host's own name is.
+            // Checked before anything is written so an over-long field comes
+            // back as a readable 400 instead of a DbUpdateException (a 500 the
+            // client can do nothing with) or a silent truncation. The client
+            // caps these inputs too — this is the enforcement that survives a
+            // caller that isn't the app.
+            var tooLong = FirstFieldOverLimit(req);
+            if (tooLong != null) return BadRequest(new { error = tooLong });
+
             var filmNameIsFreeform = req.FilmId == null && req.TmdbMovieId == null;
             var cleanFilmName = filmNameIsFreeform
                 ? _profanityFilter.CleanOrFallback(req.FilmName, "Group Activity")
@@ -497,7 +530,7 @@ namespace Backend.Controllers
                 </div>
 
                 <div id='form'>
-                    <input type='text' id='name' placeholder='Your name' />
+                    <input type='text' id='name' placeholder='Your name' maxlength='{GroupFieldLimits.Name}' />
                     <button id='joinBtn' onclick='joinSpace()'>🎟 I'm In!</button>
                     <div class='error' id='error'></div>
                 </div>
@@ -766,10 +799,19 @@ namespace Backend.Controllers
 
         [HttpPost("{id}/join-web")]
         [AllowAnonymous]
+        [EnableRateLimiting("guest-join")]
         public async Task<IActionResult> JoinGroupWeb(Guid id, [FromBody] JoinGroupRequest req)
         {
             var group = await _db.Groups.FindAsync(id);
             if (group == null) return NotFound();
+
+            // Anonymous endpoint, so this is the only thing standing between a
+            // stranger and an arbitrarily long name rendered into the public
+            // invite page's attendee list.
+            if ((req.Name?.Length ?? 0) > GroupFieldLimits.Name)
+                return BadRequest(new { error = $"Name is too long (max {GroupFieldLimits.Name} characters)." });
+            if ((req.GuestToken?.Length ?? 0) > 200)
+                return BadRequest(new { error = "Invalid guest token." });
 
             // Cleaned once, up front — the de-dupe check below compares
             // against Names already stored cleaned, so comparing against the
