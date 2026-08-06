@@ -53,9 +53,10 @@ namespace Backend.Controllers
         [HttpGet("spin")]
         public async Task<IActionResult> Spin([FromQuery] string? genre)
         {
-            if (string.IsNullOrEmpty(GetUserId())) return Unauthorized(new { error = "Unauthorized" });
+            var userId = GetUserId();
+            if (string.IsNullOrEmpty(userId)) return Unauthorized(new { error = "Unauthorized" });
 
-            var spin = await _puzzles.BuildPracticeSpinAsync(_db, genre);
+            var spin = await _puzzles.BuildPracticeSpinAsync(_db, genre, userId);
             if (spin == null)
             {
                 // With a genre, this is now a deterministic fact about the
@@ -76,6 +77,20 @@ namespace Backend.Controllers
             // the daily puzzle's payload is never returned whole. /grade looks
             // this up; nothing about the correct answer ever reaches the client.
             _cache.Set(CacheKey(spin.SpinId), spin, SpinTtl);
+
+            // Best-effort: a failed history write costs freshness on the next
+            // spin, which is not worth failing an otherwise-good spin over.
+            // Recorded at serve time rather than at /grade because an
+            // abandoned spin was still *seen* — the player looked at that film
+            // whether or not they answered.
+            try
+            {
+                await _puzzles.RecordSpinAsync(_db, userId, spin);
+            }
+            catch (Exception ex)
+            {
+                _logger.LogWarning(ex, "Couldn't record Roulette spin history for {UserId}.", userId);
+            }
 
             return Ok(new { spinId = spin.SpinId, view = _puzzles.ToPracticeView(spin) });
         }
