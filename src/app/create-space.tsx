@@ -230,6 +230,7 @@ export default function CreateSpaceScreen() {
   const [movieSearchNotice, setMovieSearchNotice] = useState<string | null>(null);
   const [showtimeConfirmed, setShowtimeConfirmed] = useState(false);
   const [nowPlaying, setNowPlaying] = useState<Movie[]>([]);
+  const [nowPlayingTv, setNowPlayingTv] = useState<Movie[]>([]);
 
   const [datePickerVisible, setDatePickerVisible] = useState(false);
   const [dateValue, setDateValue] = useState<Date | null>(null);
@@ -312,10 +313,22 @@ export default function CreateSpaceScreen() {
   // endpoint to draw from) so the picker isn't empty before the host types
   // anything.
   useEffect(() => {
-    getNowPlaying().then(setNowPlaying);
+    getNowPlaying("movie").then(setNowPlaying);
   }, []);
 
   const searchingTv = spaceType === "private_rental" && rentalActivityType === "tv";
+
+  // Fetched only once the picker is actually in TV mode, not upfront with the
+  // movie list — most Spaces are movies, so an unconditional second request
+  // would be wasted for the majority of hosts. Declared after `searchingTv`
+  // because the dependency array is evaluated during render, so referencing
+  // it any earlier would hit the temporal dead zone. getNowPlaying swallows
+  // its own failures and resolves to [], which is exactly what this rendered
+  // before.
+  useEffect(() => {
+    if (!searchingTv || nowPlayingTv.length > 0) return;
+    getNowPlaying("tv").then(setNowPlayingTv);
+  }, [searchingTv, nowPlayingTv.length]);
 
   // A rented custom venue isn't a public theater screening — "showing" reads
   // more naturally there (could be a re-watch, a screener, a private premiere)
@@ -394,8 +407,9 @@ export default function CreateSpaceScreen() {
   };
 
   // Debounced OMDb search — fires 400ms after the user stops typing. An
-  // empty query falls back to the now-playing list instead of a blank modal
-  // (TV mode has no equivalent "airing now" list, so it just stays empty).
+  // empty query falls back to the rotating now-playing list instead of a
+  // blank modal, for TV as well as movies — TV mode used to render nothing
+  // until you typed, which looked broken beside movie mode filling itself in.
   //
   // Full catalog search is available for both space types (not just private
   // rentals) — different theaters carry different things (indie/arthouse
@@ -405,7 +419,7 @@ export default function CreateSpaceScreen() {
   // itself doesn't have.
   useEffect(() => {
     if (!movieSearch.trim()) {
-      setMovieResults(searchingTv ? [] : nowPlaying);
+      setMovieResults(searchingTv ? nowPlayingTv : nowPlaying);
       setMovieSearchError(null);
       setMovieSearchNotice(null);
       return;
@@ -430,7 +444,7 @@ export default function CreateSpaceScreen() {
         .finally(() => setMovieSearching(false));
     }, 400);
     return () => clearTimeout(handle);
-  }, [movieSearch, nowPlaying, searchingTv]);
+  }, [movieSearch, nowPlaying, nowPlayingTv, searchingTv]);
 
   // Text Search's results are already query-relevant (Google did the
   // matching server-side) — a client-side substring re-filter on top would

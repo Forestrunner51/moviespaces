@@ -87,29 +87,51 @@ namespace Backend.Controllers
         // was edited without the other. Curation now lives in one place
         // (CineMindCatalogService.SurpriseMeImdbIds → the flag), and the
         // rendered title/poster can't disagree with the catalog's copy.
+        // mediaType=tv serves the same rotating list from cinemind_tv_shows,
+        // so the picker's TV mode has something to show before the user types.
+        // It previously rendered an empty modal in that state — searching TV
+        // worked fine, but a blank list reads as broken, and the asymmetry with
+        // movie mode (which pre-populates) made it look like the feature was
+        // half-finished.
+        //
+        // No surprise_me flag on the TV side: that column exists to separate
+        // "good for puzzles" from "good for browsing" within a 145-film
+        // catalog, and with only 30 shows there's nothing to filter down to —
+        // every one of them is a recognisable title worth showing.
         [HttpGet("now-playing")]
-        public async Task<IActionResult> NowPlaying()
+        public async Task<IActionResult> NowPlaying([FromQuery] string? mediaType)
         {
             // Ordering by ImdbId makes the shuffle input stable — without it
             // Postgres could return rows in any order and the "same pick all
             // week" guarantee would quietly depend on the query plan.
-            var pool = await _db.CineMindMovies
-                .Where(m => m.SurpriseMe)
-                .OrderBy(m => m.ImdbId)
-                .Select(m => new { m.ImdbId, m.Title, m.PosterPath, m.ReleaseYear })
-                .ToListAsync();
-
-            // Nothing flagged yet — the column ships defaulted to false, so
-            // between deploying this and re-running catalog/seed the flagged
-            // set is empty. Falling back to the unflagged catalog keeps the
-            // home screen populated through that window instead of rendering
-            // an empty carousel that looks like a bug.
-            if (pool.Count == 0)
+            List<CarouselItem> pool;
+            if (string.Equals(mediaType, "tv", StringComparison.OrdinalIgnoreCase))
+            {
+                pool = await _db.CineMindTvShows
+                    .OrderBy(m => m.ImdbId)
+                    .Select(m => new CarouselItem(m.ImdbId, m.Title, m.PosterPath, m.ReleaseYear))
+                    .ToListAsync();
+            }
+            else
             {
                 pool = await _db.CineMindMovies
+                    .Where(m => m.SurpriseMe)
                     .OrderBy(m => m.ImdbId)
-                    .Select(m => new { m.ImdbId, m.Title, m.PosterPath, m.ReleaseYear })
+                    .Select(m => new CarouselItem(m.ImdbId, m.Title, m.PosterPath, m.ReleaseYear))
                     .ToListAsync();
+
+                // Nothing flagged yet — the column ships defaulted to false, so
+                // between deploying this and re-running catalog/seed the flagged
+                // set is empty. Falling back to the unflagged catalog keeps the
+                // home screen populated through that window instead of rendering
+                // an empty carousel that looks like a bug.
+                if (pool.Count == 0)
+                {
+                    pool = await _db.CineMindMovies
+                        .OrderBy(m => m.ImdbId)
+                        .Select(m => new CarouselItem(m.ImdbId, m.Title, m.PosterPath, m.ReleaseYear))
+                        .ToListAsync();
+                }
             }
 
             var now = DateTime.UtcNow;
@@ -133,6 +155,11 @@ namespace Backend.Controllers
 
             return Ok(new { results });
         }
+
+        // Shared row shape so the movie and TV branches above can assign to
+        // one variable — anonymous types wouldn't unify across the two
+        // queries even though the columns are identical.
+        private sealed record CarouselItem(string ImdbId, string Title, string? PosterPath, int ReleaseYear);
 
         // OMDb title search (?s=) → our internal shape. Returns ([], null) on
         // any hard failure so the client just renders an empty state, never
