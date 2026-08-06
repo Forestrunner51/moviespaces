@@ -225,6 +225,61 @@ namespace Backend.Services
             "tt0330373", // Harry Potter and the Goblet of Fire
             "tt0903624", // The Hobbit: An Unexpected Journey
             "tt0369610", // Jurassic World
+
+            // Carousel-only titles. These are here to back SurpriseMeImdbIds
+            // below rather than for puzzle density — the carousel renders from
+            // catalog rows now, so anything it shows has to exist as a row.
+            "tt1877830", // The Batman
+            "tt2911666", // John Wick
+            "tt9362722", // Spider-Man: Across the Spider-Verse
+            "tt9114286", // Black Panther: Wakanda Forever
+            "tt10648342", // Thor: Love and Thunder
+            "tt0816711", // World War Z
+            "tt1596363", // The Girl with the Dragon Tattoo
+            "tt5433140", // Fast & Furious Presents: Hobbs & Shaw
+        };
+
+        // The "Surprise Me" carousel pool — films flagged surprise_me = true
+        // by the seed below, which MoviesController.NowPlaying then shuffles
+        // weekly and takes 10 from.
+        //
+        // Curated separately from SeedImdbIds on purpose: that list optimises
+        // for shared cast/director density so puzzles can be generated, this
+        // one for "what would someone actually want to watch tonight". Every
+        // id here must also appear above, or it has no catalog row to flag —
+        // SeedAsync logs a warning if that invariant breaks.
+        private static readonly HashSet<string> SurpriseMeImdbIds = new(StringComparer.OrdinalIgnoreCase)
+        {
+            "tt1160419",  // Dune (2021)
+            "tt15398776", // Oppenheimer
+            "tt1517268",  // Barbie
+            "tt1877830",  // The Batman
+            "tt1745960",  // Top Gun: Maverick
+            "tt10872600", // Spider-Man: No Way Home
+            "tt4154796",  // Avengers: Endgame
+            "tt0468569",  // The Dark Knight
+            "tt1375666",  // Inception
+            "tt0816692",  // Interstellar
+            "tt6791350",  // Guardians of the Galaxy Vol. 3
+            "tt9362722",  // Spider-Man: Across the Spider-Verse
+            "tt0111161",  // The Shawshank Redemption
+            "tt0110912",  // Pulp Fiction
+            "tt0137523",  // Fight Club
+            "tt0109830",  // Forrest Gump
+            "tt0133093",  // The Matrix
+            "tt0245429",  // Spirited Away
+            "tt0993846",  // The Wolf of Wall Street
+            "tt2911666",  // John Wick
+            "tt1345836",  // The Dark Knight Rises
+            "tt0816711",  // World War Z
+            "tt1596363",  // The Girl with the Dragon Tattoo
+            "tt0499549",  // Avatar
+            "tt1630029",  // Avatar: The Way of Water
+            "tt6710474",  // Everything Everywhere All at Once
+            "tt15239678", // Dune: Part Two
+            "tt10648342", // Thor: Love and Thunder
+            "tt9114286",  // Black Panther: Wakanda Forever
+            "tt5433140",  // Fast & Furious Presents: Hobbs & Shaw
         };
 
         // TV track for Mystery Movie (Easy only, for now). Shorter than the
@@ -272,6 +327,19 @@ namespace Backend.Services
         // one-shot admin action rather than something that runs per request.
         public async Task<(int Added, int Updated, int Failed)> SeedAsync(AppDbContext db)
         {
+            // A carousel id with no seed entry would silently never appear —
+            // the flag has nothing to attach to. Worth a warning rather than a
+            // throw: it costs one carousel slot, not a working seed run.
+            var orphaned = SurpriseMeImdbIds
+                .Except(SeedImdbIds, StringComparer.OrdinalIgnoreCase)
+                .ToList();
+            if (orphaned.Count > 0)
+            {
+                _logger.LogWarning(
+                    "SurpriseMeImdbIds contains {Count} id(s) missing from SeedImdbIds, so they can never be "
+                    + "flagged or shown: {Ids}", orphaned.Count, string.Join(", ", orphaned));
+            }
+
             var existing = await db.CineMindMovies.ToDictionaryAsync(m => m.ImdbId, StringComparer.OrdinalIgnoreCase);
             int added = 0, updated = 0, failed = 0;
 
@@ -286,6 +354,11 @@ namespace Backend.Services
 
                 var castJson = JsonSerializer.Serialize(entry.Cast);
                 var genresJson = JsonSerializer.Serialize(entry.Genres);
+                // Assigned rather than OR'd on the update path: the seed list
+                // is the source of truth, so removing an id from
+                // SurpriseMeImdbIds and re-seeding has to actually pull that
+                // film off the carousel.
+                var surpriseMe = SurpriseMeImdbIds.Contains(imdbId);
 
                 if (existing.TryGetValue(imdbId, out var row))
                 {
@@ -296,6 +369,7 @@ namespace Backend.Services
                     row.CastJson = castJson;
                     row.GenresJson = genresJson;
                     row.Plot = entry.Plot ?? row.Plot;
+                    row.SurpriseMe = surpriseMe;
                     updated++;
                 }
                 else
@@ -310,6 +384,7 @@ namespace Backend.Services
                         CastJson = castJson,
                         GenresJson = genresJson,
                         Plot = entry.Plot,
+                        SurpriseMe = surpriseMe,
                         CreatedAt = DateTime.UtcNow,
                     });
                     added++;

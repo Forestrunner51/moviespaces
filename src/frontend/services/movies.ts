@@ -59,8 +59,12 @@ export async function searchTvShows(query: string): Promise<SearchOutcome> {
 // A rotating "Surprise Me" pick, used to pre-populate the movie picker + home
 // carousel before the host types anything. The backend rotates the set
 // weekly from a larger curated pool (OMDb has no popularity/list endpoint).
-export async function getNowPlaying(): Promise<Movie[]> {
-  const url = `${process.env.EXPO_PUBLIC_API_URL}/api/movies/now-playing`;
+//
+// mediaType "tv" returns the same rotating list drawn from the TV catalog —
+// the picker's TV mode used to render an empty modal until you typed, which
+// looked broken next to movie mode filling itself in.
+export async function getNowPlaying(mediaType: "movie" | "tv" = "movie"): Promise<Movie[]> {
+  const url = `${process.env.EXPO_PUBLIC_API_URL}/api/movies/now-playing?mediaType=${mediaType}`;
   try {
     const res = await authFetch(url);
     if (!res.ok) return [];

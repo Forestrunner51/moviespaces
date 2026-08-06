@@ -3,7 +3,9 @@ using System.Text.Json;
 using Microsoft.AspNetCore.Authorization;
 using Microsoft.AspNetCore.Mvc;
 using Microsoft.AspNetCore.RateLimiting;
+using Microsoft.EntityFrameworkCore;
 using Microsoft.Extensions.Caching.Memory;
+using Backend.Data;
 
 namespace Backend.Controllers
 {
@@ -13,9 +15,10 @@ namespace Backend.Controllers
     // on the provider's JSON. Responses are cached (IMemoryCache) so repeat
     // lookups don't burn OMDb's daily request quota.
     //
-    // OMDb has no "popular"/"now-playing"/list endpoint (only ?s= search and
-    // ?i= lookup-by-id), so the discovery carousel is a curated set of IMDb ids
-    // fetched individually — each wrapped so one failed lookup never breaks it.
+    // OMDb has no "popular"/"now-playing"/list endpoint (only ?s= search), so
+    // the discovery carousel isn't served from here at all — it reads the
+    // cinemind_movies rows flagged surprise_me, which already carry the
+    // title/poster/year it needs. See NowPlaying.
     //
     // [Authorize]d like every other controller here that fronts a metered
     // third-party API (RouletteController, etc.) — this was previously wide
@@ -34,53 +37,20 @@ namespace Backend.Controllers
         private readonly IHttpClientFactory _httpClientFactory;
         private readonly IConfiguration _configuration;
         private readonly IMemoryCache _cache;
+        private readonly AppDbContext _db;
 
         private const string BaseUrl = "https://www.omdbapi.com/";
 
-        // Curated pool for the "Surprise Me" home carousel + the movie
-        // picker's default list (OMDb can't return a popularity list). Each
-        // week we deterministically shuffle this pool and take 10, so the
-        // list rotates automatically without any scheduled job. Edit freely —
-        // an unknown/removed id is simply skipped, never fatal.
-        private static readonly string[] SurpriseMeImdbIds = new[]
-        {
-            "tt1160419",  // Dune (2021)
-            "tt15398776", // Oppenheimer
-            "tt1517268",  // Barbie
-            "tt1877830",  // The Batman
-            "tt1745960",  // Top Gun: Maverick
-            "tt10872600", // Spider-Man: No Way Home
-            "tt4154796",  // Avengers: Endgame
-            "tt0468569",  // The Dark Knight
-            "tt1375666",  // Inception
-            "tt0816692",  // Interstellar
-            "tt6791350",  // Guardians of the Galaxy Vol. 3
-            "tt9362722",  // Spider-Man: Across the Spider-Verse
-            "tt0111161",  // The Shawshank Redemption
-            "tt0110912",  // Pulp Fiction
-            "tt0137523",  // Fight Club
-            "tt0109830",  // Forrest Gump
-            "tt0133093",  // The Matrix
-            "tt0245429",  // Spirited Away
-            "tt0993846",  // The Wolf of Wall Street
-            "tt2911666",  // John Wick
-            "tt1345836",  // The Dark Knight Rises
-            "tt0816711",  // World War Z
-            "tt1596363",  // The Girl with the Dragon Tattoo
-            "tt0499549",  // Avatar
-            "tt1630029",  // Avatar: The Way of Water
-            "tt6710474",  // Everything Everywhere All at Once
-            "tt15239678", // Dune: Part Two
-            "tt10648342", // Thor: Love and Thunder
-            "tt9114286",  // Black Panther: Wakanda Forever
-            "tt5433140",  // Fast & Furious Presents: Hobbs & Shaw
-        };
-
-        public MoviesController(IHttpClientFactory httpClientFactory, IConfiguration configuration, IMemoryCache cache)
+        public MoviesController(
+            IHttpClientFactory httpClientFactory,
+            IConfiguration configuration,
+            IMemoryCache cache,
+            AppDbContext db)
         {
             _httpClientFactory = httpClientFactory;
             _configuration = configuration;
             _cache = cache;
+            _db = db;
         }
 
         [HttpGet("search")]
@@ -105,38 +75,91 @@ namespace Backend.Controllers
             return Ok(new { results, message });
         }
 
-        // "Surprise Me" — 10 titles picked from the curated pool, fetched by
-        // id in parallel (OMDb has no list endpoint). The pick is seeded by
-        // ISO week/year so it's stable all week and rotates automatically
-        // every Monday with no scheduled job. Individually cached, and a
-        // failed lookup just drops out.
+        // "Surprise Me" — 10 titles from the catalog rows flagged surprise_me,
+        // shuffled deterministically by ISO week so the list is stable all
+        // week and rotates every Monday with no scheduled job.
+        //
+        // Reads Postgres instead of calling OMDb: cinemind_movies already
+        // stores title/poster/year for these exact films, so the old version
+        // was making 10 lookups per cold cache to re-fetch data sitting in the
+        // database — and needed a second hardcoded id list to do it, which
+        // overlapped the catalog seed by 73% and drifted every time one list
+        // was edited without the other. Curation now lives in one place
+        // (CineMindCatalogService.SurpriseMeImdbIds → the flag), and the
+        // rendered title/poster can't disagree with the catalog's copy.
+        // mediaType=tv serves the same rotating list from cinemind_tv_shows,
+        // so the picker's TV mode has something to show before the user types.
+        // It previously rendered an empty modal in that state — searching TV
+        // worked fine, but a blank list reads as broken, and the asymmetry with
+        // movie mode (which pre-populates) made it look like the feature was
+        // half-finished.
+        //
+        // No surprise_me flag on the TV side: that column exists to separate
+        // "good for puzzles" from "good for browsing" within a 145-film
+        // catalog, and with only 30 shows there's nothing to filter down to —
+        // every one of them is a recognisable title worth showing.
         [HttpGet("now-playing")]
-        public async Task<IActionResult> NowPlaying()
+        public async Task<IActionResult> NowPlaying([FromQuery] string? mediaType)
         {
-            var picks = PickWeeklySurpriseIds(10);
-            var movies = await Task.WhenAll(picks.Select(GetMovieById));
-            var results = movies.Where(m => m != null).Select(m => m!).ToList();
-            return Ok(new { results });
-        }
+            // Ordering by ImdbId makes the shuffle input stable — without it
+            // Postgres could return rows in any order and the "same pick all
+            // week" guarantee would quietly depend on the query plan.
+            List<CarouselItem> pool;
+            if (string.Equals(mediaType, "tv", StringComparison.OrdinalIgnoreCase))
+            {
+                pool = await _db.CineMindTvShows
+                    .OrderBy(m => m.ImdbId)
+                    .Select(m => new CarouselItem(m.ImdbId, m.Title, m.PosterPath, m.ReleaseYear))
+                    .ToListAsync();
+            }
+            else
+            {
+                pool = await _db.CineMindMovies
+                    .Where(m => m.SurpriseMe)
+                    .OrderBy(m => m.ImdbId)
+                    .Select(m => new CarouselItem(m.ImdbId, m.Title, m.PosterPath, m.ReleaseYear))
+                    .ToListAsync();
 
-        // Deterministic weekly shuffle: same pick for everyone all week,
-        // different pick next week — no cron job needed.
-        private static List<string> PickWeeklySurpriseIds(int count)
-        {
+                // Nothing flagged yet — the column ships defaulted to false, so
+                // between deploying this and re-running catalog/seed the flagged
+                // set is empty. Falling back to the unflagged catalog keeps the
+                // home screen populated through that window instead of rendering
+                // an empty carousel that looks like a bug.
+                if (pool.Count == 0)
+                {
+                    pool = await _db.CineMindMovies
+                        .OrderBy(m => m.ImdbId)
+                        .Select(m => new CarouselItem(m.ImdbId, m.Title, m.PosterPath, m.ReleaseYear))
+                        .ToListAsync();
+                }
+            }
+
             var now = DateTime.UtcNow;
-            var isoWeek = ISOWeek.GetWeekOfYear(now);
-            var seed = now.Year * 100 + isoWeek;
-
-            var pool = SurpriseMeImdbIds.ToList();
-            var rng = new Random(seed);
+            var rng = new Random(now.Year * 100 + ISOWeek.GetWeekOfYear(now));
             for (var i = pool.Count - 1; i > 0; i--)
             {
                 var j = rng.Next(i + 1);
                 (pool[i], pool[j]) = (pool[j], pool[i]);
             }
 
-            return pool.Take(count).ToList();
+            // Same { imdbId, title, posterUrl, releaseYear } shape MapItem
+            // produces, so the client sees no difference. PosterPath already
+            // holds the full OMDb poster URL (see CineMindCatalogService).
+            var results = pool.Take(10).Select(m => new
+            {
+                imdbId = m.ImdbId,
+                title = m.Title,
+                posterUrl = m.PosterPath,
+                releaseYear = (int?)m.ReleaseYear,
+            }).ToList();
+
+            return Ok(new { results });
         }
+
+        // Shared row shape so the movie and TV branches above can assign to
+        // one variable — anonymous types wouldn't unify across the two
+        // queries even though the columns are identical.
+        private sealed record CarouselItem(string ImdbId, string Title, string? PosterPath, int ReleaseYear);
 
         // OMDb title search (?s=) → our internal shape. Returns ([], null) on
         // any hard failure so the client just renders an empty state, never
@@ -206,37 +229,7 @@ namespace Backend.Controllers
             return (results, message);
         }
 
-        // OMDb lookup by id (?i=) → our internal shape. Cached 24h; returns
-        // null on any failure so a single bad id never breaks the carousel.
-        private async Task<object?> GetMovieById(string imdbId)
-        {
-            var apiKey = _configuration["Omdb:ApiKey"];
-            if (string.IsNullOrWhiteSpace(apiKey)) return null;
-
-            var cacheKey = $"omdb:id:{imdbId}";
-            if (_cache.TryGetValue(cacheKey, out object? cached)) return cached;
-
-            var url = $"{BaseUrl}?apikey={apiKey}&i={Uri.EscapeDataString(imdbId)}";
-            try
-            {
-                var client = _httpClientFactory.CreateClient();
-                var response = await client.GetAsync(url);
-                if (!response.IsSuccessStatusCode) return null;
-
-                var body = await response.Content.ReadAsStringAsync();
-                using var doc = JsonDocument.Parse(body);
-                var mapped = MapItem(doc.RootElement);
-                _cache.Set(cacheKey, mapped, TimeSpan.FromHours(24));
-                return mapped;
-            }
-            catch (Exception ex)
-            {
-                Console.WriteLine($"OMDb lookup {imdbId} failed: {ex.Message}");
-                return null;
-            }
-        }
-
-        // Maps an OMDb object (a ?s= search item or a full ?i= detail) into
+        // Maps an OMDb ?s= search item into
         // { imdbId, title, posterUrl, releaseYear }. Returns null when it lacks
         // an id/title (e.g. an OMDb {"Response":"False"} error object). OMDb
         // uses the literal "N/A" for a missing poster → mapped to null.
