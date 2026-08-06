@@ -55,12 +55,50 @@ namespace Backend.Services
         string? Plot,
         string? PosterPath);
 
+    // SchemaVersion defaults to CurrentSchemaVersion for every payload this
+    // process ever constructs, so nothing that calls `new DailyPuzzlePayload(...)`
+    // has to know this field exists. It only ever reads as something OTHER
+    // than CurrentSchemaVersion when System.Text.Json is deserializing a row
+    // written by an older version of this record shape — a row from before
+    // this field existed at all comes back as the default `int`, 0, which
+    // compares as stale against any real CurrentSchemaVersion (>= 1) with no
+    // extra handling needed.
+    //
+    // This exists because a JSON payload one field short of what this record
+    // currently declares does NOT fail to deserialize — System.Text.Json
+    // fills the missing property with null/default rather than throwing — so
+    // a puzzle payload stored before a field was added (Genres and the whole
+    // MysteryTv track were both added mid-week) parses "successfully" into an
+    // object with nulls a caller's C# types promise can't be there. That
+    // silently broke a feature (DailyPuzzleService.RecentlyUsedIds) that read
+    // six days of history back through Deserialize.
+    //
+    // The fix is at the type level rather than a hand-maintained "which
+    // fields might be missing" checklist (see DailyPuzzleService.IsComplete):
+    // any future change to this record's shape, or any nested challenge
+    // record's shape, just needs CurrentSchemaVersion bumped once, and every
+    // pre-existing row automatically stops being trusted — instead of relying
+    // on whoever adds the new field to also remember to update a separate
+    // completeness check.
     public record DailyPuzzlePayload(
         ConnectionChallenge Connection,
         ChronosChallenge Chronos,
         CastDeductChallenge CastDeduct,
         MysteryMovieChallenge MysteryMovie,
-        MysteryMovieChallenge MysteryTv);
+        MysteryMovieChallenge MysteryTv,
+        int SchemaVersion = DailyPuzzlePayload.CurrentSchemaVersion)
+    {
+        // Bump this — and only this — whenever DailyPuzzlePayload or any
+        // record it contains (ConnectionChallenge, ChronosChallenge,
+        // CastDeductChallenge, MysteryMovieChallenge) gains, loses, or
+        // changes the meaning of a field. Every already-stored puzzle
+        // immediately stops being trusted (DailyPuzzleService.Deserialize
+        // treats a version mismatch as equivalent to a parse failure) and
+        // regenerates or gets skipped exactly like today's puzzle already
+        // does for a corrupt row — see the "Corrupt row" comment in
+        // GetOrCreateTodayAsync.
+        public const int CurrentSchemaVersion = 1;
+    }
 
     // ── Roulette (practice, single ad-hoc challenge) ──
     //

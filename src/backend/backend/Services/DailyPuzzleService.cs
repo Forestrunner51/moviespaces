@@ -598,30 +598,27 @@ namespace Backend.Services
 
             foreach (var row in recent)
             {
-                var payload = Deserialize(row.ChallengePayloadJson);
-                if (payload == null) continue;
-
-                // Deserialize only guards against a JSON parse failure — a
-                // JSON that parses fine but predates a field this record now
-                // expects (Genres and the whole MysteryTv track were both
-                // added mid-week) leaves that property null rather than
-                // throwing. This is the first code path that reads PAST days'
-                // payloads on the hot path (ToClientView/Grade only ever
-                // touch TODAY's, which is always freshly generated against
-                // the current schema), so it's the first place an old-shaped
-                // row surfaces as a crash instead of silently never being
-                // read. Null-conditional here for the known-risky fields, and
-                // the whole row wrapped below as a second line of defense —
-                // this reads history of unpredictable shape, and one bad row
-                // must never take down puzzle generation for every player.
+                // Deserialize returning non-null is the completeness
+                // guarantee here — see IsComplete. A row from before a field
+                // existed (Genres/MysteryTv were both added mid-week) now
+                // comes back null from Deserialize itself rather than parsing
+                // "successfully" with holes in it, so every field below is
+                // safe to read directly. The try/catch is defense-in-depth
+                // for anything IsComplete doesn't cover (e.g. a malformed
+                // list element) — this reads history of unpredictable
+                // provenance, and one bad row must never take down puzzle
+                // generation for every player.
                 try
                 {
-                    foreach (var m in payload.Connection?.Movies ?? new()) movies.Add(m.ImdbId);
-                    foreach (var m in payload.Chronos?.Movies ?? new()) movies.Add(m.ImdbId);
-                    if (payload.CastDeduct?.MovieA?.ImdbId != null) movies.Add(payload.CastDeduct.MovieA.ImdbId);
-                    if (payload.CastDeduct?.MovieB?.ImdbId != null) movies.Add(payload.CastDeduct.MovieB.ImdbId);
-                    if (payload.MysteryMovie?.Answer != null) movies.Add(payload.MysteryMovie.Answer);
-                    if (payload.MysteryTv?.Answer != null) tv.Add(payload.MysteryTv.Answer);
+                    var payload = Deserialize(row.ChallengePayloadJson);
+                    if (payload == null) continue;
+
+                    foreach (var m in payload.Connection.Movies) movies.Add(m.ImdbId);
+                    foreach (var m in payload.Chronos.Movies) movies.Add(m.ImdbId);
+                    movies.Add(payload.CastDeduct.MovieA.ImdbId);
+                    movies.Add(payload.CastDeduct.MovieB.ImdbId);
+                    movies.Add(payload.MysteryMovie.Answer);
+                    tv.Add(payload.MysteryTv.Answer);
                 }
                 catch (Exception ex)
                 {
@@ -937,11 +934,38 @@ namespace Backend.Services
 
         public DailyPuzzlePayload? DeserializePayload(string json) => Deserialize(json);
 
+        // The single choke point every stored payload passes through on the
+        // way back out of the database — GetOrCreateTodayAsync (today's own
+        // row, and the create-race fallback), RecentlyUsedIds (the last six
+        // days', for repeat avoidance), and the share-result page all call
+        // this rather than JsonSerializer directly, specifically so this
+        // completeness check only has to be written once.
+        //
+        // "Parsed without throwing" and "safe to read" are NOT the same
+        // claim, and treating them as one is what broke repeat avoidance:
+        // System.Text.Json fills a property missing from the JSON with null
+        // rather than raising an error, so a row written before a field
+        // existed (Genres and the whole MysteryTv track were both added
+        // mid-week) deserializes "successfully" into an object with null
+        // members a caller's C# types promise can't be null. Every caller
+        // here already has correct handling for "this payload is unusable" —
+        // GetOrCreateTodayAsync regenerates or 503s, RecentlyUsedIds skips
+        // the day — the bug was only ever that null-but-parsed payloads
+        // weren't recognized as unusable. IsComplete makes that recognition
+        // happen once, here, instead of requiring every future reader to
+        // remember which fields might be missing from an old row.
         private static DailyPuzzlePayload? Deserialize(string json)
         {
             try
             {
-                return JsonSerializer.Deserialize<DailyPuzzlePayload>(json);
+                var payload = JsonSerializer.Deserialize<DailyPuzzlePayload>(json);
+                // Not a business-validity check — this says nothing about
+                // whether the puzzle is good, only whether every field this
+                // process's C# types assume exists actually deserialized.
+                // See DailyPuzzlePayload.CurrentSchemaVersion for why a
+                // version mismatch is the one signal that needs checking
+                // rather than a per-field null audit.
+                return payload?.SchemaVersion == DailyPuzzlePayload.CurrentSchemaVersion ? payload : null;
             }
             catch (JsonException)
             {
