@@ -29,6 +29,7 @@ public class AppDbContext : DbContext
     public DbSet<DailyPuzzle> DailyPuzzles => Set<DailyPuzzle>();
     public DbSet<UserDailyProgress> UserDailyProgress => Set<UserDailyProgress>();
     public DbSet<CineMindReminderLog> CineMindReminderLog => Set<CineMindReminderLog>();
+    public DbSet<RouletteSpinHistory> RouletteSpinHistory => Set<RouletteSpinHistory>();
 
     protected override void OnModelCreating(ModelBuilder builder)
     {
@@ -71,5 +72,13 @@ public class AppDbContext : DbContext
         // Serves the per-day leaderboard and percentile queries.
         builder.Entity<UserDailyProgress>()
             .HasIndex(p => p.PuzzleDate);
+
+        // Every read of this table is "what has THIS user seen since date X",
+        // and every prune is "delete rows older than X" — both covered by the
+        // same composite. Not unique: a film legitimately reappears once its
+        // seven days are up, and a repeat is expected rather than an error
+        // once a thin genre pool is exhausted (see BuildPracticeSpinAsync).
+        builder.Entity<RouletteSpinHistory>()
+            .HasIndex(h => new { h.UserId, h.SeenAt });
     }
 }

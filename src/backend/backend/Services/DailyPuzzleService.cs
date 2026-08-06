@@ -14,7 +14,8 @@ namespace Backend.Services
         SubmitResult Grade(DailyPuzzlePayload payload, SubmittedAnswers answers, int timeTakenMs);
 
         // ── Roulette (practice challenges) ──
-        Task<PracticeSpin?> BuildPracticeSpinAsync(AppDbContext db, string? genre);
+        Task<PracticeSpin?> BuildPracticeSpinAsync(AppDbContext db, string? genre, string userId);
+        Task RecordSpinAsync(AppDbContext db, string userId, PracticeSpin spin);
         PracticeSpinView ToPracticeView(PracticeSpin spin);
         ChallengeResult GradePracticeChallenge(string challengeType, object challenge, SubmittedAnswers answer);
 
@@ -52,6 +53,25 @@ namespace Backend.Services
         // Distractor count for multiple choice (answer + 3 wrong = 4 options).
         private const int WrongOptionCount = 3;
 
+        // How far back "don't show me this again" reaches, for both games.
+        // Seven days for Roulette (per-user spin history) and the six prior
+        // puzzles for the daily game — the same week-long promise from the
+        // player's side, expressed in whichever unit each game counts in.
+        private static readonly TimeSpan RecentSpinWindow = TimeSpan.FromDays(7);
+        private const int RecentPuzzleDays = 6;
+
+        // Hard ceiling on retained spin rows per user, independent of the age
+        // window above. The age prune alone is not a bound: /api/roulette/spin
+        // only carries the global 300-req/min limit, so a user hammering it
+        // could bank ~3M rows inside one window — and since each spin reads
+        // that user's whole window back, they'd be amplifying their own reads
+        // with every request.
+        //
+        // 200 is comfortably above what the feature can use: the exclusion
+        // only cares about distinct films, and the largest possible pool is
+        // the whole catalog (~137). Anything past that is already redundant.
+        private const int MaxTrackedSpinsPerUser = 200;
+
         public DailyPuzzleService(IConfiguration configuration, ILogger<DailyPuzzleService> logger)
         {
             _configuration = configuration;
@@ -76,7 +96,56 @@ namespace Backend.Services
 
             var catalog = await LoadCatalogAsync(db);
             var tvCatalog = await LoadTvCatalogAsync(db);
-            var generated = Generate(today, catalog, tvCatalog);
+
+            // Keep a week of puzzles from recycling the same titles. Each day
+            // consumes 11 films, so over seven days a 137-film catalog would
+            // otherwise be expected to show ~16 repeat sightings, with a ~60%
+            // chance any given day reuses at least one film from the day
+            // before — noticeable in a game whose whole format is "look at
+            // these four films".
+            //
+            // Filtering the catalog rather than threading an exclusion set
+            // through all five builders keeps Generate itself unchanged, which
+            // is what lets the retry loop below vary the window by simply
+            // handing it a different list.
+            var recentPuzzles = await db.DailyPuzzles
+                .Where(p => p.PuzzleDate < today && p.PuzzleDate >= today.AddDays(-RecentPuzzleDays))
+                .ToListAsync();
+
+            // Narrow the window progressively instead of dropping it wholesale
+            // on the first failure. Six days removes ~66 of ~137 films, which
+            // can break up the actor clusters BuildConnection depends on (it
+            // needs four films sharing one person) — and an all-or-nothing
+            // fallback would answer that by reverting to *no* exclusion at
+            // all, silently making this feature do nothing on exactly the days
+            // it's hardest. Stepping 6 → 3 → 1 → 0 keeps whatever freshness is
+            // actually achievable, and the final 0 still guarantees a puzzle.
+            //
+            // Every attempt re-seeds from the same date, so the day remains
+            // deterministic and identical for every player regardless of which
+            // step succeeds.
+            DailyPuzzlePayload? generated = null;
+            foreach (var windowDays in new[] { RecentPuzzleDays, 3, 1, 0 })
+            {
+                var window = recentPuzzles.Where(p => p.PuzzleDate >= today.AddDays(-windowDays)).ToList();
+                var (recentMovies, recentTv) = RecentlyUsedIds(window);
+
+                var freshCatalog = catalog.Where(e => !recentMovies.Contains(e.Movie.ImdbId)).ToList();
+                var freshTvCatalog = tvCatalog.Where(e => !recentTv.Contains(e.Show.ImdbId)).ToList();
+
+                generated = Generate(today, freshCatalog, freshTvCatalog);
+                if (generated != null)
+                {
+                    if (windowDays < RecentPuzzleDays)
+                    {
+                        _logger.LogInformation(
+                            "Puzzle for {Date} fell back to a {Days}-day no-repeat window; the catalog "
+                            + "is too thin to avoid {Full} days of repeats.", today, windowDays, RecentPuzzleDays);
+                    }
+                    break;
+                }
+            }
+
             if (generated == null)
             {
                 _logger.LogError(
@@ -362,7 +431,7 @@ namespace Backend.Services
         // specific movie, since the whole point of a spin is "here's a
         // challenge about THIS film."
 
-        public async Task<PracticeSpin?> BuildPracticeSpinAsync(AppDbContext db, string? genre)
+        public async Task<PracticeSpin?> BuildPracticeSpinAsync(AppDbContext db, string? genre, string userId)
         {
             var catalog = await LoadCatalogAsync(db);
             if (catalog.Count < 2) return null;
@@ -373,6 +442,47 @@ namespace Backend.Services
             if (pool.Count == 0) return null;
 
             var rng = Random.Shared;
+
+            // Most recent sighting per film, for this user, inside the window.
+            // Films they haven't seen sort first (MinValue), then the
+            // longest-ago ones — so a spin only repeats after every other
+            // option in the genre is used up, and even then it repeats the
+            // stalest film rather than a random one.
+            //
+            // This is a preference, not a filter, on purpose: excluding seen
+            // films outright would make a thin genre start failing outright
+            // after a handful of spins ("no Animation challenge available"),
+            // which is a worse experience than an honest repeat. Practice is
+            // meant to be replayable without limit.
+            // Grouped in memory rather than in SQL: this is one user's spins
+            // over one week (tens of rows, bounded by the index-covered WHERE
+            // above), so the round-trip saving from a GROUP BY is nil, and an
+            // EF GroupBy that fails to translate throws at runtime — which
+            // would take out spinning altogether rather than degrading.
+            // Read failures degrade to "no history" rather than propagating.
+            // Program.cs logs and continues when MigrateAsync throws, so the
+            // app can genuinely be serving traffic with this table missing —
+            // and an unguarded query here would turn that into a 500 on every
+            // spin, taking Roulette down entirely over a feature whose only
+            // job is to make repeats less likely.
+            var lastSeen = new Dictionary<string, DateTime>(StringComparer.OrdinalIgnoreCase);
+            try
+            {
+                var since = DateTime.UtcNow - RecentSpinWindow;
+                var history = await db.RouletteSpinHistory
+                    .Where(h => h.UserId == userId && h.SeenAt >= since)
+                    .OrderByDescending(h => h.SeenAt)
+                    .Take(MaxTrackedSpinsPerUser)
+                    .Select(h => new { h.ImdbId, h.SeenAt })
+                    .ToListAsync();
+
+                foreach (var group in history.GroupBy(h => h.ImdbId, StringComparer.OrdinalIgnoreCase))
+                    lastSeen[group.Key] = group.Max(h => h.SeenAt);
+            }
+            catch (Exception ex)
+            {
+                _logger.LogWarning(ex, "Couldn't read Roulette spin history; spinning without repeat avoidance.");
+            }
 
             // A genre filter that silently includes films from other genres is
             // not a genre filter, so `pool` is the ONLY source used below —
@@ -385,19 +495,26 @@ namespace Backend.Services
             // card and three live-action films inside the challenge.
             //
             // The right axis to widen is the *target*, not the genre: try
-            // every film in the genre, in random order, and take the first
-            // that can carry a challenge built entirely from its own genre.
-            // Shuffling first keeps the spin uniformly random rather than
-            // biased toward whatever sits early in the catalog — most films
-            // clear the bar (Chronos only needs three other in-genre films
-            // with distinct years), so in practice the first candidate wins
-            // and this is a single pass.
+            // every film in the genre and take the first that can carry a
+            // challenge built entirely from its own genre. Most films clear
+            // the bar (Chronos only needs three other in-genre films with
+            // distinct years), so in practice the first candidate wins and
+            // this is a single pass.
+            //
+            // Shuffle before the sort, not instead of it: OrderBy is stable,
+            // so films tied on last-seen (in particular every unseen film,
+            // which is the common case) stay in the random order the shuffle
+            // gave them. Sorting a non-shuffled list would make the spin
+            // deterministic within each tier.
             //
             // Exhausting the pool now means the genre genuinely cannot support
             // any challenge type at all, which is a fact about the catalog
             // rather than bad luck — see RouletteController.Spin, which tells
             // the player to pick another genre instead of spinning again.
-            foreach (var target in Shuffle(rng, pool))
+            var candidates = Shuffle(rng, pool)
+                .OrderBy(e => lastSeen.TryGetValue(e.Movie.ImdbId, out var seen) ? seen : DateTime.MinValue);
+
+            foreach (var target in candidates)
             {
                 // Random order so a low-connectivity movie doesn't always fail
                 // (or succeed) on the same challenge type every time it's spun.
@@ -425,6 +542,74 @@ namespace Backend.Services
             }
 
             return null;
+        }
+
+        // Records a served spin and prunes this user's expired rows in the
+        // same round-trip. Pruning here rather than on a timer keeps the table
+        // self-maintaining without a background job: a user who stops playing
+        // leaves at most one week of rows behind, and one who plays constantly
+        // pays a trivial delete against the (UserId, SeenAt) index.
+        //
+        // Best-effort by design — the caller must not fail a spin because the
+        // history write failed. Losing a row costs freshness on the next spin
+        // and nothing else.
+        public async Task RecordSpinAsync(AppDbContext db, string userId, PracticeSpin spin)
+        {
+            var cutoff = DateTime.UtcNow - RecentSpinWindow;
+
+            // Age alone doesn't bound the table (see MaxTrackedSpinsPerUser),
+            // so also find the timestamp of this user's Nth-newest row and
+            // prune from there down. Both conditions collapse into the single
+            // delete below by taking whichever cutoff is more aggressive.
+            // Skip/Take becomes OFFSET/LIMIT over the (UserId, SeenAt) index,
+            // so this stays one indexed lookup rather than a scan.
+            var overflowCutoff = await db.RouletteSpinHistory
+                .Where(h => h.UserId == userId)
+                .OrderByDescending(h => h.SeenAt)
+                .Skip(MaxTrackedSpinsPerUser)
+                .Select(h => (DateTime?)h.SeenAt)
+                .FirstOrDefaultAsync();
+            if (overflowCutoff.HasValue && overflowCutoff.Value > cutoff) cutoff = overflowCutoff.Value;
+
+            await db.RouletteSpinHistory
+                .Where(h => h.UserId == userId && h.SeenAt <= cutoff)
+                .ExecuteDeleteAsync();
+
+            db.RouletteSpinHistory.Add(new RouletteSpinHistory
+            {
+                UserId = userId,
+                ImdbId = spin.Movie.ImdbId,
+                ChallengeType = spin.ChallengeType,
+                SeenAt = DateTime.UtcNow,
+            });
+            await db.SaveChangesAsync();
+        }
+
+        // Every film used by the previous `RecentPuzzleDays` daily puzzles,
+        // split by catalog since the movie and TV tracks draw from separate
+        // tables. Used to keep a week of daily puzzles from recycling the same
+        // titles — generation previously only avoided repeats *within* a
+        // single day, so consecutive days could open with the same four films
+        // in The Connection.
+        private (HashSet<string> Movies, HashSet<string> Tv) RecentlyUsedIds(List<DailyPuzzle> recent)
+        {
+            var movies = new HashSet<string>(StringComparer.OrdinalIgnoreCase);
+            var tv = new HashSet<string>(StringComparer.OrdinalIgnoreCase);
+
+            foreach (var row in recent)
+            {
+                var payload = Deserialize(row.ChallengePayloadJson);
+                if (payload == null) continue;
+
+                foreach (var m in payload.Connection.Movies) movies.Add(m.ImdbId);
+                foreach (var m in payload.Chronos.Movies) movies.Add(m.ImdbId);
+                movies.Add(payload.CastDeduct.MovieA.ImdbId);
+                movies.Add(payload.CastDeduct.MovieB.ImdbId);
+                movies.Add(payload.MysteryMovie.Answer);
+                tv.Add(payload.MysteryTv.Answer);
+            }
+
+            return (movies, tv);
         }
 
         // Same linking logic as BuildConnection, but the pool of candidate
