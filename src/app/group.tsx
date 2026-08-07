@@ -833,6 +833,43 @@ export default function GroupScreen() {
           </Text>
         )}
 
+        {/* The "Tickets" quick action (public_gathering only, see below) opens
+            buildTicketUrl(group.filmName, group.bookingUrl) — without a real
+            bookingUrl it falls back to a generic fandango.com/search?q=<film>
+            with no theater, showtime, or seat selection, which is not what
+            "Get Tickets" implies. This was previously unreachable: the ONLY
+            UI that could ever set BookingUrl was the private_rental card
+            below, so a real theater Space's bookingUrl was permanently "".
+            Same host-only edit action, just surfaced for the space type that
+            actually uses Get Tickets. "Find Showtimes Near Me" (the search
+            button during creation) is how a host finds the exact Fandango
+            page to paste here — there's no showtimes API to fetch it directly. */}
+        {group.spaceType === "public_gathering" && !hasPassed && (
+          <View style={styles.ticketLinkRow}>
+            {group.bookingUrl ? (
+              <ActionButton
+                icon="link-outline"
+                label="View Exact Ticket Link"
+                onPress={() => WebBrowser.openBrowserAsync(group.bookingUrl)}
+                style={styles.rentalReservationButton}
+                textStyle={styles.rentalReservationButtonText}
+                iconColor={SpaceTheme.backgroundVoid}
+              />
+            ) : (
+              isHost && (
+                <ActionButton
+                  icon="create-outline"
+                  label="Add Exact Ticket Link"
+                  onPress={openBookingUrlModal}
+                  style={styles.addBookingLinkButton}
+                  textStyle={styles.addBookingLinkButtonText}
+                  iconColor={SpaceTheme.glowCyan}
+                />
+              )
+            )}
+          </View>
+        )}
+
         {group.postActivities && (
           <View style={styles.hangoutCapsule}>
             <View style={styles.hangoutCapsuleHeader}>
@@ -1322,10 +1359,18 @@ export default function GroupScreen() {
           behavior={Platform.OS === "ios" ? "padding" : undefined}
         >
           <View style={styles.modal}>
-            <Text style={styles.modalTitle}>Add Venue / Event Link</Text>
+            {/* Same field (Group.BookingUrl), two different meanings depending
+                on who's editing it — a private_rental host is confirming a
+                venue via a reservation/invite/chip-in link, a public_gathering
+                host is pointing "Get Tickets" at the exact Fandango showtime
+                page they found via "Find Showtimes Near Me" during creation. */}
+            <Text style={styles.modalTitle}>
+              {group?.spaceType === "public_gathering" ? "Add Exact Ticket Link" : "Add Venue / Event Link"}
+            </Text>
             <Text style={styles.modalSubtitle}>
-              Paste the reservation, invite, or chip-in link once the venue&apos;s locked in — this
-              lets everyone know it&apos;s confirmed.
+              {group?.spaceType === "public_gathering"
+                ? "Paste the exact Fandango/theater showtime page — the one with this movie, this theater, and this time already selected. Find it via Google's showtimes search, then copy the link here."
+                : "Paste the reservation, invite, or chip-in link once the venue's locked in — this lets everyone know it's confirmed."}
             </Text>
             <TextInput
               style={styles.modalInput}
@@ -1658,6 +1703,10 @@ const styles = StyleSheet.create({
     marginTop: 10,
   },
   rentalSecuredBadgeText: { color: Palette.positive, fontWeight: "700", fontSize: 13 },
+  ticketLinkRow: {
+    marginTop: 4,
+    marginBottom: 4,
+  },
   tentativeBanner: {
     backgroundColor: Palette.accentDim,
     borderWidth: 1,
