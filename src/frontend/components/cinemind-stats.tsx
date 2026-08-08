@@ -1,5 +1,5 @@
 import { View, Text, StyleSheet } from "react-native";
-import { SpaceTheme, SpaceStyles } from "@/frontend/constants/theme";
+import { SpaceTheme, SpaceStyles, Palette, Type, Display } from "@/frontend/constants/theme";
 import { CineMindStats } from "@/frontend/services/cinemind";
 
 interface CineMindStatsCardProps {
@@ -77,7 +77,7 @@ function Stat({ value, label }: { value: number; label: string }) {
 const styles = StyleSheet.create({
   card: { ...SpaceStyles.glassCard, padding: 16, marginBottom: 16 },
   title: {
-    fontSize: 11,
+    ...Type.caption,
     color: SpaceTheme.mutedOrbit,
     textTransform: "uppercase",
     fontWeight: "700",
@@ -86,16 +86,16 @@ const styles = StyleSheet.create({
   },
   statsRow: { flexDirection: "row", alignItems: "center", marginBottom: 18 },
   statBlock: { flex: 1, alignItems: "center" },
-  statValue: { fontSize: 22, fontWeight: "800", color: SpaceTheme.starWhite },
+  statValue: { ...Display.stat, color: SpaceTheme.starWhite },
   statLabel: {
-    fontSize: 10,
+    ...Type.caption,
     color: SpaceTheme.mutedOrbit,
     marginTop: 2,
     textTransform: "uppercase",
     fontWeight: "700",
   },
   distributionLabel: {
-    fontSize: 10,
+    ...Type.caption,
     color: SpaceTheme.mutedOrbit,
     textTransform: "uppercase",
     fontWeight: "700",
@@ -104,7 +104,7 @@ const styles = StyleSheet.create({
   barRow: { flexDirection: "row", alignItems: "center", gap: 8, marginBottom: 6 },
   barLabel: {
     width: 26,
-    fontSize: 12,
+    ...Type.caption,
     color: SpaceTheme.mutedOrbit,
     fontWeight: "700",
     fontVariant: ["tabular-nums"],
@@ -113,20 +113,20 @@ const styles = StyleSheet.create({
     flex: 1,
     height: 18,
     borderRadius: 5,
-    backgroundColor: "rgba(255,255,255,0.06)",
+    backgroundColor: Palette.fill,
     overflow: "hidden",
   },
-  barFill: { height: "100%", borderRadius: 5, backgroundColor: "rgba(56,189,248,0.55)" },
+  barFill: { height: "100%", borderRadius: 5, backgroundColor: Palette.accentBorder },
   barFillPerfect: { backgroundColor: SpaceTheme.accentGold },
   barCount: {
     width: 24,
-    fontSize: 12,
+    ...Type.caption,
     color: SpaceTheme.starWhite,
     textAlign: "right",
     fontVariant: ["tabular-nums"],
   },
   perfectNote: {
-    fontSize: 12,
+    ...Type.caption,
     color: SpaceTheme.accentGold,
     textAlign: "center",
     marginTop: 10,

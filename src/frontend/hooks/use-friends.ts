@@ -221,11 +221,18 @@ export function useFriends() {
 
   const searchUsers = async (query: string): Promise<Profile[]> => {
     if (!currentUserId || !query.trim()) return [];
+    // The query is interpolated into a PostgREST .or() expression, where
+    // commas, parens and quotes are syntax — a search for "Smith, J" split
+    // the filter into malformed clauses (400 → silently "no results"), and
+    // crafted input could rewrite the predicate outright. Stripping the
+    // delimiters keeps every realistic name searchable.
+    const sanitized = query.replace(/[,()"'\\]/g, " ").trim();
+    if (!sanitized) return [];
     try {
       const { data, error } = await supabase
         .from("profiles")
         .select("id, display_name, username, avatar_url")
-        .or(`display_name.ilike.%${query}%,username.ilike.%${query}%`)
+        .or(`display_name.ilike.%${sanitized}%,username.ilike.%${sanitized}%`)
         .neq("id", currentUserId)
         .limit(10);
 

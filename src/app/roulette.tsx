@@ -21,7 +21,7 @@ import { Ionicons } from "@expo/vector-icons";
 import { Starfield } from "@/frontend/components/starfield";
 import { MoviePoster } from "@/frontend/components/movie-poster";
 import { ResultDot } from "@/frontend/components/result-dot";
-import { SpaceTheme, SpaceStyles } from "@/frontend/constants/theme";
+import { SpaceTheme, SpaceStyles, Palette, Type, Radius, Display } from "@/frontend/constants/theme";
 import {
   spinRoulette,
   gradeRouletteSpin,
@@ -161,7 +161,9 @@ export default function RouletteScreen() {
   return (
     <Starfield>
       <ScrollView contentContainerStyle={styles.content} keyboardShouldPersistTaps="handled">
-        <Text style={styles.title}>🎬 Movie Roulette</Text>
+        {/* No in-screen title: the navigation header already says
+            "Movie Roulette" (see _layout.tsx), and repeating it doubled the
+            heading — same cleanup create-space.tsx documents. */}
         <Text style={styles.subtitle}>Spin for a film, then take a shot at a practice challenge</Text>
 
         {(phase === "picking" || phase === "spinning") && (
@@ -257,7 +259,7 @@ export default function RouletteScreen() {
               </TouchableOpacity>
               <TouchableOpacity activeOpacity={0.85} style={styles.secondaryButton} onPress={handlePropose}>
                 <Ionicons name="people-outline" size={16} color={SpaceTheme.accentGold} />
-                <Text style={[styles.secondaryButtonText, { color: SpaceTheme.accentGold }]}>
+                <Text style={[styles.secondaryButtonText, { color: SpaceTheme.accentGold }]} numberOfLines={1}>
                   Propose Watch Party
                 </Text>
               </TouchableOpacity>
@@ -429,16 +431,15 @@ function Option({
 
 const styles = StyleSheet.create({
   content: { paddingTop: 20, paddingHorizontal: 16, paddingBottom: 40 },
-  title: { fontSize: 24, fontWeight: "800", color: SpaceTheme.starWhite, textAlign: "center" },
   subtitle: {
-    fontSize: 13,
+    ...Type.small,
     color: SpaceTheme.mutedOrbit,
     textAlign: "center",
     marginTop: 4,
     marginBottom: 20,
   },
   genreLabel: {
-    fontSize: 11,
+    ...Type.caption,
     color: SpaceTheme.mutedOrbit,
     textTransform: "uppercase",
     fontWeight: "700",
@@ -450,14 +451,14 @@ const styles = StyleSheet.create({
     paddingVertical: 8,
     paddingHorizontal: 14,
   },
-  genrePillActive: { borderColor: SpaceTheme.glowCyan, backgroundColor: "rgba(56,189,248,0.14)" },
-  genrePillText: { color: SpaceTheme.mutedOrbit, fontSize: 13, fontWeight: "600" },
+  genrePillActive: { borderColor: SpaceTheme.glowCyan, backgroundColor: Palette.accentDim },
+  genrePillText: { color: SpaceTheme.mutedOrbit, ...Type.small, fontWeight: "600" },
   genrePillTextActive: { color: SpaceTheme.glowCyan, fontWeight: "700" },
-  errorText: { color: SpaceTheme.danger, fontSize: 13, textAlign: "center", marginBottom: 12 },
+  errorText: { color: SpaceTheme.danger, ...Type.small, textAlign: "center", marginBottom: 12 },
   wheelWrap: { alignItems: "center", marginBottom: 24, gap: 10 },
   wheelLabel: {
     color: SpaceTheme.mutedOrbit,
-    fontSize: 12,
+    ...Type.caption,
     fontWeight: "700",
     textTransform: "uppercase",
     letterSpacing: 1,
@@ -468,26 +469,26 @@ const styles = StyleSheet.create({
     justifyContent: "center",
     gap: 8,
     backgroundColor: SpaceTheme.glowCyan,
-    borderRadius: 12,
+    borderRadius: Radius.medium,
     paddingVertical: 16,
     marginTop: 4,
   },
   spinButtonDisabled: { opacity: 0.5 },
-  spinButtonText: { color: SpaceTheme.backgroundVoid, fontSize: 16, fontWeight: "700" },
+  spinButtonText: { color: SpaceTheme.backgroundVoid, ...Type.body, fontWeight: "700" },
   revealCard: { alignItems: "center", marginBottom: 20 },
   revealTitle: {
-    fontSize: 20,
+    ...Type.title,
     fontWeight: "800",
     color: SpaceTheme.starWhite,
     textAlign: "center",
     marginTop: 12,
   },
   card: { ...SpaceStyles.glassCard, padding: 16, marginBottom: 16 },
-  challengeTitle: { fontSize: 18, fontWeight: "700", color: SpaceTheme.starWhite },
-  challengeHint: { fontSize: 13, color: SpaceTheme.mutedOrbit, marginTop: 4, marginBottom: 14, lineHeight: 18 },
+  challengeTitle: { ...Type.title, fontWeight: "700", color: SpaceTheme.starWhite },
+  challengeHint: { ...Type.small, color: SpaceTheme.mutedOrbit, marginTop: 4, marginBottom: 14, lineHeight: 18 },
   posterRow: { flexDirection: "row", flexWrap: "wrap", gap: 10, marginBottom: 16, justifyContent: "center" },
   posterCell: { alignItems: "center", width: 72 },
-  posterTitle: { fontSize: 10, color: SpaceTheme.mutedOrbit, textAlign: "center", marginTop: 4 },
+  posterTitle: { ...Type.caption, color: SpaceTheme.mutedOrbit, textAlign: "center", marginTop: 4 },
   option: {
     ...SpaceStyles.glassCard,
     flexDirection: "row",
@@ -496,8 +497,8 @@ const styles = StyleSheet.create({
     padding: 14,
     marginBottom: 8,
   },
-  optionSelected: { borderColor: SpaceTheme.glowCyan, backgroundColor: "rgba(56,189,248,0.12)" },
-  optionText: { flex: 1, color: SpaceTheme.starWhite, fontSize: 15 },
+  optionSelected: { borderColor: SpaceTheme.glowCyan, backgroundColor: Palette.accentDim },
+  optionText: { flex: 1, color: SpaceTheme.starWhite, ...Type.body },
   optionTextSelected: { fontWeight: "700" },
   orderRow: {
     ...SpaceStyles.glassCard,
@@ -514,18 +515,18 @@ const styles = StyleSheet.create({
     borderRadius: 13,
     alignItems: "center",
     justifyContent: "center",
-    backgroundColor: "rgba(255,255,255,0.1)",
+    backgroundColor: Palette.fillStrong,
   },
   orderBadgeActive: { backgroundColor: SpaceTheme.glowCyan },
-  orderBadgeText: { color: SpaceTheme.mutedOrbit, fontSize: 12, fontWeight: "700" },
+  orderBadgeText: { color: SpaceTheme.mutedOrbit, ...Type.caption, fontWeight: "700" },
   orderBadgeTextActive: { color: SpaceTheme.backgroundVoid },
-  orderTitle: { flex: 1, color: SpaceTheme.starWhite, fontSize: 14 },
+  orderTitle: { flex: 1, color: SpaceTheme.starWhite, ...Type.small },
   resultBanner: { alignItems: "center", marginBottom: 16 },
   resultBannerRow: { flexDirection: "row", alignItems: "center", gap: 10 },
-  resultBannerDot: { width: 12, height: 12, borderRadius: 999 },
-  resultBannerText: { fontSize: 20, fontWeight: "800", color: SpaceTheme.starWhite },
-  resultAnswerText: { fontSize: 13, color: SpaceTheme.mutedOrbit, marginTop: 4 },
-  practiceNote: { fontSize: 11, color: SpaceTheme.mutedOrbit, marginTop: 8, fontStyle: "italic" },
+  resultBannerDot: { width: 12, height: 12, borderRadius: Radius.pill },
+  resultBannerText: { ...Type.title, fontWeight: "800", color: SpaceTheme.starWhite },
+  resultAnswerText: { ...Type.small, color: SpaceTheme.mutedOrbit, marginTop: 4 },
+  practiceNote: { ...Type.caption, color: SpaceTheme.mutedOrbit, marginTop: 8, fontStyle: "italic" },
   actionsRow: { flexDirection: "row", gap: 10, marginTop: 18 },
   secondaryButton: {
     ...SpaceStyles.glassCard,
@@ -536,5 +537,5 @@ const styles = StyleSheet.create({
     gap: 6,
     paddingVertical: 13,
   },
-  secondaryButtonText: { color: SpaceTheme.glowCyan, fontSize: 13, fontWeight: "700" },
+  secondaryButtonText: { color: SpaceTheme.glowCyan, ...Type.small, fontWeight: "700" },
 });

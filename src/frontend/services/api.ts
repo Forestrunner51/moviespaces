@@ -8,9 +8,17 @@ export async function authFetch(url: string, options: RequestInit = {}) {
   const response = await fetch(url, {
     ...options,
     headers: {
-      ...options.headers,
+      // Defaults first, caller's headers after, so a future caller CAN
+      // override Content-Type (e.g. multipart) — Authorization stays last
+      // because nothing should ever override the session token.
       "Content-Type": "application/json",
-      Authorization: `Bearer ${session?.access_token ?? ""}`,
+      ...options.headers,
+      // Omitted entirely when there's no session (expired refresh token):
+      // "Bearer " with nothing after it is a malformed header, and the
+      // backend's 401 is clearer without one.
+      ...(session?.access_token
+        ? { Authorization: `Bearer ${session.access_token}` }
+        : {}),
     },
   });
 
@@ -23,15 +31,24 @@ export async function authFetch(url: string, options: RequestInit = {}) {
 // silently refreshes an expired token over the network, which is not covered
 // by an AbortController on the fetch() call alone. This races the *entire*
 // call against a timeout so screens gated on this never spin forever.
+//
+// The timer is cleared once the race settles — cinemind's screens pass a 45s
+// cold-start timeout, and without cleanup every successful request left a
+// live 45s timer behind (they pile up fast with pull-to-refresh).
 export async function authFetchWithTimeout(
   url: string,
   options: RequestInit = {},
   timeoutMs = 10000,
 ): Promise<Response> {
-  return Promise.race([
-    authFetch(url, options),
-    new Promise<Response>((_, reject) =>
-      setTimeout(() => reject(new Error("Request timed out")), timeoutMs),
-    ),
-  ]);
+  let timer: ReturnType<typeof setTimeout> | undefined;
+  try {
+    return await Promise.race([
+      authFetch(url, options),
+      new Promise<Response>((_, reject) => {
+        timer = setTimeout(() => reject(new Error("Request timed out")), timeoutMs);
+      }),
+    ]);
+  } finally {
+    clearTimeout(timer);
+  }
 }

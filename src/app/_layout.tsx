@@ -8,7 +8,7 @@ import { useFonts, BebasNeue_400Regular } from "@expo-google-fonts/bebas-neue";
 import "@/frontend/services/sentry";
 import { AnimatedSplashOverlay } from "@/frontend/components/animated-icon";
 import { supabase } from "@/frontend/config/supabase";
-import { SpaceTheme } from "@/frontend/constants/theme";
+import { SpaceTheme, Palette } from "@/frontend/constants/theme";
 import { registerForPushNotifications } from "@/frontend/services/push-notifications";
 import { setPendingRedirect } from "@/frontend/services/pending-redirect";
 import { ToastProvider } from "@/frontend/components/toast";
@@ -24,7 +24,7 @@ const SpaceNavigationTheme = {
     background: SpaceTheme.backgroundVoid,
     card: SpaceTheme.deepSpace,
     text: SpaceTheme.starWhite,
-    border: "rgba(255, 255, 255, 0.08)",
+    border: Palette.border,
     notification: SpaceTheme.supernovaPink,
   },
 };
@@ -86,7 +86,9 @@ function Layout() {
 
   useEffect(() => {
     if (session) {
-      registerForPushNotifications();
+      // Registration is best-effort by contract (see its own comment) — a
+      // rejection here must never become an unhandled one at app launch.
+      registerForPushNotifications().catch(() => {});
     }
   }, [session]);
 

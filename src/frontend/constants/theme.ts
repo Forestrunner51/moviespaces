@@ -86,6 +86,13 @@ export const Palette = {
   // are flat on the background instead of stacked cards.
   border: "rgba(247, 240, 232, 0.10)",
   borderStrong: "rgba(247, 240, 232, 0.18)",
+  // Subtle translucent fills (neutral badges, disabled buttons, toggle
+  // tracks). Cream-based like border/borderStrong — the screens were doing
+  // this ad hoc with rgba(255,255,255,…) literals, which read cool against
+  // the warm ground, exactly the half-applied-retheme problem these tokens
+  // exist to prevent.
+  fill: "rgba(247, 240, 232, 0.07)",
+  fillStrong: "rgba(247, 240, 232, 0.14)",
 } as const;
 
 // Back-compat alias. The old key names are referenced in ~200 places across

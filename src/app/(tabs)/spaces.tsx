@@ -1,4 +1,4 @@
-import { useState, useCallback } from "react";
+import { useState, useCallback, useRef } from "react";
 import { authFetch } from "@/frontend/services/api";
 import {
   View,
@@ -156,9 +156,18 @@ export default function MySpacesScreen() {
   const [loading, setLoading] = useState(true);
   const [rentCategoryFilter, setRentCategoryFilter] = useState<EventCategory | "all">("all");
 
+  // A ref, not `spaces.length`, because the focus effect below captures the
+  // first render's loadSpaces (deps []) — a state read here would always see
+  // the initial empty array.
+  const hasLoadedOnceRef = useRef(false);
+
   const loadSpaces = async () => {
     try {
-      setLoading(true);
+      // Full-screen spinner only on the very first load. This runs on every
+      // tab focus, and unconditionally flipping `loading` swapped the whole
+      // list out for a spinner — losing scroll position — when a silent
+      // background refresh is all a revisit needs.
+      if (!hasLoadedOnceRef.current) setLoading(true);
       const res = await authFetch(
         `${process.env.EXPO_PUBLIC_API_URL}/api/group/mine`,
       );
@@ -174,6 +183,7 @@ export default function MySpacesScreen() {
     } catch (err) {
       console.error("Network error trying to fetch spaces:", err);
     } finally {
+      hasLoadedOnceRef.current = true;
       setLoading(false);
     }
   };
@@ -224,7 +234,7 @@ export default function MySpacesScreen() {
                   size={16}
                   color={active ? SpaceTheme.glowCyan : SpaceTheme.mutedOrbit}
                 />
-                <Text style={[styles.tabBarLabel, active && styles.tabBarLabelActive]}>
+                <Text style={[styles.tabBarLabel, active && styles.tabBarLabelActive]} numberOfLines={1}>
                   {label}
                 </Text>
               </TouchableOpacity>
@@ -254,6 +264,7 @@ export default function MySpacesScreen() {
                 <TouchableOpacity
                   activeOpacity={0.8}
                   style={[styles.categoryChip, rentCategoryFilter === "all" && styles.categoryChipActive]}
+                  hitSlop={{ top: 8, bottom: 8 }}
                   onPress={() => setRentCategoryFilter("all")}
                 >
                   <Text
@@ -271,12 +282,15 @@ export default function MySpacesScreen() {
                       key={key}
                       activeOpacity={0.8}
                       style={[styles.categoryChip, rentCategoryFilter === key && styles.categoryChipActive]}
+                      hitSlop={{ top: 8, bottom: 8 }}
                       onPress={() => setRentCategoryFilter(key)}
                     >
                       <Ionicons
                         name={icon}
                         size={13}
-                        color={rentCategoryFilter === key ? Palette.base : Palette.textMuted}
+                        // Accent, matching categoryChipTextActive — Palette.base
+                        // (near-black) was invisible on the accentDim fill.
+                        color={rentCategoryFilter === key ? Palette.accent : Palette.textMuted}
                       />
                       <Text
                         style={[
@@ -370,13 +384,15 @@ const styles = StyleSheet.create({
     paddingTop: 60,
     paddingHorizontal: 16,
   },
+  // Display.heading, like every sibling tab's title — this was the one
+  // screen heading at 28/system-bold, and Bebas needs the paired lineHeight
+  // to keep its ascenders from clipping.
   title: {
-    fontSize: 28,
-    fontWeight: "bold",
+    ...Display.heading,
     color: SpaceTheme.starWhite,
     marginBottom: 4,
   },
-  subtitle: { fontSize: 14, color: SpaceTheme.mutedOrbit, marginBottom: 16 },
+  subtitle: { ...Type.small, color: SpaceTheme.mutedOrbit, marginBottom: 16 },
   tabBar: {
     flexDirection: "row",
     ...SpaceStyles.glassCard,
@@ -389,7 +405,7 @@ const styles = StyleSheet.create({
     flexDirection: "row",
     gap: 6,
     paddingVertical: 10,
-    borderRadius: 12,
+    borderRadius: Radius.medium,
     alignItems: "center",
     justifyContent: "center",
   },
@@ -398,19 +414,19 @@ const styles = StyleSheet.create({
     borderWidth: 1,
     borderColor: Palette.accentBorder,
   },
-  tabBarLabel: { fontSize: 13, fontWeight: "600", color: SpaceTheme.mutedOrbit },
+  tabBarLabel: { ...Type.small, fontWeight: "600", color: SpaceTheme.mutedOrbit },
   tabBarLabelActive: { color: SpaceTheme.glowCyan },
   newSpaceButton: {
     flexDirection: "row",
     gap: 8,
     backgroundColor: SpaceTheme.supernovaPink,
     padding: 14,
-    borderRadius: 12,
+    borderRadius: Radius.medium,
     alignItems: "center",
     justifyContent: "center",
     marginBottom: 12,
   },
-  newSpaceButtonText: { color: SpaceTheme.backgroundVoid, fontWeight: "700", fontSize: 15 },
+  newSpaceButtonText: { color: SpaceTheme.backgroundVoid, fontWeight: "700", ...Type.body },
   card: {
     ...SpaceStyles.glassCard,
     flexDirection: "row",
@@ -420,7 +436,6 @@ const styles = StyleSheet.create({
     alignItems: "flex-start",
   },
   cardBody: { flex: 1, justifyContent: "center" },
-  rentCardRow: { flexDirection: "row", alignItems: "center", gap: 12 },
   cardHeader: {
     flexDirection: "row",
     justifyContent: "space-between",
@@ -448,16 +463,16 @@ const styles = StyleSheet.create({
     paddingVertical: 2,
     paddingHorizontal: 6,
   },
-  unreadBadgeText: { color: Palette.base, fontSize: 11, fontWeight: "800" },
+  unreadBadgeText: { color: Palette.base, ...Type.caption, fontWeight: "800" },
   badgeRow: { flexDirection: "row", flexWrap: "wrap", gap: 6, marginBottom: 4 },
   categoryBadge: {
     alignSelf: "flex-start",
     paddingHorizontal: 8,
     paddingVertical: 2,
     borderRadius: 6,
-    backgroundColor: "rgba(255,255,255,0.06)",
+    backgroundColor: Palette.fill,
   },
-  categoryBadgeText: { fontSize: 11, fontWeight: "600", color: SpaceTheme.mutedOrbit },
+  categoryBadgeText: { ...Type.caption, fontWeight: "600", color: SpaceTheme.mutedOrbit },
   privateBadge: {
     flexDirection: "row",
     alignItems: "center",
@@ -470,7 +485,7 @@ const styles = StyleSheet.create({
     borderWidth: 1,
     borderColor: Palette.accentBorder,
   },
-  privateBadgeText: { fontSize: 11, fontWeight: "700", color: SpaceTheme.accentGold },
+  privateBadgeText: { ...Type.caption, fontWeight: "700", color: SpaceTheme.accentGold },
   categoryFilterRow: { flexDirection: "row", flexWrap: "wrap", gap: 8, marginBottom: 12 },
   categoryChip: {
     ...SpaceStyles.glassCard,
@@ -480,18 +495,18 @@ const styles = StyleSheet.create({
     paddingVertical: 6,
     paddingHorizontal: 12,
   },
-  categoryChipActive: { borderColor: SpaceTheme.glowCyan, backgroundColor: "rgba(56,189,248,0.14)" },
-  categoryChipText: { fontSize: 12, fontWeight: "600", color: SpaceTheme.mutedOrbit },
+  categoryChipActive: { borderColor: SpaceTheme.glowCyan, backgroundColor: Palette.accentDim },
+  categoryChipText: { ...Type.caption, fontWeight: "600", color: SpaceTheme.mutedOrbit },
   categoryChipTextActive: { color: SpaceTheme.glowCyan },
   pastBadge: {
     alignSelf: "flex-start",
-    backgroundColor: "rgba(255,255,255,0.08)",
+    backgroundColor: Palette.fill,
     borderRadius: 6,
     paddingVertical: 3,
     paddingHorizontal: 8,
     marginBottom: 6,
   },
-  pastBadgeText: { color: Palette.textMuted, fontSize: 11, fontWeight: "700" },
+  pastBadgeText: { color: Palette.textMuted, ...Type.caption, fontWeight: "700" },
   details: { ...Type.small, color: Palette.textMuted, marginBottom: 6 },
   footer: { flexDirection: "row", alignItems: "center", gap: 8, marginTop: 8 },
   goingText: { ...Type.caption, color: Palette.textMuted },
@@ -501,14 +516,14 @@ const styles = StyleSheet.create({
     paddingHorizontal: 24,
   },
   emptyTitle: {
-    fontSize: 18,
+    ...Type.title,
     fontWeight: "700",
     color: SpaceTheme.starWhite,
     marginTop: 12,
     marginBottom: 6,
   },
   emptySubtitle: {
-    fontSize: 14,
+    ...Type.small,
     color: SpaceTheme.mutedOrbit,
     textAlign: "center",
     marginBottom: 20,
@@ -519,5 +534,5 @@ const styles = StyleSheet.create({
     paddingHorizontal: 24,
     borderRadius: 24,
   },
-  emptyButtonText: { color: SpaceTheme.backgroundVoid, fontWeight: "700", fontSize: 15 },
+  emptyButtonText: { color: SpaceTheme.backgroundVoid, fontWeight: "700", ...Type.body },
 });

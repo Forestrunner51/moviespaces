@@ -71,7 +71,15 @@ export default function ResetPasswordScreen() {
       const { error: updateError } = await supabase.auth.updateUser({
         password: newPassword,
       });
-      if (updateError) throw updateError;
+      if (updateError) {
+        // verifyOtp above already created a real session. If the password
+        // update then fails, tearing that session down matters: without it
+        // the user is silently signed in, still parked on this screen, and
+        // "Back to sign in" shows them a login form for an account they're
+        // already inside — with the password change they asked for not made.
+        await supabase.auth.signOut().catch(() => {});
+        throw updateError;
+      }
 
       Alert.alert("Password updated", "You're all set — you're now signed in.", [
         { text: "OK", onPress: () => router.replace("/") },

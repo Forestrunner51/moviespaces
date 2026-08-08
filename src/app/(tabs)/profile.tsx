@@ -7,6 +7,8 @@ import {
   StyleSheet,
   ActivityIndicator,
   ScrollView,
+  KeyboardAvoidingView,
+  Platform,
 } from "react-native";
 import { supabase } from "@/frontend/config/supabase";
 import { useCallback, useEffect, useState } from "react";
@@ -272,6 +274,12 @@ export default function ProfileScreen() {
 
   return (
     <Starfield>
+      {/* The only screen with text inputs that had no KAV — on an SE the
+          username field and its availability message sat under the keyboard. */}
+      <KeyboardAvoidingView
+        style={styles.flex}
+        behavior={Platform.OS === "ios" ? "padding" : undefined}
+      >
       <ScrollView
         style={styles.container}
         contentContainerStyle={styles.containerContent}
@@ -337,7 +345,9 @@ export default function ProfileScreen() {
                   <Text
                     style={[
                       styles.usernameCheckText,
-                      { color: usernameCheck.available ? Palette.positive : Palette.accent },
+                      // Danger, not accent: amber reads as "go" in this app's
+                      // language, and "that username is taken" is a blocker.
+                      { color: usernameCheck.available ? Palette.positive : Palette.danger },
                     ]}
                   >
                     {usernameCheck.available ? "✓" : "✗"} {usernameCheck.message}
@@ -449,8 +459,8 @@ export default function ProfileScreen() {
                 style={styles.spaceRow}
                 onPress={() => router.push({ pathname: "/group", params: { groupId: space.id } })}
               >
-                <Text style={styles.spaceRowTitle}>{space.filmName}</Text>
-                <Text style={styles.spaceRowSubtitle}>
+                <Text style={styles.spaceRowTitle} numberOfLines={1}>{space.filmName}</Text>
+                <Text style={styles.spaceRowSubtitle} numberOfLines={1}>
                   {space.cinemaName} • {space.showDate} at {space.showTime}
                 </Text>
               </TouchableOpacity>
@@ -473,7 +483,7 @@ export default function ProfileScreen() {
                 <Text style={styles.spaceRowTitle}>
                   {space.filmName} {space.status === "cancelled" && "(Cancelled)"}
                 </Text>
-                <Text style={styles.spaceRowSubtitle}>
+                <Text style={styles.spaceRowSubtitle} numberOfLines={1}>
                   {space.cinemaName} • {space.showDate} at {space.showTime}
                 </Text>
               </TouchableOpacity>
@@ -481,11 +491,13 @@ export default function ProfileScreen() {
           )}
         </View>
       </ScrollView>
+      </KeyboardAvoidingView>
     </Starfield>
   );
 }
 
 const styles = StyleSheet.create({
+  flex: { flex: 1 },
   container: {
     flex: 1,
   },
@@ -519,7 +531,7 @@ const styles = StyleSheet.create({
     width: 84,
     height: 84,
     borderRadius: 42,
-    backgroundColor: "rgba(255,255,255,0.08)",
+    backgroundColor: Palette.fill,
   },
   avatarPlaceholder: {
     width: 84,
@@ -551,8 +563,8 @@ const styles = StyleSheet.create({
     fontWeight: "700",
     color: Palette.text,
     borderWidth: 1,
-    borderColor: "rgba(255,255,255,0.15)",
-    backgroundColor: "rgba(255,255,255,0.05)",
+    borderColor: Palette.borderStrong,
+    backgroundColor: Palette.fill,
     borderRadius: 8,
     paddingHorizontal: 12,
     paddingVertical: 8,

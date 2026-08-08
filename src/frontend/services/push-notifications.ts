@@ -25,9 +25,13 @@ export async function registerForPushNotifications(): Promise<void> {
   // entitlement is possible without a real device), so don't even try —
   // avoids a guaranteed-to-fail attempt and its console warning every launch.
   if (!Device.isDevice) return;
-  if (!(await areNotificationsEnabled())) return;
 
   try {
+    // Inside the try on purpose: this AsyncStorage read was the one await
+    // outside it, so a storage failure at launch became an unhandled
+    // rejection on every session instead of the silent no-op promised above.
+    if (!(await areNotificationsEnabled())) return;
+
     if (Platform.OS === "android") {
       await Notifications.setNotificationChannelAsync("default", {
         name: "default",

@@ -40,10 +40,13 @@ export function buildGoogleShowtimesUrl(movieTitle: string, location?: string | 
 // has one; otherwise falls back to a generic Fandango search for the film so
 // there's always something useful to hand off to.
 export function buildTicketUrl(filmName: string, bookingUrl?: string | null): string {
-  const base =
-    bookingUrl && bookingUrl.trim()
-      ? bookingUrl.trim()
-      : `https://www.fandango.com/search?q=${encodeURIComponent(filmName)}`;
+  // bookingUrl is host-typed free text — anything that isn't a web URL
+  // (a bare domain fragment, a non-http scheme) falls back to the search
+  // rather than being handed to the browser as-is.
+  const trimmed = bookingUrl?.trim() ?? "";
+  const base = /^https?:\/\//i.test(trimmed)
+    ? trimmed
+    : `https://www.fandango.com/search?q=${encodeURIComponent(filmName)}`;
   return withAffiliateTag(base);
 }
 

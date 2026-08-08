@@ -54,6 +54,13 @@ namespace Backend.Controllers
                 ? $"{label} is too long (max {limit} characters)."
                 : null;
 
+        // BookingUrl is opened directly in members' in-app browsers, so it
+        // must be a real absolute http(s) URL — never a javascript:, file:,
+        // or custom scheme, and never a relative fragment.
+        private static bool IsWebUrl(string value) =>
+            Uri.TryCreate(value, UriKind.Absolute, out var uri)
+            && (uri.Scheme == Uri.UriSchemeHttp || uri.Scheme == Uri.UriSchemeHttps);
+
         // Returns a message for the first host-supplied field exceeding its
         // column limit, or null if everything fits. See GroupFieldLimits for
         // why the ceilings exist and why they're this generous.
@@ -70,7 +77,14 @@ namespace Backend.Controllers
             ?? CheckLength(req.HangoutNotes, GroupFieldLimits.Notes, "The notes")
             ?? CheckLength(req.BookingUrl, GroupFieldLimits.Url, "The booking link")
             ?? CheckLength(req.PosterPath, GroupFieldLimits.Url, "The poster link")
-            ?? CheckLength(req.SeasonEpisodeInfo, GroupFieldLimits.Title, "The season/episode info");
+            ?? CheckLength(req.SeasonEpisodeInfo, GroupFieldLimits.Title, "The season/episode info")
+            // These two also end up in varchar(n) columns (see the
+            // AddGroupFieldLengthLimits migration) — they were the write paths
+            // this list missed, which meant a guaranteed DbUpdateException 500.
+            ?? CheckLength(req.GooglePlaceId, 200, "The venue id")
+            ?? CheckLength(
+                req.PostActivities is { Length: > 0 } ? string.Join(",", req.PostActivities) : null,
+                500, "The activities list");
 
         // Same, for the partial-edit path. Only the fields EditGroup actually
         // writes — a null field means "don't change this", so it can't overflow.
@@ -103,11 +117,15 @@ namespace Backend.Controllers
 
         private async Task<string> GenerateUniqueSpaceCodeAsync()
         {
-            var random = Random.Shared;
+            // SECURITY: this code is the sole credential gating a private
+            // Space's join paths, so it must come from a CSPRNG — Random.Shared
+            // is a predictable stream an attacker can characterize by creating
+            // Spaces of their own and observing consecutive outputs.
             for (var attempt = 0; attempt < 10; attempt++)
             {
                 var code = new string(Enumerable.Range(0, 6)
-                    .Select(_ => SpaceCodeAlphabet[random.Next(SpaceCodeAlphabet.Length)])
+                    .Select(_ => SpaceCodeAlphabet[
+                        System.Security.Cryptography.RandomNumberGenerator.GetInt32(SpaceCodeAlphabet.Length)])
                     .ToArray());
 
                 if (!await _db.Groups.AnyAsync(g => g.SpaceCode == code)) return code;
@@ -127,9 +145,18 @@ namespace Backend.Controllers
             ?? "";
 
         [HttpPost]
+        [EnableRateLimiting("write-heavy")]
         public async Task<IActionResult> CreateGroup([FromBody] CreateGroupRequest req)
         {
             var userId = GetUserId();
+
+            // Same bounds EditGroup enforces, plus a ceiling. Without the floor,
+            // maxCapacity: 0 creates a Space that is permanently unjoinable and
+            // hidden from /open; without the ceiling, int.MaxValue disables the
+            // capacity guard the guest-join rate limit relies on as the real
+            // bound on junk-member rows per Space.
+            if (req.MaxCapacity.HasValue && (req.MaxCapacity.Value < 1 || req.MaxCapacity.Value > 5000))
+                return BadRequest(new { error = "Capacity must be between 1 and 5000." });
 
             var spaceType = req.SpaceType == "private_rental" ? "private_rental" : "public_gathering";
             // Allow-listed rather than trusting the client string verbatim —
@@ -160,6 +187,11 @@ namespace Backend.Controllers
             var tooLong = FirstFieldOverLimit(req);
             if (tooLong != null) return BadRequest(new { error = tooLong });
 
+            // Same rule UpdateBookingUrl enforces — see IsWebUrl.
+            var bookingUrl = req.BookingUrl?.Trim() ?? "";
+            if (bookingUrl.Length > 0 && !IsWebUrl(bookingUrl))
+                return BadRequest(new { error = "The booking link must be a full web address (starting with https://)." });
+
             var filmNameIsFreeform = req.FilmId == null && req.TmdbMovieId == null;
             var cleanFilmName = filmNameIsFreeform
                 ? _profanityFilter.CleanOrFallback(req.FilmName, "Group Activity")
@@ -181,7 +213,7 @@ namespace Backend.Controllers
                 FilmName = cleanFilmName,
                 ShowTime = req.ShowTime,
                 ShowDate = req.ShowDate,
-                BookingUrl = req.BookingUrl ?? "",
+                BookingUrl = bookingUrl,
                 SpaceType = spaceType,
                 TotalCostCents = spaceType == "private_rental" ? req.TotalCostCents : null,
                 MaxCapacity = req.MaxCapacity ?? 40,
@@ -670,10 +702,20 @@ namespace Backend.Controllers
         public async Task<IActionResult> SearchSpaces([FromQuery] int filmId)
         {
             var spaces = await _db.Groups
+                .AsNoTracking()
                 .Include(g => g.Members)
                 .Where(g => g.FilmId == filmId && g.Status == "pending")
+                // Same rule as GetOpenSpaces: a private Space must never
+                // surface in a browse/search feed — being listed at all leaks
+                // what IsPrivate exists to hide.
+                .Where(g => !g.IsPrivate)
                 .OrderByDescending(g => g.CreatedAt)
                 .ToListAsync();
+
+            // SpaceCode is the private-join credential elsewhere; browse feeds
+            // never need it. AsNoTracking above makes this a pure serialization
+            // redaction, not a pending entity change.
+            foreach (var space in spaces) space.SpaceCode = null;
 
             return Ok(spaces);
         }
@@ -687,6 +729,7 @@ namespace Backend.Controllers
         public async Task<IActionResult> GetOpenSpaces([FromQuery] int? filmId, [FromQuery] int? cinemaId)
         {
             var query = _db.Groups
+                .AsNoTracking()
                 .Include(g => g.Members)
                 .Where(g => g.Status == "pending")
                 // IsPrivate is independent of SpaceType — either a real
@@ -727,6 +770,12 @@ namespace Backend.Controllers
                 .OrderBy(g => g.ScreeningTime)
                 .Take(50)
                 .ToListAsync();
+
+            // This endpoint is anonymous — even though only non-private Spaces
+            // are listed, their join codes are share credentials the host hands
+            // out, not something the open feed should broadcast. AsNoTracking
+            // above makes this a pure serialization redaction.
+            foreach (var space in spaces) space.SpaceCode = null;
 
             return Ok(spaces);
         }
@@ -842,6 +891,28 @@ namespace Backend.Controllers
             // from the same person and create a duplicate member row.
             var cleanName = _profanityFilter.CleanOrFallback(req.Name, "A Movie Fan");
 
+            // Access gates run BEFORE the returning-guest branch below. That
+            // branch writes (it renames the matched member) and returns early,
+            // so with the gates after it, a caller presenting a guest token
+            // could update a name in a private or cancelled Space without ever
+            // passing the SpaceCode check. The invite page always resends the
+            // code, so a legitimate returning guest still clears this.
+            //
+            // Same SpaceCode enforcement as the authenticated join path — web
+            // joiners have no UserId to exempt as "the host" (a host always
+            // joins through the authenticated app, never this endpoint), so
+            // this check applies unconditionally for a private Space here.
+            if (group.IsPrivate)
+            {
+                var providedCode = (req.SpaceCode ?? "").Trim();
+                if (!string.Equals(providedCode, group.SpaceCode, StringComparison.OrdinalIgnoreCase))
+                    return StatusCode(403, new { error = "This Space is private — enter it using the invite code." });
+            }
+
+            // Same capacity/status enforcement as the authenticated join path.
+            if (group.Status == "cancelled")
+                return BadRequest(new { error = "This Space has been cancelled." });
+
             // De-dupe on the browser's stable guest token when it sent one.
             // Name-based de-duping (the previous behaviour, kept only as a
             // fallback for a client that sends no token) is genuinely wrong:
@@ -868,22 +939,9 @@ namespace Backend.Controllers
                 return Ok(new { memberId = existing.Id });
             }
 
-            // Same SpaceCode enforcement as the authenticated join path —
-            // web joiners have no UserId to exempt as "the host" (a host
-            // always joins through the authenticated app, never this
-            // endpoint), so this check applies unconditionally for a private
-            // Space here.
-            if (group.IsPrivate)
-            {
-                var providedCode = (req.SpaceCode ?? "").Trim();
-                if (!string.Equals(providedCode, group.SpaceCode, StringComparison.OrdinalIgnoreCase))
-                    return StatusCode(403, new { error = "This Space is private — enter it using the invite code." });
-            }
-
-            // Same capacity/status enforcement as the authenticated join path.
-            if (group.Status == "cancelled")
-                return BadRequest(new { error = "This Space has been cancelled." });
-
+            // Capacity is checked after the returning-guest branch on purpose:
+            // someone already in a full Space re-opening the invite page should
+            // resolve to their existing membership, not get "already full".
             var memberCount = await _db.GroupMembers.CountAsync(m => m.GroupId == id);
             if (memberCount >= group.MaxCapacity)
                 return BadRequest(new { error = "This Space is already full." });
@@ -962,8 +1020,17 @@ namespace Backend.Controllers
         [EnableRateLimiting("write-heavy")]
         public async Task<IActionResult> ReportShowtime(Guid id)
         {
-            var group = await _db.Groups.FindAsync(id);
+            var userId = GetUserId();
+            var group = await _db.Groups
+                .Include(g => g.Members)
+                .FirstOrDefaultAsync(g => g.Id == id);
             if (group == null) return NotFound();
+
+            // Members only — "flagged by N members" is the claim the UI makes,
+            // and without this gate any authenticated user could brand a
+            // stranger's Space "possibly outdated" from a handful of accounts.
+            var isMember = group.UserId == userId || group.Members.Any(m => m.UserId == userId);
+            if (!isMember) return Forbid();
 
             group.ShowtimeReportCount += 1;
             await _db.SaveChangesAsync();
@@ -1114,7 +1181,14 @@ namespace Backend.Controllers
             var tooLong = CheckLength(req.BookingUrl, GroupFieldLimits.Url, "The link");
             if (tooLong != null) return BadRequest(new { error = tooLong });
 
-            group.BookingUrl = req.BookingUrl?.Trim() ?? "";
+            // Members tap this link straight into an in-app browser, so only
+            // web URLs are storable — a javascript:/file:/custom-scheme value
+            // has no legitimate use as a ticket link. Empty clears the link.
+            var trimmedUrl = req.BookingUrl?.Trim() ?? "";
+            if (trimmedUrl.Length > 0 && !IsWebUrl(trimmedUrl))
+                return BadRequest(new { error = "The link must be a full web address (starting with https://)." });
+
+            group.BookingUrl = trimmedUrl;
             await _db.SaveChangesAsync();
 
             return Ok(new { bookingUrl = group.BookingUrl });
@@ -1143,8 +1217,9 @@ namespace Backend.Controllers
 
             if (req.MaxCapacity.HasValue)
             {
-                if (req.MaxCapacity.Value < 1)
-                    return BadRequest(new { error = "Capacity must be at least 1." });
+                // Same 1..5000 window CreateGroup enforces.
+                if (req.MaxCapacity.Value < 1 || req.MaxCapacity.Value > 5000)
+                    return BadRequest(new { error = "Capacity must be between 1 and 5000." });
                 var memberCount = await _db.GroupMembers.CountAsync(m => m.GroupId == id);
                 if (req.MaxCapacity.Value < memberCount)
                     return BadRequest(new { error = $"Capacity can't be less than the {memberCount} people already in this Space." });
@@ -1276,6 +1351,13 @@ namespace Backend.Controllers
                 .FirstOrDefaultAsync(g => g.Id == id);
             if (group == null) return NotFound();
             if (group.UserId != userId) return Forbid();
+
+            // Web guests are stored with UserId == "" — without this guard,
+            // newHostUserId: "" matches one of them and sets group.UserId to
+            // "", which no JWT subject can ever equal again: every host-only
+            // action is permanently locked out and the Space is orphaned.
+            if (string.IsNullOrWhiteSpace(req.NewHostUserId))
+                return BadRequest(new { error = "The new host must be a member with an account." });
 
             var newHost = group.Members.FirstOrDefault(m => m.UserId == req.NewHostUserId);
             if (newHost == null)

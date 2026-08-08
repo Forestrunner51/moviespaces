@@ -1,4 +1,4 @@
-import { useState } from "react";
+import { useRef, useState } from "react";
 import {
   View,
   Text,
@@ -54,16 +54,40 @@ export function FriendsPanel() {
       })
     : friends;
 
-  const handleSearch = async (text: string) => {
+  // Debounced (same 300ms idiom as profile.tsx's username check) and guarded
+  // against out-of-order responses: firing a request per keystroke meant the
+  // "an" response could land after "ann" and overwrite the right results.
+  const searchTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
+  const searchSeqRef = useRef(0);
+  const handleSearch = (text: string) => {
     setQuery(text);
+    if (searchTimerRef.current) clearTimeout(searchTimerRef.current);
+    const seq = ++searchSeqRef.current;
     if (!text.trim()) {
       setResults([]);
+      setSearching(false);
       return;
     }
     setSearching(true);
-    const found = await searchUsers(text);
-    setResults(found);
-    setSearching(false);
+    searchTimerRef.current = setTimeout(async () => {
+      const found = await searchUsers(text);
+      if (seq !== searchSeqRef.current) return; // a newer keystroke superseded this
+      setResults(found);
+      setSearching(false);
+    }, 300);
+  };
+
+  // One row's action in flight at a time — Accept/Decline/Add are async, and
+  // a double-tap on any of them used to fire the mutation twice.
+  const [busyId, setBusyId] = useState<string | null>(null);
+  const runRowAction = async (id: string, action: () => Promise<unknown>) => {
+    if (busyId) return;
+    setBusyId(id);
+    try {
+      await action();
+    } finally {
+      setBusyId(null);
+    }
   };
 
   const handleAdd = async (userId: string) => {
@@ -90,7 +114,7 @@ export function FriendsPanel() {
         onPress: async () => {
           const result = await removeFriend(friendshipId);
           if (!result.success) {
-            Alert.alert("Couldn't remove friend", result.error || "Please try again.");
+            showToast(result.error || "Couldn't remove friend. Please try again.");
           }
         },
       },
@@ -109,7 +133,7 @@ export function FriendsPanel() {
           onPress: async () => {
             const result = await blockUser(userId);
             if (!result.success) {
-              Alert.alert("Couldn't block user", result.error || "Please try again.");
+              showToast(result.error || "Couldn't block that user. Please try again.");
               return;
             }
             await removeFriend(friendshipId);
@@ -179,7 +203,13 @@ export function FriendsPanel() {
                   <Text style={styles.cancelRequestText}>Requested ✕</Text>
                 </TouchableOpacity>
               ) : (
-                <TouchableOpacity activeOpacity={0.8} style={styles.actionButton} onPress={() => handleAdd(user.id)}>
+                <TouchableOpacity
+                  activeOpacity={0.8}
+                  style={styles.actionButton}
+                  hitSlop={8}
+                  disabled={busyId === user.id}
+                  onPress={() => runRowAction(user.id, () => handleAdd(user.id))}
+                >
                   <Text style={styles.actionButtonText}>Add</Text>
                 </TouchableOpacity>
               )}
@@ -208,14 +238,18 @@ export function FriendsPanel() {
                 <TouchableOpacity
                   activeOpacity={0.8}
                   style={styles.actionButton}
-                  onPress={() => acceptFriendRequest(req.id)}
+                  hitSlop={8}
+                  disabled={busyId === req.id}
+                  onPress={() => runRowAction(req.id, () => acceptFriendRequest(req.id))}
                 >
                   <Text style={styles.actionButtonText}>Accept</Text>
                 </TouchableOpacity>
                 <TouchableOpacity
                   activeOpacity={0.8}
                   style={styles.actionButton}
-                  onPress={() => declineFriendRequest(req.id)}
+                  hitSlop={8}
+                  disabled={busyId === req.id}
+                  onPress={() => runRowAction(req.id, () => declineFriendRequest(req.id))}
                 >
                   <Text style={styles.declineButtonText}>Decline</Text>
                 </TouchableOpacity>
@@ -342,7 +376,9 @@ const styles = StyleSheet.create({
   cancelRequestText: { ...Type.small, color: Palette.textMuted, fontWeight: "600" },
   emptyText: { ...Type.small, color: Palette.textMuted, marginTop: 12 },
   requestActions: { flexDirection: "row", gap: 16, flexShrink: 0 },
-  actionButton: { flexShrink: 0 },
+  // Padding + the hitSlop at each usage site gets these text-only buttons to
+  // the 44pt minimum; bare Type.small text alone was a ~20pt target.
+  actionButton: { flexShrink: 0, paddingVertical: 8, paddingHorizontal: 4 },
   actionButtonText: { ...Type.small, color: Palette.accent, fontWeight: "700" },
   declineButtonText: { ...Type.small, color: Palette.textMuted, fontWeight: "700" },
 });

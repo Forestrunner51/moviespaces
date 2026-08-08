@@ -27,8 +27,11 @@ export default function SpaceRedirectScreen() {
         // private Space hides its attendee list from anyone who can't present
         // it (see GetGroup), and an invited user arriving by link should see
         // the full picture rather than an empty member list.
+        // id comes straight off a deep link — encoded so a crafted segment
+        // ("../account", embedded "?"/"#") can't redirect this authenticated
+        // request to a different backend route or inject query params.
         const res = await authFetch(
-          `${process.env.EXPO_PUBLIC_API_URL}/api/group/${id}${
+          `${process.env.EXPO_PUBLIC_API_URL}/api/group/${encodeURIComponent(id)}${
             code ? `?code=${encodeURIComponent(code)}` : ""
           }`,
         );
@@ -51,7 +54,12 @@ export default function SpaceRedirectScreen() {
     <Starfield>
       <View style={styles.center}>
         {error ? (
-          <Text style={styles.errorText}>This Space link couldn&apos;t be found.</Text>
+          <>
+            <Text style={styles.errorText}>This Space link couldn&apos;t be found.</Text>
+            <Text style={styles.backLink} onPress={() => router.back()}>
+              Go back
+            </Text>
+          </>
         ) : (
           <ActivityIndicator size="large" color={SpaceTheme.glowCyan} />
         )}
@@ -63,4 +71,11 @@ export default function SpaceRedirectScreen() {
 const styles = StyleSheet.create({
   center: { flex: 1, alignItems: "center", justifyContent: "center", padding: 24 },
   errorText: { color: SpaceTheme.mutedOrbit, fontSize: 15, textAlign: "center" },
+  backLink: {
+    color: SpaceTheme.glowCyan,
+    fontSize: 15,
+    textAlign: "center",
+    marginTop: 16,
+    padding: 8,
+  },
 });

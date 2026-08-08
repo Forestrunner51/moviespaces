@@ -1,4 +1,4 @@
-import { useEffect, useState } from "react";
+import { useCallback, useEffect, useState } from "react";
 import {
   View,
   Text,
@@ -8,11 +8,12 @@ import {
   ActivityIndicator,
   TouchableOpacity,
   Alert,
+  RefreshControl,
 } from "react-native";
-import { router } from "expo-router";
+import { router, useFocusEffect } from "expo-router";
 import { Ionicons } from "@expo/vector-icons";
 import { Starfield } from "@/frontend/components/starfield";
-import { SpaceTheme, SpaceStyles, Palette, Type, Display } from "@/frontend/constants/theme";
+import { SpaceTheme, SpaceStyles, Palette, Type, Radius, Display } from "@/frontend/constants/theme";
 import { AvatarStack } from "@/frontend/components/avatar";
 import { useProfiles } from "@/frontend/hooks/use-profiles";
 import { formatEventDate } from "@/frontend/utils/event-date";
@@ -23,6 +24,7 @@ import { distanceMiles } from "@/frontend/utils/distance";
 import { MoviePoster } from "@/frontend/components/movie-poster";
 import { EVENT_CATEGORIES, eventCategoryOf, type EventCategory } from "@/frontend/constants/event-categories";
 import { reportContent } from "@/frontend/services/moderation";
+import { useToast } from "@/frontend/components/toast";
 
 // Matches the Group shape returned by GET /api/group/open
 interface OpenSpace {
@@ -111,6 +113,7 @@ const EVENT_CATEGORY_OPTIONS: {
 ];
 
 export default function ExploreScreen() {
+  const { showToast } = useToast();
   const [openSpaces, setOpenSpaces] = useState<OpenSpace[]>([]);
   const [loading, setLoading] = useState(true);
   const [deviceLocation, setDeviceLocation] = useState<Coordinates | null>(null);
@@ -127,6 +130,8 @@ export default function ExploreScreen() {
   // taking up the top of the screen — most visits just want the list.
   const [filtersOpen, setFiltersOpen] = useState(false);
 
+  const [refreshing, setRefreshing] = useState(false);
+
   const fetchOpenSpaces = async () => {
     try {
       const res = await fetch(`${process.env.EXPO_PUBLIC_API_URL}/api/group/open`);
@@ -141,10 +146,25 @@ export default function ExploreScreen() {
     }
   };
 
+  // Refetch on every tab focus, like Home and My Spaces — a mount-only fetch
+  // meant creating a Space and coming back here showed a stale feed for the
+  // rest of the session. `loading` starts true and only ever flips false, so
+  // revisits refresh silently without swapping the list for a spinner.
+  useFocusEffect(
+    useCallback(() => {
+      fetchOpenSpaces();
+    }, []),
+  );
+
   useEffect(() => {
-    fetchOpenSpaces();
     getDeviceLocation().then(setDeviceLocation);
   }, []);
+
+  const onRefresh = async () => {
+    setRefreshing(true);
+    await fetchOpenSpaces();
+    setRefreshing(false);
+  };
 
   const handleReportSpace = (spaceId: string) => {
     Alert.alert("Report this Space?", "Let us know if this listing looks wrong or inappropriate.", [
@@ -153,10 +173,15 @@ export default function ExploreScreen() {
         text: "Report",
         style: "destructive",
         onPress: async () => {
+          // The confirm above stays a blocking Alert (it's a real decision);
+          // the outcome is just information, so it's a toast like the
+          // identical flow in group-chat.
           const result = await reportContent("space", spaceId);
-          Alert.alert(
-            result.success ? "Reported" : "Couldn't report",
-            result.success ? "Thanks — our team will review this Space." : result.error || "Please try again.",
+          showToast(
+            result.success
+              ? "Thanks — our team will review this Space."
+              : result.error || "Couldn't report. Please try again.",
+            result.success ? "success" : "error",
           );
         },
       },
@@ -299,6 +324,9 @@ export default function ExploreScreen() {
         <FlatList
           data={filteredSpaces}
           keyExtractor={(item) => item.id}
+          refreshControl={
+            <RefreshControl refreshing={refreshing} onRefresh={onRefresh} tintColor={Palette.accent} />
+          }
           ListHeaderComponent={
             <View style={styles.filters}>
               <View style={styles.searchBox}>
@@ -369,6 +397,7 @@ export default function ExploreScreen() {
                         key={key}
                         activeOpacity={0.8}
                         style={[styles.chip, typeFilter === key && styles.chipActive]}
+                        hitSlop={{ top: 8, bottom: 8 }}
                         onPress={() => setTypeFilter(key)}
                       >
                         <Text style={[styles.chipText, typeFilter === key && styles.chipTextActive]}>
@@ -385,6 +414,7 @@ export default function ExploreScreen() {
                         key={key}
                         activeOpacity={0.8}
                         style={[styles.chip, eventCategoryFilter === key && styles.chipActive]}
+                        hitSlop={{ top: 8, bottom: 8 }}
                         onPress={() => setEventCategoryFilter(key)}
                       >
                         {!!icon && (
@@ -419,6 +449,7 @@ export default function ExploreScreen() {
                         key={key}
                         activeOpacity={0.8}
                         style={[styles.chip, priceFilter === key && styles.chipActive]}
+                        hitSlop={{ top: 8, bottom: 8 }}
                         onPress={() => setPriceFilter(key)}
                       >
                         <Text style={[styles.chipText, priceFilter === key && styles.chipTextActive]}>
@@ -442,6 +473,7 @@ export default function ExploreScreen() {
                         key={key}
                         activeOpacity={0.8}
                         style={[styles.chip, distanceFilter === key && styles.chipActive]}
+                        hitSlop={{ top: 8, bottom: 8 }}
                         onPress={() => setDistanceFilter(key)}
                       >
                         <Text
@@ -469,6 +501,7 @@ export default function ExploreScreen() {
                         key={chain}
                         activeOpacity={0.8}
                         style={[styles.chip, chainFilter === chain && styles.chipActive]}
+                        hitSlop={{ top: 8, bottom: 8 }}
                         onPress={() => setChainFilter(chain)}
                       >
                         <Text style={[styles.chipText, chainFilter === chain && styles.chipTextActive]}>
@@ -494,6 +527,7 @@ export default function ExploreScreen() {
                         key={a.key}
                         activeOpacity={0.8}
                         style={[styles.chip, activityFilter === a.key && styles.chipActive]}
+                        hitSlop={{ top: 8, bottom: 8 }}
                         onPress={() => setActivityFilter(a.key)}
                       >
                         <Text
@@ -600,7 +634,7 @@ const styles = StyleSheet.create({
     paddingHorizontal: 16,
   },
   title: { ...Display.heading, color: Palette.text },
-  subtitle: { fontSize: 14, color: SpaceTheme.mutedOrbit, marginBottom: 16 },
+  subtitle: { ...Type.small, color: SpaceTheme.mutedOrbit, marginBottom: 16 },
   linkRow: {
     flexDirection: "row",
     justifyContent: "center",
@@ -615,19 +649,19 @@ const styles = StyleSheet.create({
     gap: 6,
     paddingVertical: 4,
   },
-  codeEntryLinkText: { color: SpaceTheme.mutedOrbit, fontSize: 13, fontWeight: "600" },
+  codeEntryLinkText: { color: SpaceTheme.mutedOrbit, ...Type.small, fontWeight: "600" },
   clubsChip: {
     flexDirection: "row",
     alignItems: "center",
     gap: 6,
     paddingVertical: 6,
     paddingHorizontal: 12,
-    borderRadius: 999,
+    borderRadius: Radius.pill,
     borderWidth: 1,
     borderColor: Palette.accentBorder,
     backgroundColor: Palette.accentDim,
   },
-  clubsChipText: { color: SpaceTheme.accentGold, fontSize: 13, fontWeight: "700" },
+  clubsChipText: { color: SpaceTheme.accentGold, ...Type.small, fontWeight: "700" },
   filters: { marginBottom: 8 },
   searchBox: {
     ...SpaceStyles.glassCard,
@@ -640,7 +674,7 @@ const styles = StyleSheet.create({
   },
   searchInput: {
     flex: 1,
-    fontSize: 15,
+    ...Type.body,
     color: SpaceTheme.starWhite,
     padding: 0,
   },
@@ -662,7 +696,7 @@ const styles = StyleSheet.create({
     backgroundColor: SpaceTheme.glowCyan,
     borderColor: SpaceTheme.glowCyan,
   },
-  filterToggleText: { fontSize: 13, fontWeight: "600", color: SpaceTheme.mutedOrbit },
+  filterToggleText: { ...Type.small, fontWeight: "600", color: SpaceTheme.mutedOrbit },
   filterToggleTextActive: { color: SpaceTheme.backgroundVoid },
   filterDropdown: {
     ...SpaceStyles.glassCard,
@@ -670,7 +704,7 @@ const styles = StyleSheet.create({
     marginTop: 8,
   },
   filterLabel: {
-    fontSize: 13,
+    ...Type.small,
     fontWeight: "700",
     color: SpaceTheme.mutedOrbit,
     marginTop: 12,
@@ -690,11 +724,11 @@ const styles = StyleSheet.create({
     backgroundColor: SpaceTheme.glowCyan,
     borderColor: SpaceTheme.glowCyan,
   },
-  chipText: { fontSize: 13, fontWeight: "600", color: SpaceTheme.mutedOrbit },
+  chipText: { ...Type.small, fontWeight: "600", color: SpaceTheme.mutedOrbit },
   chipTextActive: { color: SpaceTheme.backgroundVoid },
   toggleChip: { marginTop: 12, alignSelf: "flex-start" },
   resultsCount: {
-    fontSize: 13,
+    ...Type.small,
     color: SpaceTheme.mutedOrbit,
   },
   spaceCard: {
@@ -707,12 +741,6 @@ const styles = StyleSheet.create({
   },
   spaceCardPoster: { marginTop: 2 },
   spaceCardBody: { flex: 1 },
-  spaceCardHeader: {
-    flexDirection: "row",
-    justifyContent: "space-between",
-    alignItems: "center",
-    marginBottom: 4,
-  },
   spaceFilmName: {
     ...Type.body,
     fontWeight: "600",
@@ -728,93 +756,17 @@ const styles = StyleSheet.create({
   // Icon-only, tucked top-right — reporting is a rare action and shouldn't
   // sit inline with the attendee count competing for the same attention.
   reportSpaceButton: { position: "absolute", top: 0, right: 0, padding: 4 },
-  typeBadge: {
-    backgroundColor: Palette.accentDim,
-    borderWidth: 1,
-    borderColor: Palette.accentBorder,
-    borderRadius: 6,
-    paddingVertical: 3,
-    paddingHorizontal: 8,
-  },
-  typeBadgePink: {
-    backgroundColor: Palette.accentDim,
-    borderColor: Palette.accentBorder,
-  },
-  typeBadgeText: { fontSize: 11, fontWeight: "700", color: SpaceTheme.starWhite },
-  categoryRow: { marginBottom: 4 },
-  categoryBadge: {
-    alignSelf: "flex-start",
-    paddingHorizontal: 8,
-    paddingVertical: 2,
-    borderRadius: 6,
-    backgroundColor: "rgba(255,255,255,0.06)",
-  },
-  categoryBadgeText: { fontSize: 11, fontWeight: "600", color: SpaceTheme.mutedOrbit },
   spaceDetails: { ...Type.small, color: Palette.textMuted },
-  manualBadge: { fontSize: 11, color: SpaceTheme.mutedOrbit, fontStyle: "italic", marginTop: 2 },
   spacePrice: { ...Type.caption, color: Palette.accent, fontWeight: "700" },
-  hangoutBadge: {
-    alignSelf: "flex-start",
-    backgroundColor: Palette.accentDim,
-    borderWidth: 1,
-    borderColor: Palette.accentBorder,
-    borderRadius: 6,
-    paddingVertical: 3,
-    paddingHorizontal: 8,
-    marginTop: 6,
-    shadowColor: SpaceTheme.supernovaPink,
-    shadowOffset: { width: 0, height: 0 },
-    shadowOpacity: 0.5,
-    shadowRadius: 6,
-    elevation: 2,
-  },
-  hangoutBadgeText: { fontSize: 11, fontWeight: "700", color: SpaceTheme.supernovaPink },
-  afterRow: { flexDirection: "row", flexWrap: "wrap", gap: 6, marginTop: 6 },
-  afterBadge: {
-    backgroundColor: Palette.accentDim,
-    borderWidth: 1,
-    borderColor: Palette.accentBorder,
-    borderRadius: 6,
-    paddingVertical: 3,
-    paddingHorizontal: 8,
-  },
-  afterBadgeText: { fontSize: 11, fontWeight: "600", color: SpaceTheme.supernovaPink },
-  spaceFooter: {
-    flexDirection: "row",
-    justifyContent: "space-between",
-    marginTop: 8,
-  },
   spaceMembers: { ...Type.caption, color: Palette.textMuted, flex: 1 },
-  spaceHost: { fontSize: 11, color: SpaceTheme.mutedOrbit, maxWidth: 120 },
-  reportSpaceLink: { fontSize: 11, color: SpaceTheme.mutedOrbit },
-  empty: { textAlign: "center", color: SpaceTheme.mutedOrbit, marginTop: 40, fontSize: 16 },
+  empty: { textAlign: "center", color: SpaceTheme.mutedOrbit, marginTop: 40, ...Type.body },
   wideRadiusNotice: {
-    fontSize: 12,
+    ...Type.caption,
     color: SpaceTheme.supernovaPink,
     marginTop: 4,
     marginBottom: 4,
     fontStyle: "italic",
   },
-  statusRow: { flexDirection: "row", flexWrap: "wrap", gap: 6, marginTop: 6 },
-  statusBadge: {
-    backgroundColor: Palette.accentDim,
-    borderWidth: 1,
-    borderColor: Palette.accentBorder,
-    borderRadius: 6,
-    paddingVertical: 3,
-    paddingHorizontal: 8,
-  },
-  statusBadgeHot: {
-    backgroundColor: Palette.accentDim,
-    borderColor: Palette.accentBorder,
-  },
-  statusBadgeHotText: { color: SpaceTheme.accentGold },
-  statusBadgeText: { fontSize: 11, fontWeight: "700", color: SpaceTheme.starWhite },
-  statusBadgeFree: {
-    backgroundColor: Palette.positiveDim,
-    borderColor: Palette.positiveBorder,
-  },
-  statusBadgeFreeText: { fontSize: 11, fontWeight: "700", color: Palette.positive },
   ctaCard: {
     ...SpaceStyles.glassCard,
     alignItems: "center",
@@ -824,14 +776,14 @@ const styles = StyleSheet.create({
     borderColor: Palette.accentBorder,
   },
   ctaCardTitle: {
-    fontSize: 16,
+    ...Type.body,
     fontWeight: "700",
     color: SpaceTheme.starWhite,
     marginBottom: 4,
     textAlign: "center",
   },
   ctaCardSubtitle: {
-    fontSize: 13,
+    ...Type.small,
     color: SpaceTheme.mutedOrbit,
     textAlign: "center",
     marginBottom: 14,
@@ -842,5 +794,5 @@ const styles = StyleSheet.create({
     paddingHorizontal: 20,
     borderRadius: 24,
   },
-  ctaCardButtonText: { color: SpaceTheme.backgroundVoid, fontWeight: "700", fontSize: 14 },
+  ctaCardButtonText: { color: SpaceTheme.backgroundVoid, fontWeight: "700", ...Type.small },
 });

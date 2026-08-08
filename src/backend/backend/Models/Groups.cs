@@ -3,6 +3,7 @@ using System.Collections.Generic;
 using System.ComponentModel.DataAnnotations;
 // 1. Add this namespace so the [Column] attribute works
 using System.ComponentModel.DataAnnotations.Schema;
+using System.Text.Json.Serialization;
 
 namespace Backend.Models
 {
@@ -241,6 +242,13 @@ namespace Backend.Models
         // collapsed into one membership (the second got the first's memberId and
         // never actually joined), while one guest typing "alex" then "Alex Smith"
         // created two rows. Null for app members, who key on UserId instead.
+        //
+        // SECURITY: never serialized. This is the bearer credential JoinGroupWeb
+        // de-dupes (and renames) a guest membership with, and Group.Members is
+        // returned whole by several endpoints — including the anonymous
+        // /api/group/open feed. Serializing it handed every browser guest's
+        // token to anyone who could read a member list.
+        [JsonIgnore]
         [MaxLength(200)]
         public string? GuestToken { get; set; }
 

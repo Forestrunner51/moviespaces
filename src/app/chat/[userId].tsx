@@ -72,7 +72,15 @@ export default function ChatScreen() {
 
   return (
     <Starfield>
-      <View style={styles.container}>
+      {/* The KAV wraps the whole screen, like group-chat/[id].tsx — wrapping
+          only the input row pushed the row up but left the FlatList at full
+          height behind it, so the newest messages stayed hidden under the
+          keyboard. */}
+      <KeyboardAvoidingView
+        style={styles.container}
+        behavior={Platform.OS === "ios" ? "padding" : undefined}
+        keyboardVerticalOffset={Platform.OS === "ios" ? headerHeight : 0}
+      >
         <Stack.Screen options={{ title: name || "Chat" }} />
         {loading && messages.length === 0 ? (
           <ActivityIndicator color={SpaceTheme.glowCyan} style={{ flex: 1 }} />
@@ -83,28 +91,26 @@ export default function ChatScreen() {
             keyExtractor={(item) => item.id}
             renderItem={renderItem}
             contentContainerStyle={styles.list}
+            ListEmptyComponent={
+              <Text style={styles.emptyText}>No messages yet — say hi.</Text>
+            }
             onContentSizeChange={() => listRef.current?.scrollToEnd({ animated: false })}
           />
         )}
-        <KeyboardAvoidingView
-          behavior={Platform.OS === "ios" ? "padding" : undefined}
-          keyboardVerticalOffset={Platform.OS === "ios" ? headerHeight : 0}
-        >
-          <View style={styles.inputRow}>
-            <TextInput
-              style={styles.input}
-              placeholder="Message..."
-              placeholderTextColor={SpaceTheme.mutedOrbit}
-              value={text}
-              onChangeText={setText}
-              multiline
-            />
-            <TouchableOpacity activeOpacity={0.8} style={styles.sendButton} onPress={handleSend}>
-              <Text style={styles.sendButtonText}>Send</Text>
-            </TouchableOpacity>
-          </View>
-        </KeyboardAvoidingView>
-      </View>
+        <View style={styles.inputRow}>
+          <TextInput
+            style={styles.input}
+            placeholder="Message..."
+            placeholderTextColor={SpaceTheme.mutedOrbit}
+            value={text}
+            onChangeText={setText}
+            multiline
+          />
+          <TouchableOpacity activeOpacity={0.8} style={styles.sendButton} onPress={handleSend}>
+            <Text style={styles.sendButtonText}>Send</Text>
+          </TouchableOpacity>
+        </View>
+      </KeyboardAvoidingView>
     </Starfield>
   );
 }
@@ -152,4 +158,10 @@ const styles = StyleSheet.create({
     paddingVertical: 10,
   },
   sendButtonText: { ...Type.small, color: Palette.base, fontWeight: "700" },
+  emptyText: {
+    ...Type.small,
+    color: Palette.textMuted,
+    textAlign: "center",
+    marginTop: 32,
+  },
 });

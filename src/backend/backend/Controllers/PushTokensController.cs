@@ -44,6 +44,11 @@ namespace Backend.Controllers
         public async Task<IActionResult> RegisterToken([FromBody] RegisterPushTokenRequest req)
         {
             if (string.IsNullOrWhiteSpace(req.Token)) return BadRequest(new { error = "Token is required." });
+            // Real Expo push tokens ("ExponentPushToken[...]") are well under
+            // 100 chars. The column is unbounded text and this token gets
+            // POSTed back to Expo on every fan-out, so without a cap any user
+            // could store a request-body-sized blob as their "token".
+            if (req.Token.Length > 512) return BadRequest(new { error = "Token is not a valid push token." });
 
             var userId = GetUserId();
             var existing = await _db.PushTokens.FirstOrDefaultAsync(t => t.UserId == userId);
