@@ -8,8 +8,19 @@ const AFFILIATE_TAG = process.env.EXPO_PUBLIC_AFFILIATE_TAG;
 
 function withAffiliateTag(url: string): string {
   if (!AFFILIATE_TAG) return url;
-  const separator = url.includes("?") ? "&" : "?";
-  return `${url}${separator}cjevent=${encodeURIComponent(AFFILIATE_TAG)}`;
+
+  // The param has to go BEFORE any fragment, not on the end of the string.
+  // Naively appending puts it inside the fragment ("...#showtimes?cjevent=X"),
+  // where it isn't a query parameter at all — the tracking silently doesn't
+  // work and the fragment itself is corrupted. That matters more now that
+  // hosts paste real Fandango showtime URLs into a Space (see the "Exact
+  // Ticket Link" field in create-space.tsx); those routinely carry fragments.
+  const hashIndex = url.indexOf("#");
+  const base = hashIndex === -1 ? url : url.slice(0, hashIndex);
+  const fragment = hashIndex === -1 ? "" : url.slice(hashIndex);
+
+  const separator = base.includes("?") ? "&" : "?";
+  return `${base}${separator}cjevent=${encodeURIComponent(AFFILIATE_TAG)}${fragment}`;
 }
 
 // Opens Google's movie-showtimes results for a film. Google auto-detects the

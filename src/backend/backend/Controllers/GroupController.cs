@@ -39,6 +39,21 @@ namespace Backend.Controllers
             _profanityFilter = profanityFilter;
         }
 
+        // Shared by every write path that persists host-supplied text, so a
+        // value over its column's limit comes back as a readable 400 instead
+        // of a DbUpdateException the client can't act on.
+        //
+        // EVERY endpoint that writes one of these columns must call this.
+        // These columns used to be unbounded `text`; once they became
+        // varchar(n) (see the AddGroupFieldLengthLimits migration), any write
+        // path without a check became a latent 500 — which is exactly what
+        // EditGroup and UpdateBookingUrl were until this was factored out of
+        // CreateGroup.
+        private static string? CheckLength(string? value, int limit, string label) =>
+            (value?.Length ?? 0) > limit
+                ? $"{label} is too long (max {limit} characters)."
+                : null;
+
         // Returns a message for the first host-supplied field exceeding its
         // column limit, or null if everything fits. See GroupFieldLimits for
         // why the ceilings exist and why they're this generous.
@@ -46,23 +61,25 @@ namespace Backend.Controllers
         // Reports one field at a time rather than collecting all of them: the
         // realistic case is a single pasted blob, and a one-line message is
         // more actionable in an alert than a list.
-        private static string? FirstFieldOverLimit(CreateGroupRequest req)
-        {
-            static string? Check(string? value, int limit, string label) =>
-                (value?.Length ?? 0) > limit
-                    ? $"{label} is too long (max {limit} characters)."
-                    : null;
+        private static string? FirstFieldOverLimit(CreateGroupRequest req) =>
+            CheckLength(req.HostName, GroupFieldLimits.Name, "Your name")
+            ?? CheckLength(req.FilmName, GroupFieldLimits.Title, "The title")
+            ?? CheckLength(req.CinemaName, GroupFieldLimits.VenueName, "The venue name")
+            ?? CheckLength(req.ShowDate, GroupFieldLimits.ShortLabel, "The date")
+            ?? CheckLength(req.ShowTime, GroupFieldLimits.ShortLabel, "The time")
+            ?? CheckLength(req.HangoutNotes, GroupFieldLimits.Notes, "The notes")
+            ?? CheckLength(req.BookingUrl, GroupFieldLimits.Url, "The booking link")
+            ?? CheckLength(req.PosterPath, GroupFieldLimits.Url, "The poster link")
+            ?? CheckLength(req.SeasonEpisodeInfo, GroupFieldLimits.Title, "The season/episode info");
 
-            return Check(req.HostName, GroupFieldLimits.Name, "Your name")
-                ?? Check(req.FilmName, GroupFieldLimits.Title, "The title")
-                ?? Check(req.CinemaName, GroupFieldLimits.VenueName, "The venue name")
-                ?? Check(req.ShowDate, GroupFieldLimits.ShortLabel, "The date")
-                ?? Check(req.ShowTime, GroupFieldLimits.ShortLabel, "The time")
-                ?? Check(req.HangoutNotes, GroupFieldLimits.Notes, "The notes")
-                ?? Check(req.BookingUrl, GroupFieldLimits.Url, "The booking link")
-                ?? Check(req.PosterPath, GroupFieldLimits.Url, "The poster link")
-                ?? Check(req.SeasonEpisodeInfo, GroupFieldLimits.Title, "The season/episode info");
-        }
+        // Same, for the partial-edit path. Only the fields EditGroup actually
+        // writes — a null field means "don't change this", so it can't overflow.
+        private static string? FirstFieldOverLimit(EditGroupRequest req) =>
+            CheckLength(req.FilmName, GroupFieldLimits.Title, "The title")
+            ?? CheckLength(req.CinemaName, GroupFieldLimits.VenueName, "The venue name")
+            ?? CheckLength(req.ShowDate, GroupFieldLimits.ShortLabel, "The date")
+            ?? CheckLength(req.ShowTime, GroupFieldLimits.ShortLabel, "The time")
+            ?? CheckLength(req.HangoutNotes, GroupFieldLimits.Notes, "The notes");
 
         // Human-readable share id, e.g. "friday-movie-night-a8f1". The random
         // suffix makes collisions negligible without a uniqueness retry loop
@@ -783,6 +800,12 @@ namespace Backend.Controllers
             if (memberCount >= group.MaxCapacity)
                 return BadRequest(new { error = "This Space is already full." });
 
+            // Same cap the anonymous JoinGroupWeb path enforces — GroupMember.Name
+            // is varchar(100), so without this an over-long name is a 500 rather
+            // than a readable error.
+            var tooLong = CheckLength(req.Name, GroupFieldLimits.Name, "Your name");
+            if (tooLong != null) return BadRequest(new { error = tooLong });
+
             var member = new GroupMember
             {
                 GroupId = id,
@@ -1088,6 +1111,9 @@ namespace Backend.Controllers
             if (group == null) return NotFound();
             if (group.UserId != userId) return Forbid();
 
+            var tooLong = CheckLength(req.BookingUrl, GroupFieldLimits.Url, "The link");
+            if (tooLong != null) return BadRequest(new { error = tooLong });
+
             group.BookingUrl = req.BookingUrl?.Trim() ?? "";
             await _db.SaveChangesAsync();
 
@@ -1126,6 +1152,9 @@ namespace Backend.Controllers
 
             if (req.TotalCostCents.HasValue && req.TotalCostCents.Value < 0)
                 return BadRequest(new { error = "Cost can't be negative." });
+
+            var tooLong = FirstFieldOverLimit(req);
+            if (tooLong != null) return BadRequest(new { error = tooLong });
 
             // A corrected showtime is exactly what ShowtimeReportCount exists to
             // prompt — resetting it here is what makes fixing the flag

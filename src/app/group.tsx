@@ -844,7 +844,11 @@ export default function GroupScreen() {
             actually uses Get Tickets. "Find Showtimes Near Me" (the search
             button during creation) is how a host finds the exact Fandango
             page to paste here — there's no showtimes API to fetch it directly. */}
-        {group.spaceType === "public_gathering" && !hasPassed && (
+        {/* The `|| isHost` guard matters: with no bookingUrl set, only the host
+            has anything to render here (the "Add" action). Without it a
+            non-host saw an empty View that still carried the row's vertical
+            margins — a strip of dead space with nothing in it. */}
+        {group.spaceType === "public_gathering" && !hasPassed && (group.bookingUrl || isHost) && (
           <View style={styles.ticketLinkRow}>
             {group.bookingUrl ? (
               <ActionButton
@@ -856,16 +860,14 @@ export default function GroupScreen() {
                 iconColor={SpaceTheme.backgroundVoid}
               />
             ) : (
-              isHost && (
-                <ActionButton
-                  icon="create-outline"
-                  label="Add Exact Ticket Link"
-                  onPress={openBookingUrlModal}
-                  style={styles.addBookingLinkButton}
-                  textStyle={styles.addBookingLinkButtonText}
-                  iconColor={SpaceTheme.glowCyan}
-                />
-              )
+              <ActionButton
+                icon="create-outline"
+                label="Add Exact Ticket Link"
+                onPress={openBookingUrlModal}
+                style={styles.addBookingLinkButton}
+                textStyle={styles.addBookingLinkButtonText}
+                iconColor={SpaceTheme.glowCyan}
+              />
             )}
           </View>
         )}
@@ -1209,6 +1211,7 @@ export default function GroupScreen() {
               placeholderTextColor={SpaceTheme.mutedOrbit}
               value={editFilmName}
               onChangeText={setEditFilmName}
+              maxLength={200}
             />
             <TextInput
               style={styles.modalInput}
@@ -1216,6 +1219,7 @@ export default function GroupScreen() {
               placeholderTextColor={SpaceTheme.mutedOrbit}
               value={editCinemaName}
               onChangeText={setEditCinemaName}
+              maxLength={250}
             />
             {/* Pickers, not free-text. These set a real timestamp, which is
                 what formatEventDate / hasPassed / the reminder service all
@@ -1378,6 +1382,7 @@ export default function GroupScreen() {
               placeholderTextColor={SpaceTheme.mutedOrbit}
               value={bookingUrlInput}
               onChangeText={setBookingUrlInput}
+              maxLength={2048}
               autoCapitalize="none"
               keyboardType="url"
             />
