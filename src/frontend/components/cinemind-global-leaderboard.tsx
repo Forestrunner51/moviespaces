@@ -10,7 +10,7 @@ import {
 } from "react-native";
 import { Ionicons } from "@expo/vector-icons";
 import { Starfield } from "@/frontend/components/starfield";
-import { SpaceTheme, SpaceStyles } from "@/frontend/constants/theme";
+import { SpaceTheme, SpaceStyles, Palette, Type, Radius, Display } from "@/frontend/constants/theme";
 import {
   fetchGlobalLeaderboard,
   formatDuration,
@@ -93,7 +93,7 @@ export function GlobalLeaderboardView({ onBack }: GlobalLeaderboardViewProps) {
           <Text style={styles.backRowText}>Back to Puzzle</Text>
         </TouchableOpacity>
 
-        <Text style={styles.title}>🧠 Today&apos;s Leaderboard</Text>
+        <Text style={styles.title}>Today&apos;s Leaderboard</Text>
         {!!data && (
           <Text style={styles.subtitle}>
             {data.playedCount} {data.playedCount === 1 ? "player" : "players"} today
@@ -123,7 +123,7 @@ export function GlobalLeaderboardView({ onBack }: GlobalLeaderboardViewProps) {
         {!error && !!data && data.leaderboard.length > 0 && (
           <View style={styles.card}>
             {data.leaderboard.map((entry) => (
-              <Row key={entry.userId} entry={entry} />
+              <Row key={entry.rank} entry={entry} />
             ))}
             {data.isTruncated && (
               <Text style={styles.truncatedNote}>
@@ -180,10 +180,10 @@ const styles = StyleSheet.create({
   // the top edge/notch area and made it unreliable to tap.
   content: { paddingTop: 60, paddingHorizontal: 16, paddingBottom: 40 },
   backRow: { flexDirection: "row", alignItems: "center", gap: 2, marginBottom: 16, paddingVertical: 6 },
-  backRowText: { fontSize: 13, color: SpaceTheme.mutedOrbit, fontWeight: "600" },
-  title: { fontSize: 22, fontWeight: "700", color: SpaceTheme.starWhite, textAlign: "center" },
+  backRowText: { ...Type.small, color: SpaceTheme.mutedOrbit, fontWeight: "600" },
+  title: { ...Type.title, fontWeight: "700", color: SpaceTheme.starWhite, textAlign: "center" },
   subtitle: {
-    fontSize: 13,
+    ...Type.small,
     color: SpaceTheme.mutedOrbit,
     textAlign: "center",
     marginTop: 4,
@@ -196,16 +196,16 @@ const styles = StyleSheet.create({
     gap: 10,
     paddingVertical: 9,
     borderTopWidth: 1,
-    borderTopColor: "rgba(255,255,255,0.06)",
+    borderTopColor: Palette.border,
   },
-  rowYou: { backgroundColor: "rgba(56,189,248,0.08)", borderRadius: 8, paddingHorizontal: 6 },
-  rank: { fontSize: 14, width: 30, color: SpaceTheme.mutedOrbit, fontWeight: "700" },
-  name: { flex: 1, fontSize: 14, color: SpaceTheme.starWhite },
+  rowYou: { backgroundColor: Palette.accentDim, borderRadius: Radius.small, paddingHorizontal: 6 },
+  rank: { ...Type.small, width: 30, color: SpaceTheme.mutedOrbit, fontWeight: "700" },
+  name: { flex: 1, ...Type.small, color: SpaceTheme.starWhite },
   nameYou: { fontWeight: "700", color: SpaceTheme.glowCyan },
-  streak: { fontSize: 12, color: SpaceTheme.accentGold },
-  time: { fontSize: 12, color: SpaceTheme.mutedOrbit, fontVariant: ["tabular-nums"] },
+  streak: { ...Type.caption, color: SpaceTheme.accentGold },
+  time: { ...Type.caption, color: SpaceTheme.mutedOrbit, fontVariant: ["tabular-nums"] },
   score: {
-    fontSize: 15,
+    ...Type.body,
     fontWeight: "700",
     color: SpaceTheme.starWhite,
     width: 40,
@@ -213,23 +213,23 @@ const styles = StyleSheet.create({
     fontVariant: ["tabular-nums"],
   },
   pinnedLabel: {
-    fontSize: 11,
+    ...Type.caption,
     color: SpaceTheme.mutedOrbit,
     textTransform: "uppercase",
     fontWeight: "700",
     marginBottom: 2,
   },
-  truncatedNote: { fontSize: 11, color: SpaceTheme.mutedOrbit, textAlign: "center", marginTop: 10 },
-  emptyTitle: { fontSize: 16, fontWeight: "700", color: SpaceTheme.starWhite, textAlign: "center" },
+  truncatedNote: { ...Type.caption, color: SpaceTheme.mutedOrbit, textAlign: "center", marginTop: 10 },
+  emptyTitle: { ...Type.body, fontWeight: "700", color: SpaceTheme.starWhite, textAlign: "center" },
   emptyText: {
-    fontSize: 13,
+    ...Type.small,
     color: SpaceTheme.mutedOrbit,
     textAlign: "center",
     marginTop: 4,
     marginBottom: 14,
   },
   errorText: {
-    fontSize: 14,
+    ...Type.small,
     color: SpaceTheme.starWhite,
     textAlign: "center",
     marginTop: 8,
@@ -241,5 +241,5 @@ const styles = StyleSheet.create({
     paddingVertical: 12,
     alignItems: "center",
   },
-  buttonText: { color: SpaceTheme.backgroundVoid, fontSize: 14, fontWeight: "700" },
+  buttonText: { color: SpaceTheme.backgroundVoid, ...Type.small, fontWeight: "700" },
 });

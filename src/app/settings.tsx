@@ -21,8 +21,13 @@ import { Starfield } from "@/frontend/components/starfield";
 import { SpaceStyles, Palette, Type, Display, Radius } from "@/frontend/constants/theme";
 import { areNotificationsEnabled, setNotificationsEnabled } from "@/frontend/services/push-notifications";
 import { useToast } from "@/frontend/components/toast";
+import { useSafeAreaInsets } from "react-native-safe-area-context";
 
 export default function SettingsScreen() {
+  // Bottom-sheet modal padding — without the inset its Cancel button sits on
+  // the home indicator. Applied inline because StyleSheet.create can't read
+  // hooks.
+  const insets = useSafeAreaInsets();
   const { showToast } = useToast();
   const [notificationsOn, setNotificationsOn] = useState(true);
   const [notifLoading, setNotifLoading] = useState(true);
@@ -197,7 +202,7 @@ export default function SettingsScreen() {
               value={notificationsOn}
               onValueChange={handleToggleNotifications}
               disabled={notifLoading || togglingNotif}
-              trackColor={{ false: "rgba(255,255,255,0.15)", true: Palette.accent }}
+              trackColor={{ false: Palette.borderStrong, true: Palette.accent }}
               thumbColor={Palette.text}
             />
           </View>
@@ -265,7 +270,7 @@ export default function SettingsScreen() {
           style={styles.modalOverlay}
           behavior={Platform.OS === "ios" ? "padding" : undefined}
         >
-          <View style={styles.modal}>
+          <View style={[styles.modal, { paddingBottom: insets.bottom + 24 }]}>
             <Text style={styles.modalTitle}>Change Password</Text>
             <TextInput
               style={styles.modalInput}
@@ -355,7 +360,9 @@ const styles = StyleSheet.create({
   },
   modalOverlay: {
     flex: 1,
-    backgroundColor: "rgba(3, 7, 18, 0.85)",
+    // Derived from Palette.base — the old value was the pre-retheme
+    // slate-950, which read visibly cool against the warm ground.
+    backgroundColor: "rgba(11, 8, 6, 0.85)",
     justifyContent: "flex-end",
   },
   modal: {

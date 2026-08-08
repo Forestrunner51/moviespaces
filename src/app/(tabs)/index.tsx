@@ -464,7 +464,10 @@ const styles = StyleSheet.create({
     marginTop: 16,
     marginBottom: 12,
   },
-  sectionLoading: { marginBottom: 16, alignItems: "flex-start" },
+  // alignSelf, not alignItems: ActivityIndicator has no children to align —
+  // the view stretched full-width and the spinner drew centred while the
+  // empty state and carousel it replaces are both left-aligned.
+  sectionLoading: { marginBottom: 16, alignSelf: "flex-start" },
   emptySection: { marginBottom: 20 },
   emptySectionText: { ...Type.small, color: Palette.textMuted, marginBottom: 8 },
   emptySectionLink: { ...Type.small, color: Palette.accent, fontWeight: "700" },

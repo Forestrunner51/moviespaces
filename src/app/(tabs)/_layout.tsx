@@ -1,6 +1,6 @@
 import { Tabs } from "expo-router";
 import { Ionicons } from "@expo/vector-icons";
-import { SpaceTheme } from "@/frontend/constants/theme";
+import { SpaceTheme, Palette } from "@/frontend/constants/theme";
 
 export default function TabsLayout() {
   return (
@@ -10,7 +10,7 @@ export default function TabsLayout() {
         tabBarInactiveTintColor: SpaceTheme.mutedOrbit,
         tabBarStyle: {
           backgroundColor: SpaceTheme.deepSpace,
-          borderTopColor: "rgba(255, 255, 255, 0.08)",
+          borderTopColor: Palette.border,
         },
       }}
     >

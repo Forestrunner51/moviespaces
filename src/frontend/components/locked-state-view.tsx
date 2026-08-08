@@ -115,7 +115,7 @@ const styles = StyleSheet.create({
     width: "100%",
   },
   statBlock: { flex: 1, alignItems: "center" },
-  statDivider: { width: 1, height: 32, backgroundColor: "rgba(255,255,255,0.1)" },
+  statDivider: { width: 1, height: 32, backgroundColor: Palette.border },
   statValue: { fontSize: 20, fontWeight: "700", color: SpaceTheme.starWhite },
   statValueMuted: { fontSize: 14, color: SpaceTheme.mutedOrbit, fontWeight: "600" },
   statLabel: {

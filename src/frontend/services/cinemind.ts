@@ -151,7 +151,9 @@ export interface CatalogMovie {
 
 export interface LeaderboardEntry {
   rank: number;
-  userId: string;
+  // Only present on the (membership-gated) Space leaderboard. The global
+  // board deliberately omits it — strangers' auth UUIDs, see GameController.
+  userId?: string;
   name: string;
   score: number;
   timeTakenMs: number;
@@ -302,7 +304,7 @@ export async function browseCatalog(mediaType: "movie" | "tv" = "movie"): Promis
 
 export async function fetchSpaceLeaderboard(spaceId: string): Promise<SpaceLeaderboard | null> {
   try {
-    const res = await authFetch(`${BASE}/spaces/${spaceId}/leaderboard`);
+    const res = await authFetch(`${BASE}/spaces/${encodeURIComponent(spaceId)}/leaderboard`);
     if (!res.ok) return null;
     return (await res.json()) as SpaceLeaderboard;
   } catch (err) {

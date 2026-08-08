@@ -136,7 +136,7 @@ export default function GroupScreen() {
       // to someone who was actually invited (see GetGroup's MembersHidden
       // gate) rather than an empty one.
       const res = await authFetch(
-        `${process.env.EXPO_PUBLIC_API_URL}/api/group/${groupId}${
+        `${process.env.EXPO_PUBLIC_API_URL}/api/group/${encodeURIComponent(groupId)}${
           code ? `?code=${encodeURIComponent(code)}` : ""
         }`,
       );
@@ -178,7 +178,7 @@ export default function GroupScreen() {
     async (path: string, options: RequestInit = {}): Promise<boolean> => {
       try {
         const res = await authFetch(
-          `${process.env.EXPO_PUBLIC_API_URL}/api/group/${groupId}${path}`,
+          `${process.env.EXPO_PUBLIC_API_URL}/api/group/${encodeURIComponent(groupId)}${path}`,
           { method: "POST", ...options },
         );
         if (!res.ok) {
@@ -230,9 +230,26 @@ export default function GroupScreen() {
     });
   };
 
+  // Every outbound link a host typed goes through this: only http(s) URLs
+  // open (bookingUrl is host-supplied free text — a non-web scheme would make
+  // openBrowserAsync reject, and until now that rejection was unhandled), and
+  // a failure surfaces as a toast instead of a silent dead tap.
+  const openExternalUrl = async (url: string) => {
+    const trimmed = (url ?? "").trim();
+    if (!/^https?:\/\//i.test(trimmed)) {
+      showToast("This link isn't a valid web address.", "error");
+      return;
+    }
+    try {
+      await WebBrowser.openBrowserAsync(trimmed);
+    } catch {
+      showToast("Couldn't open that link.", "error");
+    }
+  };
+
   const handleGetTickets = async () => {
     if (!group) return;
-    await WebBrowser.openBrowserAsync(buildTicketUrl(group.filmName, group.bookingUrl));
+    await openExternalUrl(buildTicketUrl(group.filmName, group.bookingUrl));
   };
 
   // cinemaName is often free-typed (a Home/Hosted address, "Sarah's
@@ -246,7 +263,11 @@ export default function GroupScreen() {
     const url =
       Platform.OS === "ios" ? `maps:0,0?q=${query}` : `geo:0,0?q=${query}`;
     Linking.openURL(url).catch(() => {
-      Linking.openURL(`https://www.google.com/maps/search/?api=1&query=${query}`);
+      // The web fallback can also fail (no browser handler) — swallow it
+      // rather than leave an unhandled rejection for Sentry to report.
+      Linking.openURL(`https://www.google.com/maps/search/?api=1&query=${query}`).catch(() => {
+        showToast("Couldn't open Maps on this device.", "error");
+      });
     });
   };
 
@@ -844,28 +865,30 @@ export default function GroupScreen() {
             actually uses Get Tickets. "Find Showtimes Near Me" (the search
             button during creation) is how a host finds the exact Fandango
             page to paste here — there's no showtimes API to fetch it directly. */}
-        {group.spaceType === "public_gathering" && !hasPassed && (
+        {/* The `|| isHost` guard matters: with no bookingUrl set, only the host
+            has anything to render here (the "Add" action). Without it a
+            non-host saw an empty View that still carried the row's vertical
+            margins — a strip of dead space with nothing in it. */}
+        {group.spaceType === "public_gathering" && !hasPassed && (group.bookingUrl || isHost) && (
           <View style={styles.ticketLinkRow}>
             {group.bookingUrl ? (
               <ActionButton
                 icon="link-outline"
                 label="View Exact Ticket Link"
-                onPress={() => WebBrowser.openBrowserAsync(group.bookingUrl)}
+                onPress={() => openExternalUrl(group.bookingUrl)}
                 style={styles.rentalReservationButton}
                 textStyle={styles.rentalReservationButtonText}
                 iconColor={SpaceTheme.backgroundVoid}
               />
             ) : (
-              isHost && (
-                <ActionButton
-                  icon="create-outline"
-                  label="Add Exact Ticket Link"
-                  onPress={openBookingUrlModal}
-                  style={styles.addBookingLinkButton}
-                  textStyle={styles.addBookingLinkButtonText}
-                  iconColor={SpaceTheme.glowCyan}
-                />
-              )
+              <ActionButton
+                icon="create-outline"
+                label="Add Exact Ticket Link"
+                onPress={openBookingUrlModal}
+                style={styles.addBookingLinkButton}
+                textStyle={styles.addBookingLinkButtonText}
+                iconColor={SpaceTheme.glowCyan}
+              />
             )}
           </View>
         )}
@@ -930,7 +953,7 @@ export default function GroupScreen() {
                   <ActionButton
                     icon="link-outline"
                     label="View Event / Venue Link"
-                    onPress={() => WebBrowser.openBrowserAsync(group.bookingUrl)}
+                    onPress={() => openExternalUrl(group.bookingUrl)}
                     style={styles.rentalReservationButton}
                     textStyle={styles.rentalReservationButtonText}
                     iconColor={SpaceTheme.backgroundVoid}
@@ -1209,6 +1232,7 @@ export default function GroupScreen() {
               placeholderTextColor={SpaceTheme.mutedOrbit}
               value={editFilmName}
               onChangeText={setEditFilmName}
+              maxLength={200}
             />
             <TextInput
               style={styles.modalInput}
@@ -1216,6 +1240,7 @@ export default function GroupScreen() {
               placeholderTextColor={SpaceTheme.mutedOrbit}
               value={editCinemaName}
               onChangeText={setEditCinemaName}
+              maxLength={250}
             />
             {/* Pickers, not free-text. These set a real timestamp, which is
                 what formatEventDate / hasPassed / the reminder service all
@@ -1378,6 +1403,7 @@ export default function GroupScreen() {
               placeholderTextColor={SpaceTheme.mutedOrbit}
               value={bookingUrlInput}
               onChangeText={setBookingUrlInput}
+              maxLength={2048}
               autoCapitalize="none"
               keyboardType="url"
             />
@@ -1416,7 +1442,7 @@ const styles = StyleSheet.create({
     paddingBottom: 40,
   },
   center: { flex: 1, justifyContent: "center", alignItems: "center" },
-  notFoundText: { color: SpaceTheme.mutedOrbit, fontSize: 16 },
+  notFoundText: { color: SpaceTheme.mutedOrbit, ...Type.body },
   hero: { flexDirection: "row", gap: 14, marginBottom: 20, alignItems: "flex-start" },
   editButton: { padding: 4 },
   heroInfo: { flex: 1, justifyContent: "center" },
@@ -1456,9 +1482,9 @@ const styles = StyleSheet.create({
     paddingHorizontal: 8,
     paddingVertical: 3,
     borderRadius: 6,
-    backgroundColor: "rgba(255,255,255,0.06)",
+    backgroundColor: Palette.fill,
   },
-  categoryBadgeText: { fontSize: 11, fontWeight: "600", color: SpaceTheme.mutedOrbit },
+  categoryBadgeText: { ...Type.caption, fontWeight: "600", color: SpaceTheme.mutedOrbit },
   privateBadge: {
     flexDirection: "row",
     alignItems: "center",
@@ -1471,7 +1497,7 @@ const styles = StyleSheet.create({
     borderWidth: 1,
     borderColor: Palette.accentBorder,
   },
-  privateBadgeText: { fontSize: 11, fontWeight: "700", color: SpaceTheme.accentGold },
+  privateBadgeText: { ...Type.caption, fontWeight: "700", color: SpaceTheme.accentGold },
   tvBadge: {
     flexDirection: "row",
     alignItems: "center",
@@ -1480,34 +1506,34 @@ const styles = StyleSheet.create({
     backgroundColor: Palette.accentDim,
     borderWidth: 1,
     borderColor: Palette.accentBorder,
-    borderRadius: 8,
+    borderRadius: Radius.small,
     paddingVertical: 5,
     paddingHorizontal: 10,
     marginBottom: 8,
   },
-  tvBadgeText: { color: SpaceTheme.glowCyan, fontWeight: "700", fontSize: 12 },
+  tvBadgeText: { color: SpaceTheme.glowCyan, fontWeight: "700", ...Type.caption },
   manualRow: {
     flexDirection: "row",
     justifyContent: "space-between",
     alignItems: "center",
     marginBottom: 4,
   },
-  manualBadge: { fontSize: 12, color: SpaceTheme.mutedOrbit, fontWeight: "600" },
+  manualBadge: { ...Type.caption, color: SpaceTheme.mutedOrbit, fontWeight: "600" },
   reportRow: { flexDirection: "row", alignItems: "center", gap: 4 },
-  reportLink: { fontSize: 12, color: SpaceTheme.mutedOrbit, fontWeight: "700" },
+  reportLink: { ...Type.caption, color: SpaceTheme.mutedOrbit, fontWeight: "700" },
   reportCountText: { ...Type.caption, color: Palette.danger, marginBottom: 12 },
   hangoutCapsule: {
     borderWidth: 1,
-    borderColor: "rgba(255, 255, 255, 0.08)",
+    borderColor: Palette.border,
     backgroundColor: Palette.accentDim,
-    borderRadius: 12,
+    borderRadius: Radius.medium,
     padding: 14,
     marginBottom: 16,
   },
   hangoutCapsuleHeader: { flexDirection: "row", alignItems: "center", gap: 6, marginBottom: 8 },
   hangoutCapsuleTitle: { ...Type.small, fontWeight: "700", color: Palette.accent },
   hangoutNotesText: {
-    fontSize: 13,
+    ...Type.small,
     color: SpaceTheme.starWhite,
     lineHeight: 19,
     marginTop: 8,
@@ -1517,11 +1543,11 @@ const styles = StyleSheet.create({
     backgroundColor: Palette.accentDim,
     borderWidth: 1,
     borderColor: Palette.accentBorder,
-    borderRadius: 8,
+    borderRadius: Radius.small,
     paddingVertical: 6,
     paddingHorizontal: 10,
   },
-  afterBadgeText: { fontSize: 12, fontWeight: "600", color: SpaceTheme.supernovaPink },
+  afterBadgeText: { ...Type.caption, fontWeight: "600", color: SpaceTheme.supernovaPink },
   rentalCard: {
     ...SpaceStyles.glassCard,
     borderColor: Palette.accentBorder,
@@ -1531,12 +1557,12 @@ const styles = StyleSheet.create({
   rentalCardHeader: { marginBottom: 8 },
   rentalBadge: {
     color: SpaceTheme.supernovaPink,
-    fontSize: 12,
+    ...Type.caption,
     fontWeight: "800",
     letterSpacing: 0.5,
   },
-  rentalCostText: { color: SpaceTheme.accentGold, fontSize: 20, fontWeight: "700" },
-  rentalPerPersonText: { color: SpaceTheme.mutedOrbit, fontSize: 13, marginTop: 2 },
+  rentalCostText: { color: SpaceTheme.accentGold, ...Type.title, fontWeight: "700" },
+  rentalPerPersonText: { color: SpaceTheme.mutedOrbit, ...Type.small, marginTop: 2 },
   freeBadge: {
     flexDirection: "row",
     alignItems: "center",
@@ -1550,7 +1576,7 @@ const styles = StyleSheet.create({
     paddingHorizontal: 12,
   },
   freeBadgeText: { ...Type.small, color: Palette.positive, fontWeight: "700" },
-  rentalCapacityText: { color: SpaceTheme.glowCyan, fontSize: 13, fontWeight: "600", marginTop: 8 },
+  rentalCapacityText: { color: SpaceTheme.glowCyan, ...Type.small, fontWeight: "600", marginTop: 8 },
   section: {
     ...SpaceStyles.glassCard,
     padding: 16,
@@ -1575,8 +1601,8 @@ const styles = StyleSheet.create({
   memberName: { ...Type.body, color: Palette.text },
   guestTag: { ...Type.caption, color: Palette.textFaint, marginTop: 1 },
   memberRowRight: { flexDirection: "row", alignItems: "center", gap: 12 },
-  addFriendText: { color: SpaceTheme.glowCyan, fontWeight: "700", fontSize: 13 },
-  friendRequested: { color: SpaceTheme.mutedOrbit, fontSize: 13 },
+  addFriendText: { color: SpaceTheme.glowCyan, fontWeight: "700", ...Type.small },
+  friendRequested: { color: SpaceTheme.mutedOrbit, ...Type.small },
   confirmed: { color: Palette.positive, fontWeight: "600" },
   pending: { color: Palette.textMuted, fontWeight: "600" },
   joinButton: {
@@ -1594,20 +1620,20 @@ const styles = StyleSheet.create({
   confirmButton: {
     backgroundColor: Palette.positive,
     padding: 14,
-    borderRadius: 12,
+    borderRadius: Radius.medium,
     alignItems: "center",
     marginBottom: 12,
   },
   confirmedButton: {
-    backgroundColor: "rgba(255, 255, 255, 0.06)",
+    backgroundColor: Palette.fill,
     borderWidth: 1,
-    borderColor: "rgba(255, 255, 255, 0.12)",
+    borderColor: Palette.border,
     padding: 14,
-    borderRadius: 12,
+    borderRadius: Radius.medium,
     alignItems: "center",
     marginBottom: 12,
   },
-  confirmedButtonText: { color: SpaceTheme.mutedOrbit, fontWeight: "600", fontSize: 14 },
+  confirmedButtonText: { color: SpaceTheme.mutedOrbit, fontWeight: "600", ...Type.small },
   spaceCodeRow: {
     ...SpaceStyles.glassCard,
     flexDirection: "row",
@@ -1619,10 +1645,10 @@ const styles = StyleSheet.create({
     marginBottom: 14,
     borderColor: Palette.accentBorder,
   },
-  spaceCodeLabel: { color: SpaceTheme.mutedOrbit, fontSize: 12, fontWeight: "600" },
+  spaceCodeLabel: { color: SpaceTheme.mutedOrbit, ...Type.caption, fontWeight: "600" },
   spaceCodeValue: {
     color: SpaceTheme.accentGold,
-    fontSize: 15,
+    ...Type.body,
     fontWeight: "800",
     letterSpacing: 1.5,
   },
@@ -1635,33 +1661,33 @@ const styles = StyleSheet.create({
   bookButton: {
     backgroundColor: Palette.positive,
     padding: 14,
-    borderRadius: 12,
+    borderRadius: Radius.medium,
     alignItems: "center",
   },
   unbookButton: {
-    backgroundColor: "rgba(255, 255, 255, 0.08)",
+    backgroundColor: Palette.fill,
     borderWidth: 1,
-    borderColor: "rgba(255, 255, 255, 0.15)",
+    borderColor: Palette.borderStrong,
     padding: 14,
-    borderRadius: 12,
+    borderRadius: Radius.medium,
     alignItems: "center",
   },
   // White, not the dark `buttonText` — this button sits on a dark glass
   // background, so the previous void-colored label was near-invisible.
-  unbookButtonText: { color: SpaceTheme.starWhite, fontWeight: "700", fontSize: 15 },
+  unbookButtonText: { color: SpaceTheme.starWhite, fontWeight: "700", ...Type.body },
   cancelSpaceButton: {
     alignItems: "center",
     padding: 14,
     marginTop: 12,
   },
-  cancelSpaceButtonText: { color: SpaceTheme.danger, fontWeight: "600", fontSize: 14 },
+  cancelSpaceButtonText: { color: SpaceTheme.danger, fontWeight: "600", ...Type.small },
   cancelledBanner: {
     flexDirection: "row",
     justifyContent: "center",
     backgroundColor: Palette.dangerDim,
     borderWidth: 1,
     borderColor: Palette.dangerBorder,
-    borderRadius: 12,
+    borderRadius: Radius.medium,
     padding: 12,
     marginBottom: 12,
     alignItems: "center",
@@ -1669,31 +1695,31 @@ const styles = StyleSheet.create({
   },
   cancelledBannerText: { ...Type.small, color: Palette.danger, fontWeight: "700" },
   leaveSpaceButton: {
-    backgroundColor: "rgba(255, 255, 255, 0.08)",
+    backgroundColor: Palette.fill,
     borderWidth: 1,
-    borderColor: "rgba(255, 255, 255, 0.15)",
+    borderColor: Palette.borderStrong,
     padding: 14,
-    borderRadius: 12,
+    borderRadius: Radius.medium,
     alignItems: "center",
     marginBottom: 12,
   },
-  leaveSpaceButtonText: { color: SpaceTheme.mutedOrbit, fontWeight: "600", fontSize: 14 },
-  buttonText: { color: SpaceTheme.backgroundVoid, fontWeight: "700", fontSize: 16 },
+  leaveSpaceButtonText: { color: SpaceTheme.mutedOrbit, fontWeight: "600", ...Type.small },
+  buttonText: { color: SpaceTheme.backgroundVoid, fontWeight: "700", ...Type.body },
   rentalReservationButton: {
     backgroundColor: SpaceTheme.glowCyan,
     padding: 14,
-    borderRadius: 12,
+    borderRadius: Radius.medium,
     alignItems: "center",
     marginTop: 12,
   },
   rentalReservationButtonText: {
     color: SpaceTheme.backgroundVoid,
     fontWeight: "700",
-    fontSize: 15,
+    ...Type.body,
   },
   linkDisclaimer: {
     color: SpaceTheme.mutedOrbit,
-    fontSize: 11,
+    ...Type.caption,
     lineHeight: 15,
     textAlign: "center",
     marginTop: 8,
@@ -1702,7 +1728,7 @@ const styles = StyleSheet.create({
     alignSelf: "center",
     marginTop: 10,
   },
-  rentalSecuredBadgeText: { color: Palette.positive, fontWeight: "700", fontSize: 13 },
+  rentalSecuredBadgeText: { color: Palette.positive, fontWeight: "700", ...Type.small },
   ticketLinkRow: {
     marginTop: 4,
     marginBottom: 4,
@@ -1717,7 +1743,7 @@ const styles = StyleSheet.create({
   },
   tentativeBannerText: {
     color: SpaceTheme.supernovaPink,
-    fontSize: 13,
+    ...Type.small,
     lineHeight: 18,
     fontWeight: "600",
   },
@@ -1727,10 +1753,10 @@ const styles = StyleSheet.create({
     paddingVertical: 8,
     paddingHorizontal: 16,
   },
-  addBookingLinkButtonText: { color: SpaceTheme.glowCyan, fontWeight: "700", fontSize: 14 },
+  addBookingLinkButtonText: { color: SpaceTheme.glowCyan, fontWeight: "700", ...Type.small },
   modalOverlay: {
     flex: 1,
-    backgroundColor: "rgba(3, 7, 18, 0.85)",
+    backgroundColor: "rgba(11, 8, 6, 0.85)",
     justifyContent: "flex-end",
   },
   modal: {
@@ -1742,17 +1768,17 @@ const styles = StyleSheet.create({
     borderTopLeftRadius: 20,
     borderTopRightRadius: 20,
     borderWidth: 1,
-    borderColor: "rgba(255, 255, 255, 0.08)",
+    borderColor: Palette.border,
   },
-  modalTitle: { fontSize: 20, fontWeight: "bold", color: SpaceTheme.starWhite, marginBottom: 4 },
-  modalSubtitle: { fontSize: 13, color: SpaceTheme.mutedOrbit, marginBottom: 20, lineHeight: 18 },
+  modalTitle: { ...Type.title, fontWeight: "bold", color: SpaceTheme.starWhite, marginBottom: 4 },
+  modalSubtitle: { ...Type.small, color: SpaceTheme.mutedOrbit, marginBottom: 20, lineHeight: 18 },
   modalInput: {
     borderWidth: 1,
-    borderColor: "rgba(255, 255, 255, 0.12)",
-    borderRadius: 8,
+    borderColor: Palette.border,
+    borderRadius: Radius.small,
     padding: 12,
-    fontSize: 16,
-    backgroundColor: "rgba(255, 255, 255, 0.05)",
+    ...Type.body,
+    backgroundColor: Palette.fill,
     marginBottom: 16,
     color: SpaceTheme.starWhite,
   },
@@ -1770,5 +1796,5 @@ const styles = StyleSheet.create({
   modalPickerText: { ...Type.body, color: Palette.text, flex: 1 },
   modalPickerPlaceholder: { color: Palette.textMuted },
   modalCancelButton: { alignItems: "center", padding: 12 },
-  modalCancelButtonText: { color: SpaceTheme.mutedOrbit, fontSize: 15 },
+  modalCancelButtonText: { color: SpaceTheme.mutedOrbit, ...Type.body },
 });

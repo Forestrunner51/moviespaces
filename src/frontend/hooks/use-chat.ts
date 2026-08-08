@@ -1,6 +1,7 @@
 import { useState, useEffect, useRef } from "react";
 import { supabase } from "@/frontend/config/supabase";
 import { authFetch } from "@/frontend/services/api";
+import { getBlockedUserIds } from "@/frontend/services/moderation";
 import { useForegroundPoll } from "@/frontend/hooks/use-foreground-poll";
 
 export interface Message {
@@ -11,10 +12,30 @@ export interface Message {
   created_at: string;
 }
 
+// chatTargetId arrives via a deep-linkable route param
+// (moviespaces://chat/<anything>) and is interpolated into a PostgREST .or()
+// filter, where commas/parens are syntax. RLS keeps other users' rows
+// unreadable regardless, but a crafted link shouldn't get to mangle the
+// query at all — anything that isn't a UUID is simply not a chat target.
+const UUID_RE = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i;
+
 export function useChat(chatTargetId: string) {
+  const validTargetId = UUID_RE.test(chatTargetId) ? chatTargetId : "";
   const [currentUserId, setCurrentUserId] = useState<string | null>(null);
   const [messages, setMessages] = useState<Message[]>([]);
   const [loading, setLoading] = useState(true);
+  // Same client-side moderation gate group-chat applies: messages from
+  // someone you've blocked stop rendering, including in the DM thread
+  // itself. (RLS still delivers the rows — this is the display-layer filter
+  // the App Store moderation flow expects.)
+  const blockedIdsRef = useRef<Set<string>>(new Set());
+  useEffect(() => {
+    getBlockedUserIds()
+      .then((ids) => {
+        blockedIdsRef.current = new Set(ids);
+      })
+      .catch(() => {});
+  }, []);
 
   // Get current user id
   useEffect(() => {
@@ -26,19 +47,19 @@ export function useChat(chatTargetId: string) {
   }, []);
 
   const fetchHistory = async () => {
-    if (!currentUserId || !chatTargetId) return;
+    if (!currentUserId || !validTargetId) return;
     setLoading(true);
     try {
       const { data, error } = await supabase
         .from("messages")
         .select("id, sender_id, receiver_id, content, created_at")
         .or(
-          `and(sender_id.eq.${currentUserId},receiver_id.eq.${chatTargetId}),and(sender_id.eq.${chatTargetId},receiver_id.eq.${currentUserId})`
+          `and(sender_id.eq.${currentUserId},receiver_id.eq.${validTargetId}),and(sender_id.eq.${validTargetId},receiver_id.eq.${currentUserId})`
         )
         .order("created_at", { ascending: true });
 
       if (error) throw error;
-      setMessages(data || []);
+      setMessages((data || []).filter((m) => !blockedIdsRef.current.has(m.sender_id)));
     } catch (err) {
       console.error("Error fetching message history:", err);
     } finally {
@@ -48,7 +69,7 @@ export function useChat(chatTargetId: string) {
 
   // Poll instead of using Supabase Realtime — but only while foregrounded, so
   // a DM left open in the background stops hitting Supabase every 4s.
-  useForegroundPoll(fetchHistory, 4000, Boolean(currentUserId && chatTargetId), chatTargetId);
+  useForegroundPoll(fetchHistory, 4000, Boolean(currentUserId && validTargetId), validTargetId);
 
   // Marks this DM read, and keeps it marked as new messages arrive while the
   // screen is open. Marking only on mount (the original approach, and what
@@ -63,17 +84,17 @@ export function useChat(chatTargetId: string) {
   // effect, which would have run *after* this one and immediately undone it.
   const lastMarkedRef = useRef<string | null>(null);
   const latestMessageAt = messages.length ? messages[messages.length - 1].created_at : null;
-  const markKey = latestMessageAt ? `${chatTargetId}:${latestMessageAt}` : null;
+  const markKey = latestMessageAt ? `${validTargetId}:${latestMessageAt}` : null;
 
   useEffect(() => {
-    if (!currentUserId || !chatTargetId || !markKey) return;
+    if (!currentUserId || !validTargetId || !markKey) return;
     if (lastMarkedRef.current === markKey) return;
     lastMarkedRef.current = markKey;
 
     supabase
       .from("group_message_reads")
       .upsert(
-        { user_id: currentUserId, group_type: "dm", group_id: chatTargetId, last_read_at: new Date().toISOString() },
+        { user_id: currentUserId, group_type: "dm", group_id: validTargetId, last_read_at: new Date().toISOString() },
         { onConflict: "user_id,group_type,group_id" },
       )
       .then(({ error }) => {
@@ -84,10 +105,10 @@ export function useChat(chatTargetId: string) {
           lastMarkedRef.current = null;
         }
       });
-  }, [currentUserId, chatTargetId, markKey]);
+  }, [currentUserId, validTargetId, markKey]);
 
   const notifyRecipient = async (preview: string) => {
-    if (!currentUserId || !chatTargetId) return;
+    if (!currentUserId || !validTargetId) return;
     const { data: profile } = await supabase
       .from("profiles")
       .select("display_name")
@@ -97,7 +118,7 @@ export function useChat(chatTargetId: string) {
     await authFetch(`${process.env.EXPO_PUBLIC_API_URL}/api/pushtokens/notify-dm`, {
       method: "POST",
       body: JSON.stringify({
-        recipientUserId: chatTargetId,
+        recipientUserId: validTargetId,
         senderName: profile?.display_name || "Someone",
         preview,
       }),
@@ -105,13 +126,13 @@ export function useChat(chatTargetId: string) {
   };
 
   const sendMessage = async (content: string) => {
-    if (!currentUserId || !chatTargetId || !content.trim()) return { success: false };
+    if (!currentUserId || !validTargetId || !content.trim()) return { success: false };
     try {
       const tempId = `temp_${Date.now()}`;
       const newMsg: Message = {
         id: tempId,
         sender_id: currentUserId,
-        receiver_id: chatTargetId,
+        receiver_id: validTargetId,
         content,
         created_at: new Date().toISOString(),
       };
@@ -124,7 +145,7 @@ export function useChat(chatTargetId: string) {
         .insert([
           {
             sender_id: currentUserId,
-            receiver_id: chatTargetId,
+            receiver_id: validTargetId,
             content: content.trim(),
           },
         ])

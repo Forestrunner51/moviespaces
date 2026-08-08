@@ -52,10 +52,16 @@ export function generateShareGrid({
     lines.push(`🔥 ${result.streakCount} day streak`);
   }
 
-  lines.push(`${shareBaseUrl}/cinemind-result/${shareId}`);
+  // Only append links when there's a real base URL to build them on — with
+  // EXPO_PUBLIC_API_URL unset, "/cinemind-result/<id>" is a bare relative
+  // path pasted into a chat, which reads as a broken link. The score lines
+  // above are still worth sharing on their own.
+  if (shareBaseUrl) {
+    lines.push(`${shareBaseUrl}/cinemind-result/${shareId}`);
 
-  if (spaceId) {
-    lines.push(`Join my Space: ${shareBaseUrl}/space/${spaceId}`);
+    if (spaceId) {
+      lines.push(`Join my Space: ${shareBaseUrl}/space/${spaceId}`);
+    }
   }
 
   return lines.join("\n");

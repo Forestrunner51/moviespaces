@@ -8,8 +8,19 @@ const AFFILIATE_TAG = process.env.EXPO_PUBLIC_AFFILIATE_TAG;
 
 function withAffiliateTag(url: string): string {
   if (!AFFILIATE_TAG) return url;
-  const separator = url.includes("?") ? "&" : "?";
-  return `${url}${separator}cjevent=${encodeURIComponent(AFFILIATE_TAG)}`;
+
+  // The param has to go BEFORE any fragment, not on the end of the string.
+  // Naively appending puts it inside the fragment ("...#showtimes?cjevent=X"),
+  // where it isn't a query parameter at all — the tracking silently doesn't
+  // work and the fragment itself is corrupted. That matters more now that
+  // hosts paste real Fandango showtime URLs into a Space (see the "Exact
+  // Ticket Link" field in create-space.tsx); those routinely carry fragments.
+  const hashIndex = url.indexOf("#");
+  const base = hashIndex === -1 ? url : url.slice(0, hashIndex);
+  const fragment = hashIndex === -1 ? "" : url.slice(hashIndex);
+
+  const separator = base.includes("?") ? "&" : "?";
+  return `${base}${separator}cjevent=${encodeURIComponent(AFFILIATE_TAG)}${fragment}`;
 }
 
 // Opens Google's movie-showtimes results for a film. Google auto-detects the
@@ -29,10 +40,13 @@ export function buildGoogleShowtimesUrl(movieTitle: string, location?: string | 
 // has one; otherwise falls back to a generic Fandango search for the film so
 // there's always something useful to hand off to.
 export function buildTicketUrl(filmName: string, bookingUrl?: string | null): string {
-  const base =
-    bookingUrl && bookingUrl.trim()
-      ? bookingUrl.trim()
-      : `https://www.fandango.com/search?q=${encodeURIComponent(filmName)}`;
+  // bookingUrl is host-typed free text — anything that isn't a web URL
+  // (a bare domain fragment, a non-http scheme) falls back to the search
+  // rather than being handed to the browser as-is.
+  const trimmed = bookingUrl?.trim() ?? "";
+  const base = /^https?:\/\//i.test(trimmed)
+    ? trimmed
+    : `https://www.fandango.com/search?q=${encodeURIComponent(filmName)}`;
   return withAffiliateTag(base);
 }
 

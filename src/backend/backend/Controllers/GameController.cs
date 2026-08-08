@@ -313,10 +313,15 @@ namespace Backend.Controllers
             });
         }
 
+        // Deliberately no userId here: this feeds the GLOBAL leaderboard, where
+        // the other 99 rows are strangers — handing out their Supabase auth
+        // UUIDs serves nothing (isYou is already computed server-side, and the
+        // client keys rows on rank). The Space leaderboard is different: it's
+        // membership-gated and its userIds are already visible via the member
+        // list, so it keeps them.
         private static object ToEntry(UserDailyProgress p, int rank, string callerId) => new
         {
             rank,
-            userId = p.UserId,
             name = string.IsNullOrWhiteSpace(p.DisplayName) ? "Player" : p.DisplayName,
             score = p.Score,
             timeTakenMs = p.TimeTakenMs,

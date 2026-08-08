@@ -46,12 +46,15 @@ Everything native only becomes real here: SSO, the "MovieSpaces" name, Bebas Neu
 - [x] **Pollers gated to foreground** (`use-foreground-poll.ts`) — chat/4s, Space/5s and three 15s pollers used to keep running while backgrounded, burning battery and hammering the single Render instance.
 - [x] **Backend test suite added** (`src/backend/backend.Tests`, 42 tests) — run with `npm test`, or everything at once with `npm run check`. Covers payload schema-versioning, answer redaction, and scoring.
 - [ ] **Rotate the Supabase `JwtSecret`** — it was committed in `appsettings.json` and is in git history. Currently unused by the code (auth validates asymmetrically via JWKS), so this is precautionary, but rotate it in Supabase and delete the key from the file.
-- [ ] Render backend env vars set in production: `Omdb__ApiKey` (OMDb — replaced TMDb/MoviesDatabase; double underscore so .NET maps it to `Omdb:ApiKey`), `GooglePlaces:ApiKey`, `Supabase:ServiceRoleKey`, `Supabase:Url`, `PostgresConnection`, `Sentry:Dsn` (optional)
-- [ ] **Re-run `POST /api/game/catalog/seed`** (header `x-admin-secret`) — needed to populate `surprise_me` flags for the home carousel and to pull the ~45 films added for Roulette's genre coverage. Also run `catalog/seed-tv` if the TV picker list is empty.
-- [ ] All Supabase migrations applied to the production DB (friends-only DM policy, reports/blocks, etc.)
+- [x] **`Sentry__Dsn` set on Render** (backend crash reporting live). Still confirm the rest are set: `Omdb__ApiKey`, `GooglePlaces__ApiKey`, `Supabase__ServiceRoleKey`, `Supabase__Url`, `PostgresConnection`, `CineMind__PuzzleSalt`, `CineMind__AdminSecret`. (`CineMind__AdminSecret` confirmed present — a wrong-secret request returns 401, not the 500 a blank one would.)
+- [x] **Delete the inert `Sentry__AuthToken` env var from Render** if still there — the backend never reads it; the auth token belongs in EAS secrets, not Render.
+- [x] **Catalog re-seeded** — `surprise_me` flags populated, ~45 films added for Roulette genre coverage.
+- [ ] All Supabase migrations applied to the production DB (friends-only DM policy, reports/blocks, etc.). EF migrations auto-apply on backend boot — confirm the Render deploy actually restarted.
 - [ ] Confirm the `AddGroupPosterPath` EF migration ran (poster feature) — the backend auto-migrates on boot
 - [ ] Render cold-start awareness: free tier sleeps after inactivity → first request after idle is slow. Decide if a paid/always-on instance is needed for launch, or accept the cold start
-- [ ] **Set `EXPO_PUBLIC_SENTRY_DSN` in `eas.json`'s production profile** — currently absent, and `sentry.ts` no-ops without it, so a released build reports **no client crashes at all**. Single highest-value item on this list: one env var between you and total blindness post-launch.
+- [x] **Sentry fully wired** — client DSN in `eas.json` production, backend DSN on Render, `SENTRY_AUTH_TOKEN` in EAS project secrets (verified via `eas secret:list`), `SENTRY_DISABLE_AUTO_UPLOAD=false` so production stack traces are readable rather than minified.
+- [x] **Custom SMTP via Resend** — `moviespaces.org` bought + verified (DKIM/SPF/DMARC in Cloudflare). Supabase auth email no longer uses the throttled default sender.
+- [x] **`main` merged and deployed** — was 118 commits behind; none of the recent work was live until PR #105. CORS lockdown verified live in production via curl.
 - [ ] Load-sanity: nothing here needs to scale huge, but confirm the DB and API respond under a few concurrent users
 
 ## PHASE 4 — QA: test every flow on a real device

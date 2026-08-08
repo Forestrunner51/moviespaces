@@ -1,7 +1,7 @@
 import { useEffect, useState } from "react";
 import { View, Text, StyleSheet, ActivityIndicator, TouchableOpacity } from "react-native";
 import { router } from "expo-router";
-import { SpaceTheme, SpaceStyles } from "@/frontend/constants/theme";
+import { SpaceTheme, SpaceStyles, Palette, Type, Radius, Display } from "@/frontend/constants/theme";
 import {
   fetchSpaceLeaderboard,
   formatDuration,
@@ -54,7 +54,7 @@ export function CineMindLeaderboard({ spaceId }: CineMindLeaderboardProps) {
   return (
     <View style={styles.section}>
       <View style={styles.headerRow}>
-        <Text style={styles.sectionTitle}>🧠 CineMind Today</Text>
+        <Text style={styles.sectionTitle}>CineMind Today</Text>
         <Text style={styles.playedCount}>
           {data.playedCount}/{data.memberCount} played
         </Text>
@@ -104,24 +104,24 @@ const styles = StyleSheet.create({
     justifyContent: "space-between",
     marginBottom: 10,
   },
-  sectionTitle: { fontSize: 16, fontWeight: "700", color: SpaceTheme.starWhite },
-  playedCount: { fontSize: 12, color: SpaceTheme.mutedOrbit },
+  sectionTitle: { ...Type.body, fontWeight: "700", color: SpaceTheme.starWhite },
+  playedCount: { ...Type.caption, color: SpaceTheme.mutedOrbit },
   row: {
     flexDirection: "row",
     alignItems: "center",
     gap: 10,
     paddingVertical: 8,
     borderTopWidth: 1,
-    borderTopColor: "rgba(255,255,255,0.06)",
+    borderTopColor: Palette.border,
   },
-  rowYou: { backgroundColor: "rgba(56,189,248,0.08)", borderRadius: 8, paddingHorizontal: 6 },
-  rank: { fontSize: 14, width: 26, color: SpaceTheme.mutedOrbit, fontWeight: "700" },
-  name: { flex: 1, fontSize: 14, color: SpaceTheme.starWhite },
+  rowYou: { backgroundColor: Palette.accentDim, borderRadius: Radius.small, paddingHorizontal: 6 },
+  rank: { ...Type.small, width: 26, color: SpaceTheme.mutedOrbit, fontWeight: "700" },
+  name: { flex: 1, ...Type.small, color: SpaceTheme.starWhite },
   nameYou: { fontWeight: "700", color: SpaceTheme.glowCyan },
-  streak: { fontSize: 12, color: SpaceTheme.accentGold },
-  time: { fontSize: 12, color: SpaceTheme.mutedOrbit, fontVariant: ["tabular-nums"] },
+  streak: { ...Type.caption, color: SpaceTheme.accentGold },
+  time: { ...Type.caption, color: SpaceTheme.mutedOrbit, fontVariant: ["tabular-nums"] },
   score: {
-    fontSize: 15,
+    ...Type.body,
     fontWeight: "700",
     color: SpaceTheme.starWhite,
     width: 40,
@@ -135,5 +135,5 @@ const styles = StyleSheet.create({
     alignItems: "center",
     marginTop: 12,
   },
-  playButtonText: { color: SpaceTheme.backgroundVoid, fontSize: 14, fontWeight: "700" },
+  playButtonText: { color: SpaceTheme.backgroundVoid, ...Type.small, fontWeight: "700" },
 });

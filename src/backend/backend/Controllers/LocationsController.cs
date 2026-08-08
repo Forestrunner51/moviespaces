@@ -131,13 +131,23 @@ namespace Backend.Controllers
                         ? typesEl.EnumerateArray().Select(t => t.GetString()).Where(t => t != null).ToArray()
                         : Array.Empty<string>();
 
+                    // Every property is third-party JSON — a place Google
+                    // returns without one of these members must degrade to a
+                    // partial row, not throw KeyNotFoundException and 500 the
+                    // whole search.
+                    var placeId = place.TryGetProperty("id", out var idEl) ? idEl.GetString() : null;
+                    if (placeId == null) continue;
+
                     theaters.Add(new
                     {
-                        placeId = place.GetProperty("id").GetString(),
-                        name = place.TryGetProperty("displayName", out var dn) ? dn.GetProperty("text").GetString() : "",
+                        placeId,
+                        name = place.TryGetProperty("displayName", out var dn)
+                            && dn.TryGetProperty("text", out var dnText) ? dnText.GetString() : "",
                         address = place.TryGetProperty("formattedAddress", out var addr) ? addr.GetString() : "",
-                        latitude = place.TryGetProperty("location", out var loc) ? loc.GetProperty("latitude").GetDouble() : (double?)null,
-                        longitude = place.TryGetProperty("location", out var loc2) ? loc2.GetProperty("longitude").GetDouble() : (double?)null,
+                        latitude = place.TryGetProperty("location", out var loc)
+                            && loc.TryGetProperty("latitude", out var lat) ? lat.GetDouble() : (double?)null,
+                        longitude = place.TryGetProperty("location", out var loc2)
+                            && loc2.TryGetProperty("longitude", out var lng) ? lng.GetDouble() : (double?)null,
                         types,
                     });
                 }

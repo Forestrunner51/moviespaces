@@ -156,8 +156,9 @@ export function useGroupChat(groupType: GroupChatType, groupId: string) {
 
   const sendMessage = async (content: string) => {
     if (!currentUserId || !groupId || !content.trim()) return { success: false };
+    // Declared outside the try so the catch can roll the optimistic bubble back.
+    const tempId = `temp_${Date.now()}`;
     try {
-      const tempId = `temp_${Date.now()}`;
       const newMsg: GroupMessage = {
         id: tempId,
         sender_id: currentUserId,
@@ -206,7 +207,12 @@ export function useGroupChat(groupType: GroupChatType, groupId: string) {
       return { success: true };
     } catch (err: any) {
       console.error("Error sending group message:", err);
-      fetchHistory();
+      // Remove the optimistic bubble directly. Rolling back via
+      // fetchHistory() didn't work: its merge deliberately preserves temp_
+      // messages the server doesn't have yet, so the failed send survived
+      // every subsequent poll — shown as sent on screen while the input
+      // restored the draft and a toast said it wasn't.
+      setMessages((prev) => prev.filter((m) => m.id !== tempId));
       return { success: false, error: err.message };
     }
   };

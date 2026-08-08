@@ -7,7 +7,7 @@ import {
   type ImageStyle,
 } from "react-native";
 import { Ionicons } from "@expo/vector-icons";
-import { SpaceTheme } from "@/frontend/constants/theme";
+import { SpaceTheme, Palette } from "@/frontend/constants/theme";
 
 interface MoviePosterProps {
   uri?: string | null;
@@ -61,6 +61,6 @@ export function MoviePoster({ uri, width, height, style, blurRadius, fallbackIco
 }
 
 const styles = StyleSheet.create({
-  poster: { backgroundColor: "rgba(255,255,255,0.05)" },
+  poster: { backgroundColor: Palette.fill },
   fallback: { alignItems: "center", justifyContent: "center" },
 });

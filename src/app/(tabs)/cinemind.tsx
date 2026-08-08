@@ -19,7 +19,7 @@ import { LockedStateView } from "@/frontend/components/locked-state-view";
 import { ResultDot } from "@/frontend/components/result-dot";
 import { CineMindStatsCard } from "@/frontend/components/cinemind-stats";
 import { GlobalLeaderboardView } from "@/frontend/components/cinemind-global-leaderboard";
-import { SpaceTheme, SpaceStyles, Palette } from "@/frontend/constants/theme";
+import { SpaceTheme, SpaceStyles, Palette, Type, Radius } from "@/frontend/constants/theme";
 import {
   fetchTodayPuzzle,
   fetchStats,
@@ -92,6 +92,7 @@ export default function CineMindScreen() {
   // the background would otherwise under-count the player's real time.
   const startedAt = useRef<number | null>(null);
   const submitting = useRef(false);
+  const [submittingUi, setSubmittingUi] = useState(false);
 
   const load = useCallback(async () => {
     setPhase("loading");
@@ -187,6 +188,11 @@ export default function CineMindScreen() {
     // very attempt they just made.
     if (submitting.current) return;
     submitting.current = true;
+    // State mirror of the ref, purely for feedback: the ref blocks the
+    // double-tap synchronously, but causes no re-render — so on the cold
+    // backend the button sat enabled-looking and dead for multi-second
+    // submits with nothing telling the player their tap registered.
+    setSubmittingUi(true);
 
     const timeTakenMs = startedAt.current != null ? Date.now() - startedAt.current : elapsedMs;
     try {
@@ -212,6 +218,7 @@ export default function CineMindScreen() {
       showToast(err?.message || "Couldn't submit your answers. Please try again.");
     } finally {
       submitting.current = false;
+      setSubmittingUi(false);
     }
   };
 
@@ -493,16 +500,20 @@ export default function CineMindScreen() {
   
           <TouchableOpacity
             activeOpacity={0.85}
-            style={[styles.primaryButton, !canAdvance && styles.primaryButtonDisabled]}
-            disabled={!canAdvance}
+            style={[styles.primaryButton, (!canAdvance || submittingUi) && styles.primaryButtonDisabled]}
+            disabled={!canAdvance || submittingUi}
             onPress={() => {
               if (challengeIndex < 4) setChallengeIndex(challengeIndex + 1);
               else handleSubmit();
             }}
           >
-            <Text style={styles.primaryButtonText}>
-              {challengeIndex < 4 ? "Next Challenge" : "Submit & See Score"}
-            </Text>
+            {submittingUi ? (
+              <ActivityIndicator color={SpaceTheme.backgroundVoid} />
+            ) : (
+              <Text style={styles.primaryButtonText}>
+                {challengeIndex < 4 ? "Next Challenge" : "Submit & See Score"}
+              </Text>
+            )}
           </TouchableOpacity>
 
           <Text style={styles.footnote}>One puzzle a day. No takebacks.</Text>
@@ -809,7 +820,9 @@ function MysteryChallenge({
   return (
     <View style={styles.card}>
       <Text style={styles.challengeLabel}>Challenge {challengeNumber} of 5</Text>
-      <Text style={styles.challengeTitle}>{isTv ? "📺 Mystery TV Show" : "🎬 Mystery Movie"}</Text>
+      {/* No emoji — The Connection / Chronos / Cast Deduct don't carry one,
+          and the odd title out read as decoration rather than meaning. */}
+      <Text style={styles.challengeTitle}>{isTv ? "Mystery TV Show" : "Mystery Movie"}</Text>
       <Text style={styles.challengeHint}>
         Guess the {isTv ? "show" : "film"} from the clues below. Fewer guesses, more points.
       </Text>
@@ -982,7 +995,10 @@ function ResultRow({
 
 const styles = StyleSheet.create({
   flex: { flex: 1 },
-  content: { paddingTop: 20, paddingHorizontal: 16, paddingBottom: 40 },
+  // 60, matching every other headerless Starfield tab (Home, Spaces,
+  // Explore, Profile) — at 20 the timer pill and title sat under the
+  // notch/Dynamic Island.
+  content: { paddingTop: 60, paddingHorizontal: 16, paddingBottom: 40 },
   centered: { flex: 1, alignItems: "center", justifyContent: "center", padding: 24, gap: 14 },
   header: { flexDirection: "row", justifyContent: "space-between", marginBottom: 16 },
   headerPill: {
@@ -993,9 +1009,9 @@ const styles = StyleSheet.create({
     paddingVertical: 6,
     paddingHorizontal: 12,
   },
-  headerPillText: { color: SpaceTheme.starWhite, fontSize: 13, fontWeight: "700" },
+  headerPillText: { color: SpaceTheme.starWhite, ...Type.small, fontWeight: "700" },
   puzzleNumber: {
-    fontSize: 13,
+    ...Type.small,
     color: SpaceTheme.mutedOrbit,
     textTransform: "uppercase",
     fontWeight: "700",
@@ -1006,22 +1022,22 @@ const styles = StyleSheet.create({
     width: 8,
     height: 8,
     borderRadius: 4,
-    backgroundColor: "rgba(255,255,255,0.18)",
+    backgroundColor: Palette.fillStrong,
   },
   progressDotActive: { backgroundColor: SpaceTheme.glowCyan, width: 22 },
   progressDotDone: { backgroundColor: SpaceTheme.supernovaPink },
   card: { ...SpaceStyles.glassCard, padding: 16, marginBottom: 16 },
   challengeLabel: {
-    fontSize: 11,
+    ...Type.caption,
     color: SpaceTheme.mutedOrbit,
     textTransform: "uppercase",
     fontWeight: "700",
   },
-  challengeTitle: { fontSize: 20, fontWeight: "700", color: SpaceTheme.starWhite, marginTop: 2 },
-  challengeHint: { fontSize: 13, color: SpaceTheme.mutedOrbit, marginTop: 4, marginBottom: 14, lineHeight: 18 },
+  challengeTitle: { ...Type.title, fontWeight: "700", color: SpaceTheme.starWhite, marginTop: 2 },
+  challengeHint: { ...Type.small, color: SpaceTheme.mutedOrbit, marginTop: 4, marginBottom: 14, lineHeight: 18 },
   posterRow: { flexDirection: "row", flexWrap: "wrap", gap: 10, marginBottom: 16, justifyContent: "center" },
   posterCell: { alignItems: "center", width: 72 },
-  posterTitle: { fontSize: 10, color: SpaceTheme.mutedOrbit, textAlign: "center", marginTop: 4 },
+  posterTitle: { ...Type.caption, color: SpaceTheme.mutedOrbit, textAlign: "center", marginTop: 4 },
   option: {
     ...SpaceStyles.glassCard,
     flexDirection: "row",
@@ -1030,8 +1046,8 @@ const styles = StyleSheet.create({
     padding: 14,
     marginBottom: 8,
   },
-  optionSelected: { borderColor: SpaceTheme.glowCyan, backgroundColor: "rgba(56,189,248,0.12)" },
-  optionText: { flex: 1, color: SpaceTheme.starWhite, fontSize: 15 },
+  optionSelected: { borderColor: SpaceTheme.glowCyan, backgroundColor: Palette.accentDim },
+  optionText: { flex: 1, color: SpaceTheme.starWhite, ...Type.body },
   optionTextSelected: { fontWeight: "700" },
   orderRow: {
     ...SpaceStyles.glassCard,
@@ -1048,23 +1064,23 @@ const styles = StyleSheet.create({
     borderRadius: 13,
     alignItems: "center",
     justifyContent: "center",
-    backgroundColor: "rgba(255,255,255,0.1)",
+    backgroundColor: Palette.fillStrong,
   },
   orderBadgeActive: { backgroundColor: SpaceTheme.glowCyan },
-  orderBadgeText: { color: SpaceTheme.mutedOrbit, fontSize: 12, fontWeight: "700" },
+  orderBadgeText: { color: SpaceTheme.mutedOrbit, ...Type.caption, fontWeight: "700" },
   orderBadgeTextActive: { color: SpaceTheme.backgroundVoid },
-  orderTitle: { flex: 1, color: SpaceTheme.starWhite, fontSize: 14 },
+  orderTitle: { flex: 1, color: SpaceTheme.starWhite, ...Type.small },
   primaryButton: {
     flexDirection: "row",
     alignItems: "center",
     justifyContent: "center",
     gap: 8,
     backgroundColor: SpaceTheme.glowCyan,
-    borderRadius: 12,
+    borderRadius: Radius.medium,
     paddingVertical: 15,
   },
-  primaryButtonDisabled: { backgroundColor: "rgba(255,255,255,0.14)" },
-  primaryButtonText: { color: SpaceTheme.backgroundVoid, fontSize: 16, fontWeight: "700" },
+  primaryButtonDisabled: { backgroundColor: Palette.fillStrong },
+  primaryButtonText: { color: SpaceTheme.backgroundVoid, ...Type.body, fontWeight: "700" },
   secondaryButton: {
     ...SpaceStyles.glassCard,
     flexDirection: "row",
@@ -1075,37 +1091,37 @@ const styles = StyleSheet.create({
     marginTop: 12,
     borderColor: Palette.accentBorder,
   },
-  secondaryButtonText: { color: SpaceTheme.accentGold, fontSize: 15, fontWeight: "700" },
+  secondaryButtonText: { color: SpaceTheme.accentGold, ...Type.body, fontWeight: "700" },
   countdownText: {
     textAlign: "center",
     color: SpaceTheme.mutedOrbit,
-    fontSize: 12,
+    ...Type.caption,
     marginTop: 16,
     fontVariant: ["tabular-nums"],
   },
-  footnote: { textAlign: "center", color: SpaceTheme.mutedOrbit, fontSize: 11, marginTop: 14 },
-  bigTitle: { fontSize: 15, color: SpaceTheme.mutedOrbit, textAlign: "center", fontWeight: "700" },
+  footnote: { textAlign: "center", color: SpaceTheme.mutedOrbit, ...Type.caption, marginTop: 14 },
+  bigTitle: { ...Type.body, color: SpaceTheme.mutedOrbit, textAlign: "center", fontWeight: "700" },
   scoreLine: {
-    fontSize: 46,
+    ...Type.display,
     fontWeight: "800",
     color: SpaceTheme.starWhite,
     textAlign: "center",
     marginTop: 4,
   },
-  scoreLineMuted: { fontSize: 22, color: SpaceTheme.mutedOrbit },
-  subtitle: { fontSize: 13, color: SpaceTheme.mutedOrbit, textAlign: "center", marginBottom: 20 },
+  scoreLineMuted: { ...Type.title, color: SpaceTheme.mutedOrbit },
+  subtitle: { ...Type.small, color: SpaceTheme.mutedOrbit, textAlign: "center", marginBottom: 20 },
   resultRow: { flexDirection: "row", alignItems: "center", gap: 10, paddingVertical: 10 },
   // Matches the cinemind-result web page's .dot exactly — same size ratio,
   // same two colours (applied inline by ResultDot), so the in-app board and
   // the page a friend opens from a shared link read as the same design.
-  resultDot: { width: 10, height: 10, borderRadius: 999 },
-  resultLabel: { color: SpaceTheme.starWhite, fontSize: 15, fontWeight: "600" },
-  resultAnswer: { color: SpaceTheme.mutedOrbit, fontSize: 12, marginTop: 2 },
-  resultPoints: { color: SpaceTheme.glowCyan, fontSize: 14, fontWeight: "700" },
-  errorText: { color: SpaceTheme.starWhite, fontSize: 15, textAlign: "center" },
+  resultDot: { width: 10, height: 10, borderRadius: Radius.pill },
+  resultLabel: { color: SpaceTheme.starWhite, ...Type.body, fontWeight: "600" },
+  resultAnswer: { color: SpaceTheme.mutedOrbit, ...Type.caption, marginTop: 2 },
+  resultPoints: { color: SpaceTheme.glowCyan, ...Type.small, fontWeight: "700" },
+  errorText: { color: SpaceTheme.starWhite, ...Type.body, textAlign: "center" },
   slowLoadText: {
     color: SpaceTheme.mutedOrbit,
-    fontSize: 13,
+    ...Type.small,
     textAlign: "center",
     lineHeight: 18,
   },
@@ -1117,11 +1133,11 @@ const styles = StyleSheet.create({
     paddingVertical: 10,
     paddingHorizontal: 6,
   },
-  difficultyPillActive: { borderColor: SpaceTheme.glowCyan, backgroundColor: "rgba(56,189,248,0.14)" },
-  difficultyPillLabel: { color: SpaceTheme.starWhite, fontSize: 13, fontWeight: "700" },
+  difficultyPillActive: { borderColor: SpaceTheme.glowCyan, backgroundColor: Palette.accentDim },
+  difficultyPillLabel: { color: SpaceTheme.starWhite, ...Type.small, fontWeight: "700" },
   difficultyPillBlurb: {
     color: SpaceTheme.mutedOrbit,
-    fontSize: 10,
+    ...Type.caption,
     textAlign: "center",
     marginTop: 3,
   },
@@ -1130,32 +1146,32 @@ const styles = StyleSheet.create({
   clueRow: { flexDirection: "row", marginBottom: 8, gap: 10 },
   clueLabel: {
     width: 62,
-    fontSize: 11,
+    ...Type.caption,
     color: SpaceTheme.mutedOrbit,
     textTransform: "uppercase",
     fontWeight: "700",
     paddingTop: 1,
   },
-  clueValue: { flex: 1, color: SpaceTheme.starWhite, fontSize: 14, lineHeight: 19 },
+  clueValue: { flex: 1, color: SpaceTheme.starWhite, ...Type.small, lineHeight: 19 },
   guessRow: {
     flexDirection: "row",
     alignItems: "flex-start",
     gap: 8,
     paddingVertical: 6,
     borderTopWidth: 1,
-    borderTopColor: "rgba(255,255,255,0.06)",
+    borderTopColor: Palette.border,
   },
   // flex-start on the row (see guessRow) pins this to the top so it sits
   // beside the title's first line rather than drifting to the vertical
   // center when feedback wraps to two lines — marginTop nudges it down to
   // the title text's optical center instead of its very top edge.
-  guessRowMarker: { width: 8, height: 8, borderRadius: 999, marginTop: 5 },
-  guessRowTitle: { color: SpaceTheme.starWhite, fontSize: 13, fontWeight: "600" },
-  guessRowFeedback: { color: SpaceTheme.mutedOrbit, fontSize: 12, marginTop: 1 },
+  guessRowMarker: { width: 8, height: 8, borderRadius: Radius.pill, marginTop: 5 },
+  guessRowTitle: { color: SpaceTheme.starWhite, ...Type.small, fontWeight: "600" },
+  guessRowFeedback: { color: SpaceTheme.mutedOrbit, ...Type.caption, marginTop: 1 },
   mysteryInput: {
     ...SpaceStyles.glassCard,
     color: SpaceTheme.starWhite,
-    fontSize: 15,
+    ...Type.body,
     paddingVertical: 12,
     paddingHorizontal: 14,
     marginTop: 12,
@@ -1164,20 +1180,20 @@ const styles = StyleSheet.create({
     paddingVertical: 10,
     paddingHorizontal: 14,
     borderBottomWidth: 1,
-    borderBottomColor: "rgba(255,255,255,0.06)",
+    borderBottomColor: Palette.border,
   },
-  mysteryMatchText: { color: SpaceTheme.starWhite, fontSize: 14 },
+  mysteryMatchText: { color: SpaceTheme.starWhite, ...Type.small },
   mysteryLoadingIndicator: { marginTop: 12 },
   mysteryNoMatchesText: {
     color: SpaceTheme.mutedOrbit,
-    fontSize: 12,
+    ...Type.caption,
     textAlign: "center",
     marginTop: 10,
   },
   mysteryErrorBox: { alignItems: "center", marginTop: 12 },
   mysteryErrorText: {
     color: SpaceTheme.danger,
-    fontSize: 13,
+    ...Type.small,
     textAlign: "center",
     marginBottom: 12,
   },
@@ -1187,25 +1203,25 @@ const styles = StyleSheet.create({
     paddingVertical: 10,
     paddingHorizontal: 24,
   },
-  mysteryRetryButtonText: { color: SpaceTheme.backgroundVoid, fontSize: 13, fontWeight: "700" },
+  mysteryRetryButtonText: { color: SpaceTheme.backgroundVoid, ...Type.small, fontWeight: "700" },
   // Deliberately plainer than the retry button next to it — retrying is the
   // action we want taken; skipping is the escape hatch.
   mysterySkipButton: { paddingVertical: 10, paddingHorizontal: 24 },
   mysterySkipButtonText: {
     color: SpaceTheme.mutedOrbit,
-    fontSize: 13,
+    ...Type.small,
     fontWeight: "600",
     textDecorationLine: "underline",
   },
   mysteryAttemptsText: {
     color: SpaceTheme.mutedOrbit,
-    fontSize: 11,
+    ...Type.caption,
     textAlign: "center",
     marginTop: 10,
   },
   mysteryResolvedText: {
     color: SpaceTheme.accentGold,
-    fontSize: 14,
+    ...Type.small,
     fontWeight: "700",
     textAlign: "center",
     marginTop: 12,

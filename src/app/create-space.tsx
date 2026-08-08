@@ -31,6 +31,7 @@ import { useToast } from "@/frontend/components/toast";
 import { searchMovies, searchTvShows, getNowPlaying, Movie } from "@/frontend/services/movies";
 import * as WebBrowser from "expo-web-browser";
 import { buildGoogleShowtimesUrl } from "@/frontend/services/ticket-links";
+import { useSafeAreaInsets } from "react-native-safe-area-context";
 import {
   getDeviceLocation,
   fetchNearbyTheaters,
@@ -55,9 +56,17 @@ const isOutsideBusinessHours = (d: Date) => {
   return minutes >= 2 * 60 && minutes < 10 * 60 + 30;
 };
 
-const maxBookingDate = new Date(Date.now() + 14 * 24 * 60 * 60 * 1000);
+// A function, not a module-scope constant: module scope is evaluated once at
+// bundle load, so on an app left warm for days the picker's 14-day window
+// kept shrinking relative to `minimumDate={new Date()}` until nothing was
+// selectable.
+const maxBookingDate = () => new Date(Date.now() + 14 * 24 * 60 * 60 * 1000);
 
 export default function CreateSpaceScreen() {
+  // Bottom-sheet padding for the three picker modals — without it their last
+  // control sits on the home indicator. Inline because StyleSheet.create
+  // can't read hooks.
+  const insets = useSafeAreaInsets();
   const {
     theaterName: prefillTheaterName,
     theaterPlaceId: prefillPlaceId,
@@ -945,7 +954,7 @@ export default function CreateSpaceScreen() {
               value={dateValue ?? new Date()}
               mode="date"
               minimumDate={new Date()}
-              maximumDate={maxBookingDate}
+              maximumDate={maxBookingDate()}
               display={Platform.OS === "ios" ? "spinner" : "default"}
               themeVariant="dark"
               onValueChange={onDateChange}
@@ -1312,7 +1321,7 @@ export default function CreateSpaceScreen() {
           style={styles.modalBackdrop}
           behavior={Platform.OS === "ios" ? "padding" : undefined}
         >
-          <View style={styles.modalSheet}>
+          <View style={[styles.modalSheet, { paddingBottom: insets.bottom + 16 }]}>
             <View style={styles.modalHeader}>
               <Text style={styles.modalTitle}>
                 {spaceType === "private_rental" ? "Select a Location" : "Select a Theater"}
@@ -1410,7 +1419,7 @@ export default function CreateSpaceScreen() {
           style={styles.modalBackdrop}
           behavior={Platform.OS === "ios" ? "padding" : undefined}
         >
-          <View style={styles.modalSheet}>
+          <View style={[styles.modalSheet, { paddingBottom: insets.bottom + 16 }]}>
             <View style={styles.modalHeader}>
               <Text style={styles.modalTitle}>
                 {searchingTv
@@ -1542,7 +1551,7 @@ export default function CreateSpaceScreen() {
           style={styles.modalBackdrop}
           behavior={Platform.OS === "ios" ? "padding" : undefined}
         >
-          <View style={styles.modalSheet}>
+          <View style={[styles.modalSheet, { paddingBottom: insets.bottom + 16 }]}>
             <View style={styles.modalHeader}>
               <Text style={styles.modalTitle}>Invite Friends</Text>
               <TouchableOpacity
@@ -1783,7 +1792,7 @@ const styles = StyleSheet.create({
   keyboardDoneBar: {
     backgroundColor: Palette.raised,
     borderTopWidth: 1,
-    borderTopColor: "rgba(255, 255, 255, 0.08)",
+    borderTopColor: Palette.border,
     alignItems: "flex-end",
     padding: 10,
   },
@@ -1810,7 +1819,7 @@ const styles = StyleSheet.create({
   modalRow: {
     paddingVertical: 12,
     borderBottomWidth: 1,
-    borderBottomColor: "rgba(255, 255, 255, 0.08)",
+    borderBottomColor: Palette.border,
   },
   modalRowTitle: { ...Type.small, fontWeight: "600", color: Palette.text, marginBottom: 2},
   modalRowSubtitle: { ...Type.small, color: Palette.textMuted},

@@ -31,7 +31,12 @@ export default function GroupChatScreen() {
     showDate?: string;
     seasonEpisodeInfo?: string;
   }>();
-  const { currentUserId, messages, loading, sendMessage } = useGroupChat(type, id);
+  // `type` is only supplied by group.tsx's navigation — a direct deep link
+  // (moviespaces://group-chat/<id>) leaves it undefined, which used to reach
+  // the hook as .eq("group_type", undefined): an empty history and a send
+  // that violates the DB check constraint. "group" is the only value ever
+  // written (see GroupChatType), so defaulting is always correct.
+  const { currentUserId, messages, loading, sendMessage } = useGroupChat(type ?? "group", id);
   // Header height, derived from the safe-area top inset + the standard iOS
   // nav-bar content height (44). A hardcoded offset doesn't account for the
   // top inset (which varies with notch/Dynamic Island/no-notch), so the
@@ -216,7 +221,7 @@ const styles = StyleSheet.create({
   container: { flex: 1 },
   contextBanner: {
     borderBottomWidth: 1,
-    borderBottomColor: "rgba(255, 255, 255, 0.08)",
+    borderBottomColor: Palette.border,
     backgroundColor: Palette.accentDim,
     paddingVertical: 8,
     paddingHorizontal: 16,
