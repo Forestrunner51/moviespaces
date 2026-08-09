@@ -37,6 +37,12 @@ async function afterAuthSuccess(router: ReturnType<typeof useRouter>) {
 export default function AuthScreen() {
   const { showToast } = useToast();
   const router = useRouter();
+  // Both SSO buttons ship together or not at all: App Store guideline 4.8
+  // requires Sign in with Apple wherever a third-party sign-in (Google) is
+  // offered, so hiding one and shipping the other is a rejection. Set back to
+  // true once BOTH providers are verified working on a real device.
+  const showSso = false;
+
   const [isSignUp, setIsSignUp] = useState(false);
   const [name, setName] = useState("");
   const [email, setEmail] = useState("");
@@ -165,7 +171,7 @@ export default function AuthScreen() {
           {isSignUp ? "Create a new account" : "Sign in to your account"}
         </Text>
 
-        {appleAvailable && (
+        {showSso && appleAvailable && (
           <AppleAuthentication.AppleAuthenticationButton
             buttonType={AppleAuthentication.AppleAuthenticationButtonType.CONTINUE}
             buttonStyle={AppleAuthentication.AppleAuthenticationButtonStyle.WHITE}
@@ -175,24 +181,28 @@ export default function AuthScreen() {
           />
         )}
 
-        <TouchableOpacity
-          activeOpacity={0.8}
-          style={styles.googleButton}
-          onPress={handleGoogleSignIn}
-          disabled={ssoLoading !== null || loading}
-        >
-          {ssoLoading === "google" ? (
-            <ActivityIndicator color={Palette.base} />
-          ) : (
-            <Text style={styles.googleButtonText}>Continue with Google</Text>
-          )}
-        </TouchableOpacity>
+        {showSso && (
+          <TouchableOpacity
+            activeOpacity={0.8}
+            style={styles.googleButton}
+            onPress={handleGoogleSignIn}
+            disabled={ssoLoading !== null || loading}
+          >
+            {ssoLoading === "google" ? (
+              <ActivityIndicator color={Palette.base} />
+            ) : (
+              <Text style={styles.googleButtonText}>Continue with Google</Text>
+            )}
+          </TouchableOpacity>
+        )}
 
-        <View style={styles.dividerRow}>
-          <View style={styles.dividerLine} />
-          <Text style={styles.dividerText}>OR</Text>
-          <View style={styles.dividerLine} />
-        </View>
+        {showSso && (
+          <View style={styles.dividerRow}>
+            <View style={styles.dividerLine} />
+            <Text style={styles.dividerText}>OR</Text>
+            <View style={styles.dividerLine} />
+          </View>
+        )}
 
         {isSignUp && (
           <TextInput

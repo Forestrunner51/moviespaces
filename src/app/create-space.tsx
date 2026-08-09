@@ -569,12 +569,9 @@ export default function CreateSpaceScreen() {
           showTime: showTime.trim(),
           showDate: showDate.trim(),
           screeningTime,
-          // Both space types can carry a bookingUrl now, just with different
-          // meaning (see the "Exact Ticket Link" field above and the
-          // "Event / Venue Link" field in the private_rental section below) —
-          // this used to be private_rental-only, which meant a public_gathering
-          // Space's bookingUrl was permanently empty and "Get Tickets" could
-          // never resolve to more than a generic Fandango search.
+          // private_rental only — the "Event / Venue Link" field below. A
+          // theater screening has no per-Space link: "Get Tickets" searches
+          // Fandango for the film.
           bookingUrl: bookingUrl.trim(),
           spaceType,
           totalCostCents,
@@ -637,11 +634,9 @@ export default function CreateSpaceScreen() {
                   setTheaterLat(null);
                   setTheaterLng(null);
                 }
-                // bookingUrl means something different per space type now
-                // (an exact Fandango showtime link here vs. a reservation/
-                // chip-in link for private_rental) — carrying a value typed
-                // under one meaning into a submit under the other would send
-                // the wrong kind of link out to guests.
+                // bookingUrl is private_rental's venue link — a theater
+                // screening has no use for it, so don't carry a typed value
+                // across into a Space that would ignore it.
                 setBookingUrl("");
               }}
             >
@@ -1021,33 +1016,6 @@ export default function CreateSpaceScreen() {
               <Ionicons name="search-outline" size={18} color={Palette.base} />
               <Text style={styles.showtimeButtonText}>Find Showtimes Near Me</Text>
             </TouchableOpacity>
-          )}
-
-          {/* Optional at creation — without it, the Space's "Get Tickets"
-              action falls back to a generic fandango.com search for the film
-              title alone (no theater, no showtime, no seat picker), which
-              isn't what a guest expects from "Get Tickets". A host can always
-              add this later from the Space screen, but capturing it right here
-              — right after they've just had Google's showtimes page open — is
-              the one moment they already have the exact link on their
-              clipboard. */}
-          {spaceType === "public_gathering" && (
-            <TextInput
-              style={styles.input}
-              placeholder="Exact Ticket Link (Optional)"
-              placeholderTextColor={Palette.textMuted}
-              value={bookingUrl}
-              onChangeText={setBookingUrl}
-              maxLength={2048}
-              autoCapitalize="none"
-              keyboardType="url"
-            />
-          )}
-          {spaceType === "public_gathering" && (
-            <Text style={styles.rentalHintText}>
-              Paste the exact Fandango/theater showtime page from the search above so &quot;Get
-              Tickets&quot; goes straight there instead of a generic search.
-            </Text>
           )}
 
           <TouchableOpacity
