@@ -38,17 +38,20 @@ namespace Backend.Controllers
                 });
             }
 
-            var client = _httpClientFactory.CreateClient();
-            var request = new HttpRequestMessage(
-                HttpMethod.Get,
-                "https://api.amctheatres.com/v2/movies?page-number=1&page-size=1");
-            // Sent trimmed so a stray space in the stored variable doesn't mask
-            // an otherwise-valid key — the length fields below still surface
-            // whether whitespace was present.
-            request.Headers.Add("X-AMC-Vendor-Key", key.Trim());
-
             try
             {
+                var client = _httpClientFactory.CreateClient();
+                var request = new HttpRequestMessage(
+                    HttpMethod.Get,
+                    "https://api.amctheatres.com/v2/movies?page-number=1&page-size=1");
+                // Inside the try: Headers.Add throws FormatException on an
+                // illegal header char (e.g. a key pasted with an interior
+                // newline), and this endpoint exists precisely to diagnose a
+                // mis-stored key — it must report that, not 500 on it. Trim
+                // handles surrounding whitespace; the length fields still
+                // reveal whether any was present.
+                request.Headers.Add("X-AMC-Vendor-Key", key.Trim());
+
                 var response = await client.SendAsync(request);
                 var body = await response.Content.ReadAsStringAsync();
                 var snippet = body.Length > 200 ? body.Substring(0, 200) : body;

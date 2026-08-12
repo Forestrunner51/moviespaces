@@ -4,6 +4,7 @@ import { useLocalSearchParams, router } from "expo-router";
 import { Ionicons } from "@expo/vector-icons";
 import { Starfield } from "@/frontend/components/starfield";
 import { SpaceStyles, Palette, Type, Display, Radius } from "@/frontend/constants/theme";
+import { useToast } from "@/frontend/components/toast";
 import { authFetch } from "@/frontend/services/api";
 import { completeOnboarding } from "@/frontend/services/onboarding";
 
@@ -33,6 +34,7 @@ const ICON_BY_GENRE: Record<string, keyof typeof Ionicons.glyphMap> = {
 // let someone browse Community Spaces — the genres param is optional, and an
 // empty one just shows every public club.
 export default function SpaceDiscoveryScreen() {
+  const { showToast } = useToast();
   const { genres } = useLocalSearchParams<{ genres?: string }>();
   const [spaces, setSpaces] = useState<DiscoverSpace[]>([]);
   const [loading, setLoading] = useState(true);
@@ -71,9 +73,14 @@ export default function SpaceDiscoveryScreen() {
       );
       if (res.ok) {
         setSpaces((prev) => prev.map((s) => (s.id === space.id ? { ...s, isJoined: true } : s)));
+      } else {
+        // Was silent — a first-run user tapping Join on flaky signal saw
+        // nothing happen and couldn't tell if it worked. Tell them.
+        const body = await res.json().catch(() => null);
+        showToast(body?.error || "Couldn't join that club. Please try again.");
       }
-      // A failed join here isn't fatal to the flow — the card just stays in
-      // its "Join" state and the user can retry, same as any other tap.
+    } catch {
+      showToast("Network error — please try again.");
     } finally {
       setJoiningId(null);
     }
@@ -127,9 +134,11 @@ export default function SpaceDiscoveryScreen() {
               <View style={styles.statsRow}>
                 <Text style={styles.statText}>{space.memberCount} members</Text>
                 <Text style={styles.statText}>
-                  {space.playedTodayCount > 0
-                    ? `${space.playedTodayCount} played today · avg ${space.todayAvgScore}`
-                    : "No plays yet today"}
+                  {space.playedTodayCount === 0
+                    ? "No plays yet today"
+                    : space.todayAvgScore != null
+                      ? `${space.playedTodayCount} played today · avg ${space.todayAvgScore}`
+                      : `${space.playedTodayCount} played today`}
                 </Text>
               </View>
 

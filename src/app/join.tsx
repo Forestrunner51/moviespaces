@@ -43,13 +43,19 @@ export default function JoinScreen() {
 
     (async () => {
       if (joining.current) return;
+      // A malformed deep link (moviespaces://join with no groupId) would
+      // otherwise POST to /api/group/undefined/join and fail confusingly.
+      if (!groupId) {
+        setErrorText("This invite link is missing its Space — ask the host for a fresh link or code.");
+        return;
+      }
       joining.current = true;
       try {
         const name = await resolveName();
         if (cancelled) return;
         if (name) await AsyncStorage.setItem("userName", name);
 
-        const res = await authFetch(`${process.env.EXPO_PUBLIC_API_URL}/api/group/${groupId}/join`, {
+        const res = await authFetch(`${process.env.EXPO_PUBLIC_API_URL}/api/group/${encodeURIComponent(groupId)}/join`, {
           method: "POST",
           body: JSON.stringify({ name, spaceCode: code ?? null }),
         });
@@ -80,7 +86,11 @@ export default function JoinScreen() {
           <>
             <Text style={styles.title}>Couldn&apos;t join</Text>
             <Text style={styles.subtitle}>{errorText}</Text>
-            <TouchableOpacity activeOpacity={0.8} style={styles.button} onPress={() => router.back()}>
+            <TouchableOpacity
+              activeOpacity={0.8}
+              style={styles.button}
+              onPress={() => (router.canGoBack() ? router.back() : router.replace("/"))}
+            >
               <Text style={styles.buttonText}>Go Back</Text>
             </TouchableOpacity>
           </>

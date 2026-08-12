@@ -92,9 +92,8 @@ interface Group {
 
 export default function GroupScreen() {
   const { showToast } = useToast();
-  const { groupId, hostName, code } = useLocalSearchParams<{
+  const { groupId, code } = useLocalSearchParams<{
     groupId: string;
-    hostName: string;
     // Present when arriving via join-by-code.tsx or a shared link that
     // embedded it — forwarded to /join so a private Space's join call can
     // present it. Absent for someone who found the group id some other way,
@@ -708,9 +707,15 @@ export default function GroupScreen() {
   const groupMembers = group.members ?? [];
   const allConfirmed =
     groupMembers.length > 0 && groupMembers.every((m) => m.confirmed);
-  const isHost =
-    (!!hostName && hostName === group.hostName) ||
-    (!!currentUserId && currentUserId === group.userId);
+  // Host status is decided ONLY by the server-authoritative user id, never by
+  // the hostName navigation param — that param is attacker-controllable via a
+  // crafted deep link (/group?groupId=X&hostName=<real host's name>), which
+  // would surface host-only controls (Edit, Cancel, Delete, Remove Member) to
+  // a non-owner. The backend rejects every host action for a non-owner anyway,
+  // so this was only ever cosmetic, but showing those buttons at all reads as
+  // broken. The real host still matches here: they created the Space, so
+  // group.userId is their id.
+  const isHost = !!currentUserId && currentUserId === group.userId;
   const confirmedCount = groupMembers.filter((m) => m.confirmed).length;
   const isMember =
     !!currentUserId && groupMembers.some((m) => m.userId === currentUserId);

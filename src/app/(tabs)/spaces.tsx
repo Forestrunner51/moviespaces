@@ -64,7 +64,7 @@ function SpaceCard({
   unreadCount: number;
   past: boolean;
 }) {
-  const profiles = useProfiles(item.members.map((m) => m.userId));
+  const profiles = useProfiles((item.members ?? []).map((m) => m.userId));
   // Relative labels ("Tonight", "In 3 days") read the real current time.
   const eventDate = formatEventDate(item.screeningTime, item.showDate, item.showTime);
 
@@ -130,7 +130,7 @@ function SpaceCard({
             people is a gathering — which is the whole product. */}
         <View style={styles.footer}>
           <AvatarStack
-            people={item.members.map((m) => ({
+            people={(item.members ?? []).map((m) => ({
               userId: m.userId,
               name: m.name,
               avatarUrl: profiles.get(m.userId)?.avatarUrl,
@@ -138,7 +138,7 @@ function SpaceCard({
             size={24}
           />
           <Text style={styles.goingText}>
-            {item.members.length} going
+            {(item.members ?? []).length} going
             {item.status === "booked" ? " · Booked" : ""}
           </Text>
         </View>
