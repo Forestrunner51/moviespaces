@@ -24,19 +24,22 @@ namespace Backend.Controllers
         private readonly CineMindCatalogService _catalog;
         private readonly IConfiguration _configuration;
         private readonly ILogger<GameController> _logger;
+        private readonly IProfanityFilterService _profanityFilter;
 
         public GameController(
             AppDbContext db,
             IDailyPuzzleService puzzles,
             CineMindCatalogService catalog,
             IConfiguration configuration,
-            ILogger<GameController> logger)
+            ILogger<GameController> logger,
+            IProfanityFilterService profanityFilter)
         {
             _db = db;
             _puzzles = puzzles;
             _catalog = catalog;
             _configuration = configuration;
             _logger = logger;
+            _profanityFilter = profanityFilter;
         }
 
         private string GetUserId() =>
@@ -332,12 +335,16 @@ namespace Backend.Controllers
         // Names come from a client-owned Supabase profile, so they're treated
         // as untrusted input: collapsed to one line and truncated to the
         // column width, since a 60-char name with newlines would otherwise
-        // wreck every row of the board.
-        private static string? CleanDisplayName(string? raw)
+        // wreck every row of the board. And because this name is broadcast to
+        // every player on the public global leaderboard, it goes through the
+        // same profanity filter as host/member names — a profane name falls
+        // back to "Player" rather than being shown to everyone.
+        private string? CleanDisplayName(string? raw)
         {
             if (string.IsNullOrWhiteSpace(raw)) return null;
             var collapsed = string.Join(" ", raw.Split((char[]?)null, StringSplitOptions.RemoveEmptyEntries));
-            return collapsed.Length <= 60 ? collapsed : collapsed[..60];
+            var truncated = collapsed.Length <= 60 ? collapsed : collapsed[..60];
+            return _profanityFilter.CleanOrFallback(truncated, "Player");
         }
 
         // GET /api/game/spaces/{spaceId}/leaderboard

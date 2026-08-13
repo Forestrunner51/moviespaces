@@ -1,4 +1,4 @@
-import { useState, useEffect } from "react";
+import { useState, useEffect, useRef } from "react";
 import { supabase } from "@/frontend/config/supabase";
 import { useForegroundPoll } from "@/frontend/hooks/use-foreground-poll";
 
@@ -29,6 +29,11 @@ export function useFriends() {
   const [pendingRequests, setPendingRequests] = useState<PendingRequest[]>([]);
   const [sentRequests, setSentRequests] = useState<SentRequest[]>([]);
   const [loading, setLoading] = useState(true);
+  // Only the first fetch shows the full-screen spinner. This function is the
+  // 15s poll callback too, so flipping `loading` true on every tick made the
+  // Friends tab's empty state flash to a spinner and back every 15 seconds for
+  // a user with no friends yet.
+  const hasLoadedFriendsOnce = useRef(false);
 
   // Get current user id
   useEffect(() => {
@@ -41,7 +46,7 @@ export function useFriends() {
 
   const fetchFriendsAndRequests = async () => {
     if (!currentUserId) return;
-    setLoading(true);
+    if (!hasLoadedFriendsOnce.current) setLoading(true);
     try {
       // 1. Fetch friendships (accepted)
       const { data: friendshipsData, error: fError } = await supabase
@@ -137,6 +142,7 @@ export function useFriends() {
     } catch (err) {
       console.error("Error fetching friends/requests:", err);
     } finally {
+      hasLoadedFriendsOnce.current = true;
       setLoading(false);
     }
   };
@@ -222,11 +228,13 @@ export function useFriends() {
   const searchUsers = async (query: string): Promise<Profile[]> => {
     if (!currentUserId || !query.trim()) return [];
     // The query is interpolated into a PostgREST .or() expression, where
-    // commas, parens and quotes are syntax — a search for "Smith, J" split
-    // the filter into malformed clauses (400 → silently "no results"), and
-    // crafted input could rewrite the predicate outright. Stripping the
-    // delimiters keeps every realistic name searchable.
-    const sanitized = query.replace(/[,()"'\\]/g, " ").trim();
+    // commas and parens are structural and a double-quote opens a quoted
+    // value — a search for "Smith, J" split the filter into malformed clauses
+    // (400 → silently "no results"), and crafted input could rewrite the
+    // predicate. Strip only those structural characters. Apostrophes are NOT
+    // special in a PostgREST filter, so they stay — otherwise "O'Brien"
+    // becomes "O Brien" and matches nobody.
+    const sanitized = query.replace(/[,()"\\]/g, " ").trim();
     if (!sanitized) return [];
     try {
       const { data, error } = await supabase

@@ -54,7 +54,7 @@ interface OpenSpace {
 // avatars need a hook, and the card is rendered inside a FlatList
 // renderItem, which isn't a component and can't hold hooks of its own.
 function ExploreCardMeta({ item, distanceMi }: { item: OpenSpace; distanceMi: number | null }) {
-  const profiles = useProfiles(item.members.map((m) => m.userId));
+  const profiles = useProfiles((item.members ?? []).map((m) => m.userId));
   // Relative labels ("Tonight", "In 3 days") read the real current time.
   const eventDate = formatEventDate(item.screeningTime, item.showDate, item.showTime);
   const isFree = item.totalCostCents == null || item.totalCostCents === 0;
@@ -78,7 +78,7 @@ function ExploreCardMeta({ item, distanceMi }: { item: OpenSpace; distanceMi: nu
 
       <View style={styles.cardFooter}>
         <AvatarStack
-          people={item.members.map((m) => ({
+          people={(item.members ?? []).map((m) => ({
             userId: m.userId,
             name: m.name,
             avatarUrl: profiles.get(m.userId)?.avatarUrl,
@@ -86,7 +86,7 @@ function ExploreCardMeta({ item, distanceMi }: { item: OpenSpace; distanceMi: nu
           size={24}
         />
         <Text style={styles.spaceMembers} numberOfLines={1}>
-          {item.members.length}/{item.maxCapacity} · {item.hostName}
+          {(item.members ?? []).length}/{item.maxCapacity} · {item.hostName}
         </Text>
         {!isFree && (
           <Text style={styles.spacePrice}>${(item.totalCostCents! / 100).toFixed(0)}</Text>
@@ -234,7 +234,7 @@ export default function ExploreScreen() {
       eventCategoryOf(space.spaceType, space.eventCategory) !== eventCategoryFilter
     )
       return false;
-    if (openOnly && space.members.length >= space.maxCapacity) return false;
+    if (openOnly && (space.members ?? []).length >= space.maxCapacity) return false;
     if (activityFilter && !space.postActivities?.split(",").includes(activityFilter)) return false;
     if (chainFilter && cinemaChain(space.cinemaName) !== chainFilter) return false;
     if (!passesPriceFilter(space)) return false;

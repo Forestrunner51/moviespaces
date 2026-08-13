@@ -35,8 +35,8 @@ function relativeLabel(target: Date): string {
   if (days === -1) return "Yesterday";
   if (days > 1 && days <= 6) return `In ${days} days`;
   if (days < -1 && days >= -6) return `${Math.abs(days)} days ago`;
-  // Pluralize off the computed week count, not the raw day count — 8–13 days
-  // rounds to "2 weeks", which the old `days >= 14` check rendered "2 week".
+  // Pluralize off the computed week count, not the raw day count — the old
+  // `days >= 14` check rendered "In 2 week" for 8–13 days (which round to 2).
   // Math.round, not ceil: 15 days is closer to 2 weeks than 3.
   const weeks = Math.max(1, Math.round(Math.abs(days) / 7));
   const plural = weeks === 1 ? "" : "s";

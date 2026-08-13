@@ -95,6 +95,20 @@ namespace Backend.Controllers
             ?? CheckLength(req.ShowTime, GroupFieldLimits.ShortLabel, "The time")
             ?? CheckLength(req.HangoutNotes, GroupFieldLimits.Notes, "The notes");
 
+        // ScreeningTime is written to a `timestamptz` column, and Npgsql throws
+        // when handed a DateTime whose Kind is Unspecified. System.Text.Json
+        // yields Unspecified for any ISO timestamp the client sends without a
+        // 'Z'/offset — so this normalizes to UTC defensively, turning a latent
+        // 500-on-create into a safe write. The app's client already sends UTC
+        // with a 'Z' (Kind = Utc, a no-op here); this covers everything else.
+        private static DateTime? ToUtc(DateTime? dt) => dt?.Kind switch
+        {
+            null => null,
+            DateTimeKind.Utc => dt,
+            DateTimeKind.Local => dt.Value.ToUniversalTime(),
+            _ => DateTime.SpecifyKind(dt!.Value, DateTimeKind.Utc),
+        };
+
         // Human-readable share id, e.g. "friday-movie-night-a8f1". The random
         // suffix makes collisions negligible without a uniqueness retry loop
         // — good enough for a purely additive, non-critical identifier.
@@ -228,7 +242,7 @@ namespace Backend.Controllers
                 TheaterLongitude = req.TheaterLongitude,
                 TmdbMovieId = req.TmdbMovieId,
                 PosterPath = req.PosterPath,
-                ScreeningTime = req.ScreeningTime,
+                ScreeningTime = ToUtc(req.ScreeningTime),
                 SeasonEpisodeInfo = string.IsNullOrWhiteSpace(req.SeasonEpisodeInfo) ? null : req.SeasonEpisodeInfo.Trim(),
                 EventCategory = eventCategory,
                 IsPrivate = req.IsPrivate ?? false,
@@ -1253,7 +1267,7 @@ namespace Backend.Controllers
             if (req.CinemaName != null) group.CinemaName = req.CinemaName.Trim();
             if (req.ShowDate != null) group.ShowDate = req.ShowDate.Trim();
             if (req.ShowTime != null) group.ShowTime = req.ShowTime.Trim();
-            if (req.ScreeningTime.HasValue) group.ScreeningTime = req.ScreeningTime;
+            if (req.ScreeningTime.HasValue) group.ScreeningTime = ToUtc(req.ScreeningTime);
             if (req.MaxCapacity.HasValue) group.MaxCapacity = req.MaxCapacity.Value;
             if (req.TotalCostCents.HasValue) group.TotalCostCents = req.TotalCostCents.Value;
             if (req.HangoutNotes != null)

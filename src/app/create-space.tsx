@@ -1,4 +1,4 @@
-import { useEffect, useState } from "react";
+import { useEffect, useRef, useState } from "react";
 import {
   View,
   Text,
@@ -163,6 +163,10 @@ export default function CreateSpaceScreen() {
   };
 
   const [creating, setCreating] = useState(false);
+  // Synchronous re-entry guard — `creating` state doesn't re-render before a
+  // fast double-tap fires handleSubmit twice, and two POST /api/group calls
+  // create two duplicate Spaces. Same ref pattern the chat/join screens use.
+  const creatingRef = useRef(false);
   // Collapsed by default — cost/link details, after-movie activities, and
   // friend invites are all genuinely optional and were previously flat on
   // the page at the same visual weight as required fields (venue, title,
@@ -545,6 +549,8 @@ export default function CreateSpaceScreen() {
       totalCostCents = amount > 0 ? Math.round(amount * 100) : null;
     }
 
+    if (creatingRef.current) return;
+    creatingRef.current = true;
     setCreating(true);
     await AsyncStorage.setItem("userName", hostName.trim());
 
@@ -591,12 +597,14 @@ export default function CreateSpaceScreen() {
 
       const data = await res.json();
       await sendFriendInvites(data.groupId);
+      creatingRef.current = false;
       setCreating(false);
       router.replace({
         pathname: "/group",
         params: { groupId: data.groupId, hostName: hostName.trim() },
       });
     } catch (err: any) {
+      creatingRef.current = false;
       setCreating(false);
       showToast(err?.message || "Couldn't create the Space. Please try again.");
     }
