@@ -5,6 +5,7 @@ import { SpaceStyles, Palette, Type, Radius } from "@/frontend/constants/theme";
 import {
   fetchShowtimeTheaters,
   fetchTheaterShowtimes,
+  isStale,
   ShowtimeTheater,
   TheaterShowtimesDay,
 } from "@/frontend/services/showtimes";
@@ -39,6 +40,7 @@ interface Props {
 
 export function ShowtimePicker({ selection, onSelect }: Props) {
   const [theaters, setTheaters] = useState<ShowtimeTheater[] | null>(null);
+  const [stale, setStale] = useState(false);
   const [loadError, setLoadError] = useState(false);
   const [theater, setTheater] = useState<ShowtimeTheater | null>(null);
   const [day, setDay] = useState<TheaterShowtimesDay | null>(null);
@@ -51,8 +53,11 @@ export function ShowtimePicker({ selection, onSelect }: Props) {
     (async () => {
       try {
         const loc = await getDeviceLocation();
-        const list = await fetchShowtimeTheaters(loc?.latitude, loc?.longitude);
-        if (!cancelled) setTheaters(list);
+        const result = await fetchShowtimeTheaters(loc?.latitude, loc?.longitude);
+        if (!cancelled) {
+          setTheaters(result.theaters);
+          setStale(isStale(result.lastUpdatedUtc));
+        }
       } catch {
         if (!cancelled) {
           setTheaters([]);
@@ -119,6 +124,18 @@ export function ShowtimePicker({ selection, onSelect }: Props) {
 
   return (
     <View style={styles.container}>
+      {/* Most-recent data always shows; this banner is the honesty layer
+          when the nightly refresh has been failing for 36h+. */}
+      {stale && (
+        <View style={styles.staleBanner}>
+          <Ionicons name="time-outline" size={14} color={Palette.accent} />
+          <Text style={styles.staleBannerText}>
+            These showtimes haven&apos;t refreshed recently — double-check with the theater before
+            heading out.
+          </Text>
+        </View>
+      )}
+
       {/* Step 1 — theater (nearest first) */}
       <Text style={styles.stepLabel}>THEATER</Text>
       <ScrollView horizontal showsHorizontalScrollIndicator={false} contentContainerStyle={styles.chipScroll}>
@@ -276,4 +293,16 @@ const styles = StyleSheet.create({
   summaryTitle: { ...Type.body, fontWeight: "700", color: Palette.text },
   summarySub: { ...Type.caption, color: Palette.textMuted, marginTop: 2 },
   summaryChange: { ...Type.small, color: Palette.accent, fontWeight: "700" },
+  staleBanner: {
+    flexDirection: "row",
+    alignItems: "center",
+    gap: 8,
+    backgroundColor: Palette.accentDim,
+    borderWidth: 1,
+    borderColor: Palette.accentBorder,
+    borderRadius: Radius.small,
+    padding: 10,
+    marginTop: 8,
+  },
+  staleBannerText: { ...Type.caption, color: Palette.text, flex: 1 },
 });

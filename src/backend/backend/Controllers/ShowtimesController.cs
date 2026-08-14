@@ -36,7 +36,15 @@ namespace Backend.Controllers
         [HttpGet("theaters")]
         public async Task<IActionResult> GetTheaters([FromQuery] double? lat, [FromQuery] double? lng)
         {
+            // Serve whatever the cache holds, but only rows that are still in
+            // the future — if the scraper has been broken for days, theaters
+            // whose data fully aged out drop off naturally, and the client
+            // gets a lastUpdatedUtc to decide whether to warn. Data is never
+            // hidden just for being old; it's hidden for being about the past.
+            var todayLocal = DateOnly.FromDateTime(DateTime.UtcNow.AddHours(-6));
+
             var theaters = await _db.ScrapedShowtimes
+                .Where(s => s.ShowDate >= todayLocal)
                 .GroupBy(s => new { s.TheaterSlug, s.TheaterName, s.Latitude, s.Longitude })
                 .Select(g => new
                 {
@@ -47,6 +55,11 @@ namespace Backend.Controllers
                     movieCount = g.Select(s => s.MovieSlug).Distinct().Count(),
                 })
                 .ToListAsync();
+
+            var lastUpdatedUtc = await _db.ScrapedShowtimes
+                .OrderByDescending(s => s.ScrapedAtUtc)
+                .Select(s => (DateTime?)s.ScrapedAtUtc)
+                .FirstOrDefaultAsync();
 
             if (lat.HasValue && lng.HasValue)
             {
@@ -61,7 +74,7 @@ namespace Backend.Controllers
                 theaters = theaters.OrderBy(t => t.name).ToList();
             }
 
-            return Ok(new { theaters });
+            return Ok(new { theaters, lastUpdatedUtc });
         }
 
         // GET /api/showtimes/theaters/{slug}?date=2026-08-15 — one theater's
@@ -80,14 +93,22 @@ namespace Backend.Controllers
                 day = DateOnly.FromDateTime(DateTime.UtcNow.AddHours(-6)); // Central-local today
             }
 
-            // The dates this theater has any data for — drives the client's
-            // date chips so it never offers a day the scrape doesn't cover.
+            // The dates this theater has any FUTURE data for — drives the
+            // client's date chips so it never offers a day that's already
+            // passed (which is what stale cache rows would otherwise do).
+            var todayLocal = DateOnly.FromDateTime(DateTime.UtcNow.AddHours(-6));
             var availableDates = await _db.ScrapedShowtimes
-                .Where(s => s.TheaterSlug == slug)
+                .Where(s => s.TheaterSlug == slug && s.ShowDate >= todayLocal)
                 .Select(s => s.ShowDate)
                 .Distinct()
                 .OrderBy(d => d)
                 .ToListAsync();
+
+            var lastUpdatedUtc = await _db.ScrapedShowtimes
+                .Where(s => s.TheaterSlug == slug)
+                .OrderByDescending(s => s.ScrapedAtUtc)
+                .Select(s => (DateTime?)s.ScrapedAtUtc)
+                .FirstOrDefaultAsync();
 
             var rows = await _db.ScrapedShowtimes
                 .Where(s => s.TheaterSlug == slug && s.ShowDate == day)
@@ -115,6 +136,7 @@ namespace Backend.Controllers
                 theaterName = rows.FirstOrDefault()?.TheaterName,
                 date = day.ToString("yyyy-MM-dd"),
                 availableDates = availableDates.Select(d => d.ToString("yyyy-MM-dd")).ToList(),
+                lastUpdatedUtc,
                 movies,
             });
         }
