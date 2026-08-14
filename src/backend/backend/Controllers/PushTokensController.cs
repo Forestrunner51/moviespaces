@@ -51,6 +51,18 @@ namespace Backend.Controllers
             if (req.Token.Length > 512) return BadRequest(new { error = "Token is not a valid push token." });
 
             var userId = GetUserId();
+
+            // A device token belongs to exactly one signed-in account at a
+            // time. Signing into several accounts on one phone left each
+            // account holding a row with the SAME device token — and every
+            // all-users fan-out (e.g. the CineMind daily reminder) then hit
+            // that phone once per account: the "3 identical notifications"
+            // bug. Claiming the token here evicts other accounts' copies.
+            var stolen = await _db.PushTokens
+                .Where(t => t.Token == req.Token && t.UserId != userId)
+                .ToListAsync();
+            _db.PushTokens.RemoveRange(stolen);
+
             var existing = await _db.PushTokens.FirstOrDefaultAsync(t => t.UserId == userId);
 
             if (existing == null)

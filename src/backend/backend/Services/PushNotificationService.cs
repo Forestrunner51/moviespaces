@@ -106,6 +106,12 @@ namespace Backend.Services
 
         private async Task SendExpoPushAsync(List<string> tokens, string title, string body)
         {
+            // Single choke point for every send path: one physical device gets
+            // one push regardless of how many account rows resolved to its
+            // token (see PushTokensController's claim-on-register for how
+            // those duplicates arise in the first place).
+            tokens = tokens.Distinct().ToList();
+
             var client = _httpClientFactory.CreateClient();
 
             for (var i = 0; i < tokens.Count; i += ExpoBatchSize)
