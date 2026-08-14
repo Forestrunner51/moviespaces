@@ -47,6 +47,7 @@ export function ShowtimePicker({ selection, onSelect }: Props) {
   const [dayLoading, setDayLoading] = useState(false);
   // Collapsed once a time is chosen; re-expandable to change it.
   const [open, setOpen] = useState(true);
+  const [showAllTheaters, setShowAllTheaters] = useState(false);
 
   useEffect(() => {
     let cancelled = false;
@@ -144,23 +145,31 @@ export function ShowtimePicker({ selection, onSelect }: Props) {
 
       {/* Step 1 — theater (nearest first) */}
       <Text style={styles.stepLabel}>THEATER</Text>
-      <ScrollView horizontal showsHorizontalScrollIndicator={false} contentContainerStyle={styles.chipScroll}>
-        {theaters.map((t) => (
-          <TouchableOpacity
-            key={t.slug}
-            activeOpacity={0.8}
-            style={[styles.chip, theater?.slug === t.slug && styles.chipActive]}
-            onPress={() => pickTheater(t)}
+      {/* Vertical, nearest-first — the parent screen scrolls, so plain rows.
+          Capped at 8 until expanded so the list doesn't bury the steps below. */}
+      {(showAllTheaters ? theaters : theaters.slice(0, 8)).map((t) => (
+        <TouchableOpacity
+          key={t.slug}
+          activeOpacity={0.8}
+          style={[styles.theaterRow, theater?.slug === t.slug && styles.chipActive]}
+          onPress={() => pickTheater(t)}
+        >
+          <Text
+            style={[styles.chipText, theater?.slug === t.slug && styles.chipTextActive]}
+            numberOfLines={1}
           >
-            <Text
-              style={[styles.chipText, theater?.slug === t.slug && styles.chipTextActive]}
-              numberOfLines={1}
-            >
-              {t.name}
-            </Text>
-          </TouchableOpacity>
-        ))}
-      </ScrollView>
+            {t.name}
+          </Text>
+          <Text style={styles.theaterRowCount}>{t.movieCount} films</Text>
+        </TouchableOpacity>
+      ))}
+      {theaters.length > 8 && (
+        <TouchableOpacity activeOpacity={0.8} onPress={() => setShowAllTheaters((p) => !p)}>
+          <Text style={styles.showAllText}>
+            {showAllTheaters ? "Show fewer" : `Show all ${theaters.length} theaters`}
+          </Text>
+        </TouchableOpacity>
+      )}
 
       {/* Step 2 — date */}
       {theater && day && day.availableDates.length > 0 && (
@@ -320,4 +329,16 @@ const styles = StyleSheet.create({
   },
   staleBannerText: { ...Type.caption, color: Palette.text, flex: 1 },
   dayErrorText: { ...Type.small, color: Palette.danger, marginTop: 10, textAlign: "center" },
+  theaterRow: {
+    ...SpaceStyles.glassCard,
+    flexDirection: "row",
+    alignItems: "center",
+    justifyContent: "space-between",
+    gap: 10,
+    paddingVertical: 12,
+    paddingHorizontal: 14,
+    marginBottom: 6,
+  },
+  theaterRowCount: { ...Type.caption, color: Palette.textFaint },
+  showAllText: { ...Type.small, color: Palette.accent, fontWeight: "700", textAlign: "center", marginTop: 4 },
 });
