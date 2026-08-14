@@ -10,6 +10,7 @@ import {
   TheaterShowtimesDay,
 } from "@/frontend/services/showtimes";
 import { getDeviceLocation } from "@/frontend/services/nearby-theaters";
+import { distanceMiles } from "@/frontend/utils/distance";
 
 // The theater-screening picker: real theaters → real dates → real films and
 // times, all from the backend's nightly showtimes cache. This replaced the
@@ -55,8 +56,23 @@ export function ShowtimePicker({ selection, onSelect }: Props) {
       try {
         const loc = await getDeviceLocation();
         const result = await fetchShowtimeTheaters(loc?.latitude, loc?.longitude);
+        // The API returns every covered metro nearest-first — without this
+        // cutoff a user outside coverage saw a "nearest" theater hundreds of
+        // miles away instead of the honest "not near you yet" state. No
+        // location permission → show the list (we can't know they're far).
+        let list = result.theaters;
+        if (loc && list.length > 0) {
+          const nearest = list[0];
+          if (
+            nearest.latitude != null &&
+            nearest.longitude != null &&
+            distanceMiles(loc.latitude, loc.longitude, nearest.latitude, nearest.longitude) > 60
+          ) {
+            list = [];
+          }
+        }
         if (!cancelled) {
-          setTheaters(result.theaters);
+          setTheaters(list);
           setStale(isStale(result.lastUpdatedUtc));
         }
       } catch {
