@@ -35,6 +35,9 @@ public class AppDbContext : DbContext
     // refilled per theater on each scrape run; nothing else writes here.
     public DbSet<ScrapedShowtime> ScrapedShowtimes => Set<ScrapedShowtime>();
 
+    // Server-authoritative CineMind timing (see PuzzleFirstSeen).
+    public DbSet<PuzzleFirstSeen> PuzzleFirstSeen => Set<PuzzleFirstSeen>();
+
     protected override void OnModelCreating(ModelBuilder builder)
     {
         base.OnModelCreating(builder);
@@ -92,5 +95,10 @@ public class AppDbContext : DbContext
         // the GroupBy-theater listing, both led by TheaterSlug.
         builder.Entity<ScrapedShowtime>()
             .HasIndex(s => new { s.TheaterSlug, s.ShowDate });
+
+        // One first-seen instant per user per day — the composite PK makes a
+        // second insert a conflict, so the earliest timestamp always wins.
+        builder.Entity<PuzzleFirstSeen>()
+            .HasKey(p => new { p.UserId, p.PuzzleDate });
     }
 }

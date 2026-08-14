@@ -66,6 +66,16 @@ namespace Backend.Controllers
             var (puzzle, payload) = generated.Value;
             var today = puzzle.PuzzleDate;
 
+            // Start the server-side clock the first time this user sees
+            // today's puzzle. PK conflict = already seen = earliest wins, so
+            // re-fetching (or force-quitting and relaunching) never resets it.
+            if (!await _db.PuzzleFirstSeen.AnyAsync(p => p.UserId == userId && p.PuzzleDate == today))
+            {
+                _db.PuzzleFirstSeen.Add(new PuzzleFirstSeen { UserId = userId, PuzzleDate = today });
+                try { await _db.SaveChangesAsync(); }
+                catch (DbUpdateException) { _db.ChangeTracker.Clear(); } // concurrent first-fetch race
+            }
+
             var progress = await _db.UserDailyProgress
                 .FirstOrDefaultAsync(p => p.UserId == userId && p.PuzzleDate == today);
 
@@ -135,7 +145,21 @@ namespace Backend.Controllers
             // Clamp rather than reject: a plausible-but-wrong elapsed time
             // shouldn't lose someone their streak, but an absurd one must not
             // top the "fastest time" leaderboard either.
+            // Server-authoritative timing: elapsed since the server first
+            // served this user today's puzzle. The client's stopwatch is only
+            // a fallback for a missing first-seen row (legacy sessions), and
+            // can never REDUCE the server's answer — screenshotting the
+            // puzzle and "thinking offline" keeps costing real time.
             var timeTakenMs = Math.Clamp(request.TimeTakenMs, 0, (int)TimeSpan.FromHours(1).TotalMilliseconds);
+            var firstSeen = await _db.PuzzleFirstSeen
+                .FirstOrDefaultAsync(p => p.UserId == userId && p.PuzzleDate == today);
+            if (firstSeen != null)
+            {
+                var serverElapsed = (int)Math.Clamp(
+                    (DateTime.UtcNow - firstSeen.FirstSeenUtc).TotalMilliseconds,
+                    0, TimeSpan.FromHours(1).TotalMilliseconds);
+                timeTakenMs = Math.Max(timeTakenMs, serverElapsed);
+            }
 
             var graded = _puzzles.Grade(payload, request.Answers, timeTakenMs);
             var streak = await CurrentStreakAsync(userId, today) + 1;
