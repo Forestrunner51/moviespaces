@@ -116,6 +116,17 @@ namespace Backend.Controllers
                 .ThenBy(s => s.StartMinutes)
                 .ToListAsync();
 
+            // When serving today, drop showings that already started — at 9pm
+            // the 9:25 AM matinee isn't something anyone can plan around. A
+            // 15-minute grace keeps a just-started showing offerable for the
+            // "meet you inside" case. Times are theater-local (Central).
+            if (day == todayLocal)
+            {
+                var centralNow = DateTime.UtcNow.AddHours(-6);
+                var nowMinutes = centralNow.Hour * 60 + centralNow.Minute;
+                rows = rows.Where(r => r.StartMinutes >= nowMinutes - 15).ToList();
+            }
+
             var movies = rows
                 .GroupBy(s => new { s.MovieSlug, s.MovieTitle })
                 .Select(g => new

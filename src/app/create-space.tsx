@@ -639,6 +639,11 @@ export default function CreateSpaceScreen() {
                   setTheaterLat(null);
                   setTheaterLng(null);
                 }
+                // Round-trip guard: if a showtime was already picked, re-apply
+                // it — a venue/movie typed while in Watch Party mode would
+                // otherwise desync from the picker's collapsed summary and
+                // submit with mismatched fields.
+                if (showtimeSelection) handleShowtimeSelected(showtimeSelection);
                 // bookingUrl is private_rental's venue link — a theater
                 // screening has no use for it, so don't carry a typed value
                 // across into a Space that would ignore it.

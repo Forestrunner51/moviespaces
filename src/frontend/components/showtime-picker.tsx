@@ -70,15 +70,21 @@ export function ShowtimePicker({ selection, onSelect }: Props) {
     };
   }, []);
 
+  // Separate from loadError: that one gates the whole picker's empty state,
+  // while a single day's fetch failing should only message inside the flow
+  // (the theater list is still fine — the user can retap or switch).
+  const [dayError, setDayError] = useState(false);
+
   const pickTheater = async (t: ShowtimeTheater, date?: string) => {
     setTheater(t);
     setDay(null);
+    setDayError(false);
     setDayLoading(true);
     try {
       const data = await fetchTheaterShowtimes(t.slug, date);
       setDay(data);
     } catch {
-      setLoadError(true);
+      setDayError(true);
     } finally {
       setDayLoading(false);
     }
@@ -178,6 +184,14 @@ export function ShowtimePicker({ selection, onSelect }: Props) {
       )}
 
       {dayLoading && <ActivityIndicator color={Palette.accent} style={styles.loading} />}
+
+      {theater && dayError && !dayLoading && (
+        <TouchableOpacity activeOpacity={0.8} onPress={() => pickTheater(theater)}>
+          <Text style={styles.dayErrorText}>
+            Couldn&apos;t load this theater&apos;s showtimes — tap to retry.
+          </Text>
+        </TouchableOpacity>
+      )}
 
       {/* Step 3 — film & time */}
       {theater && day && !dayLoading && (
@@ -305,4 +319,5 @@ const styles = StyleSheet.create({
     marginTop: 8,
   },
   staleBannerText: { ...Type.caption, color: Palette.text, flex: 1 },
+  dayErrorText: { ...Type.small, color: Palette.danger, marginTop: 10, textAlign: "center" },
 });
