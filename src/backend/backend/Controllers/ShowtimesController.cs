@@ -80,6 +80,15 @@ namespace Backend.Controllers
                 day = DateOnly.FromDateTime(DateTime.UtcNow.AddHours(-6)); // Central-local today
             }
 
+            // The dates this theater has any data for — drives the client's
+            // date chips so it never offers a day the scrape doesn't cover.
+            var availableDates = await _db.ScrapedShowtimes
+                .Where(s => s.TheaterSlug == slug)
+                .Select(s => s.ShowDate)
+                .Distinct()
+                .OrderBy(d => d)
+                .ToListAsync();
+
             var rows = await _db.ScrapedShowtimes
                 .Where(s => s.TheaterSlug == slug && s.ShowDate == day)
                 .OrderBy(s => s.MovieTitle)
@@ -105,6 +114,7 @@ namespace Backend.Controllers
                 theaterSlug = slug,
                 theaterName = rows.FirstOrDefault()?.TheaterName,
                 date = day.ToString("yyyy-MM-dd"),
+                availableDates = availableDates.Select(d => d.ToString("yyyy-MM-dd")).ToList(),
                 movies,
             });
         }

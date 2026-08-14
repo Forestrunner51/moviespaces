@@ -29,8 +29,7 @@ import { POST_ACTIVITIES } from "@/frontend/constants/activities";
 import { useFriends } from "@/frontend/hooks/use-friends";
 import { useToast } from "@/frontend/components/toast";
 import { searchMovies, searchTvShows, getNowPlaying, Movie } from "@/frontend/services/movies";
-import * as WebBrowser from "expo-web-browser";
-import { buildGoogleShowtimesUrl } from "@/frontend/services/ticket-links";
+import { ShowtimePicker, ShowtimeSelection } from "@/frontend/components/showtime-picker";
 import { useSafeAreaInsets } from "react-native-safe-area-context";
 import {
   getDeviceLocation,
@@ -48,13 +47,6 @@ const formatDate = (d: Date) =>
 
 const formatTime = (d: Date) =>
   d.toLocaleTimeString(undefined, { hour: "numeric", minute: "2-digit", hour12: true });
-
-// Theaters don't run showings between roughly 2am and 10:30am — catches an
-// obvious fat-finger on the time picker (e.g. AM/PM mixup) before it's saved.
-const isOutsideBusinessHours = (d: Date) => {
-  const minutes = d.getHours() * 60 + d.getMinutes();
-  return minutes >= 2 * 60 && minutes < 10 * 60 + 30;
-};
 
 // A function, not a module-scope constant: module scope is evaluated once at
 // bundle load, so on an app left warm for days the picker's 14-day window
@@ -241,7 +233,8 @@ export default function CreateSpaceScreen() {
   const [movieSearching, setMovieSearching] = useState(false);
   const [movieSearchError, setMovieSearchError] = useState<string | null>(null);
   const [movieSearchNotice, setMovieSearchNotice] = useState<string | null>(null);
-  const [showtimeConfirmed, setShowtimeConfirmed] = useState(false);
+  // The chosen real showing for a theater Space (see handleShowtimeSelected).
+  const [showtimeSelection, setShowtimeSelection] = useState<ShowtimeSelection | null>(null);
   const { showToast } = useToast();
   const [nowPlaying, setNowPlaying] = useState<Movie[]>([]);
   const [nowPlayingTv, setNowPlayingTv] = useState<Movie[]>([]);
@@ -494,12 +487,32 @@ export default function CreateSpaceScreen() {
     setTimeValue(selected);
   };
 
-  // Opens Google's showtimes results for the picked film near the chosen
-  // theater in an in-app browser. Google localizes and shows real theaters,
-  // times, and ticket links — the host reads off the real showtime, then sets
-  // the time in the picker below. (No paid showtimes API.)
-  const handleFindShowtimes = () => {
-    WebBrowser.openBrowserAsync(buildGoogleShowtimesUrl(movieName, theaterName));
+  // Theater screenings are picked from the backend's showtimes data (see
+  // ShowtimePicker) — one tap fills theater, film, date, and time with values
+  // that verifiably exist, replacing the old Google-deep-link + manual-entry
+  // + attestation flow. Poster lookup is best-effort from the movie search
+  // API by title; a miss just means the card shows the fallback icon.
+  const handleShowtimeSelected = (sel: ShowtimeSelection) => {
+    setShowtimeSelection(sel);
+    setTheaterName(sel.theaterName);
+    setTheaterPlaceId(null);
+    setTheaterLat(sel.latitude);
+    setTheaterLng(sel.longitude);
+    setMovieName(sel.movieTitle);
+
+    const [y, m, d] = sel.date.split("-").map(Number);
+    const when = new Date(y, m - 1, d, Math.floor(sel.minutes / 60), sel.minutes % 60, 0, 0);
+    setDateValue(when);
+    setShowDate(formatDate(when));
+    setTimeValue(when);
+
+    setPosterPath(null);
+    searchMovies(sel.movieTitle)
+      .then((outcome) => {
+        const poster = outcome.results.find((r) => r.posterPath)?.posterPath;
+        if (poster) setPosterPath(poster);
+      })
+      .catch(() => {});
   };
 
   const handleSubmit = async () => {
@@ -514,28 +527,12 @@ export default function CreateSpaceScreen() {
       return;
     }
 
-    // Theater hours only make sense for an actual movie theater — a
-    // public_gathering is always a real Google Places theater (enforced
-    // above, where switching to it forces venueMode back to "theater"), but
-    // venueMode "theater" ALSO covers Watch Party/Custom Venue's "In-Person /
-    // Venue" option, which is any in-person location, not necessarily a
-    // theater: a private screening room, a rented space for a fight card
-    // airing overseas, a same-day anime simulcast. Those legitimately start
-    // at 3am the same way a Home watch party does (see setVenueMode("home")
-    // below), so gating on spaceType rather than venueMode is what actually
-    // scopes this to "is this a real theater," not "did the host pick the
-    // venue-with-an-address UI."
-    if (spaceType === "public_gathering" && timeValue && isOutsideBusinessHours(timeValue)) {
-      showToast("Theaters don't typically run showings between 2:00 AM and 10:30 AM — double-check the time you picked.");
-      return;
-    }
-
-    // We don't have a real showtimes API (see "Find Showtimes Near Me") —
-    // there's no way to verify server-side that this movie is actually
-    // playing at this theater at this time, so we require the host to
-    // attest to it instead of silently allowing bogus/expired listings.
-    if (spaceType === "public_gathering" && !showtimeConfirmed) {
-      showToast("Please tick the box confirming this is actually playing at that theater, date and time.");
+    // A theater Space's showtime now comes exclusively from the showtimes
+    // picker — real theater, real film, real time — so the old attestation
+    // checkbox and the plausible-hours sanity check are gone: there's nothing
+    // to attest, and the data can't be implausible.
+    if (spaceType === "public_gathering" && !showtimeSelection) {
+      showToast("Pick a theater, film, and showtime above.");
       return;
     }
 
@@ -722,34 +719,41 @@ export default function CreateSpaceScreen() {
             </View>
           )}
 
-          {venueMode === "theater" ? (
-            <TouchableOpacity
-              activeOpacity={theaterLocked ? 1 : 0.8}
-              style={styles.pickerField}
-              onPress={() => !theaterLocked && setTheaterModalVisible(true)}
-              disabled={theaterLocked}
-            >
-              <Ionicons name="storefront-outline" size={18} color={Palette.textMuted} />
-              <Text style={[styles.pickerFieldText, !theaterName && styles.pickerFieldPlaceholder]}>
-                {theaterName ||
-                  (spaceType === "private_rental" ? "Select a location" : "Select a nearby theater")}
-              </Text>
-              <Ionicons
-                name={theaterLocked ? "lock-closed" : "chevron-down"}
-                size={18}
-                color={Palette.textMuted}
-              />
-            </TouchableOpacity>
-          ) : (
-            <TextInput
-              style={styles.input}
-              placeholder="Address, room, or host's place (e.g. Sarah's Apartment, Unit 4B)"
-              placeholderTextColor={Palette.textMuted}
-              value={theaterName}
-              onChangeText={setTheaterName}
-              maxLength={250}
-            />
+          {/* Theater screenings: everything (theater, film, date, time) comes
+              from the showtimes picker in one flow — the venue/movie/date
+              fields below are the Watch Party path only. */}
+          {spaceType === "public_gathering" && (
+            <ShowtimePicker selection={showtimeSelection} onSelect={handleShowtimeSelected} />
           )}
+
+          {spaceType === "private_rental" &&
+            (venueMode === "theater" ? (
+              <TouchableOpacity
+                activeOpacity={theaterLocked ? 1 : 0.8}
+                style={styles.pickerField}
+                onPress={() => !theaterLocked && setTheaterModalVisible(true)}
+                disabled={theaterLocked}
+              >
+                <Ionicons name="storefront-outline" size={18} color={Palette.textMuted} />
+                <Text style={[styles.pickerFieldText, !theaterName && styles.pickerFieldPlaceholder]}>
+                  {theaterName || "Select a location"}
+                </Text>
+                <Ionicons
+                  name={theaterLocked ? "lock-closed" : "chevron-down"}
+                  size={18}
+                  color={Palette.textMuted}
+                />
+              </TouchableOpacity>
+            ) : (
+              <TextInput
+                style={styles.input}
+                placeholder="Address, room, or host's place (e.g. Sarah's Apartment, Unit 4B)"
+                placeholderTextColor={Palette.textMuted}
+                value={theaterName}
+                onChangeText={setTheaterName}
+                maxLength={250}
+              />
+            ))}
 
           {spaceType === "private_rental" && (
             <View style={styles.chipRow}>
@@ -900,7 +904,7 @@ export default function CreateSpaceScreen() {
                 {uploadingEventPhoto && <ActivityIndicator color={Palette.accent} />}
               </TouchableOpacity>
             </>
-          ) : (
+          ) : spaceType === "private_rental" ? (
             <TouchableOpacity
               activeOpacity={0.8}
               style={styles.pickerField}
@@ -917,7 +921,7 @@ export default function CreateSpaceScreen() {
               </Text>
               <Ionicons name="chevron-down" size={18} color={Palette.textMuted} />
             </TouchableOpacity>
-          )}
+          ) : null}
 
           {searchingTv && (
             <TextInput
@@ -930,6 +934,8 @@ export default function CreateSpaceScreen() {
             />
           )}
 
+          {spaceType === "private_rental" && (
+          <>
           <TouchableOpacity
             activeOpacity={0.8}
             style={styles.pickerField}
@@ -1011,19 +1017,7 @@ export default function CreateSpaceScreen() {
               <Text style={styles.pickerDoneButtonText}>Done</Text>
             </TouchableOpacity>
           )}
-
-          {/* Look up real showtimes on Google (opens in-app browser) for the
-              chosen film + theater — the host reads the time and sets it in the
-              picker above. Movie screenings only. */}
-          {spaceType === "public_gathering" && !!movieName.trim() && (
-            <TouchableOpacity
-              activeOpacity={0.85}
-              style={styles.showtimeButton}
-              onPress={handleFindShowtimes}
-            >
-              <Ionicons name="search-outline" size={18} color={Palette.base} />
-              <Text style={styles.showtimeButtonText}>Find Showtimes Near Me</Text>
-            </TouchableOpacity>
+          </>
           )}
 
           <TouchableOpacity
@@ -1215,27 +1209,9 @@ export default function CreateSpaceScreen() {
             </>
           )}
 
-          {/* No showtimes API backs this, so the host attests that the film is
-              really playing there. Required at submit. Moved down here for
-              the same reason as the private toggle below it — a final
-              confirmation right before submitting, not something to trip
-              over mid-form right after picking a date/time. */}
-          {spaceType === "public_gathering" && (
-            <TouchableOpacity
-              activeOpacity={0.8}
-              style={styles.confirmRow}
-              onPress={() => setShowtimeConfirmed((prev) => !prev)}
-            >
-              <Ionicons
-                name={showtimeConfirmed ? "checkbox" : "square-outline"}
-                size={20}
-                color={showtimeConfirmed ? Palette.accent : Palette.textMuted}
-              />
-              <Text style={styles.confirmRowText}>
-                I&apos;ve confirmed this movie is actually playing at this theater at this date/time.
-              </Text>
-            </TouchableOpacity>
-          )}
+          {/* The attestation checkbox that used to sit here is gone: theater
+              showtimes now come from real data via ShowtimePicker, so there
+              is nothing for the host to attest to. */}
 
           {/* Independent of spaceType — a real theater screening and a
               custom watch party can both be made invite-only. Placed as the
@@ -1680,17 +1656,6 @@ const styles = StyleSheet.create({
     elevation: 6,
   },
   submitButtonText: { ...Type.body, color: Palette.base, fontWeight: "800",},
-  showtimeButton: {
-    flexDirection: "row",
-    alignItems: "center",
-    justifyContent: "center",
-    gap: 8,
-    backgroundColor: Palette.accent,
-    borderRadius: 12,
-    paddingVertical: 12,
-    marginTop: 4,
-  },
-  showtimeButtonText: { ...Type.small, color: Palette.base, fontWeight: "700"},
   confirmRow: {
     flexDirection: "row",
     alignItems: "center",
