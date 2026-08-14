@@ -29,6 +29,12 @@ builder.Services.AddSingleton<IDailyPuzzleService, DailyPuzzleService>();
 builder.Services.AddSingleton<CineMindCatalogService>();
 builder.Services.AddHostedService<ReminderBackgroundService>();
 builder.Services.AddHostedService<CineMindReminderService>();
+builder.Services.AddSingleton<ShowtimesScraperService>();
+// Registered as a singleton AND a hosted service so ShowtimesController can
+// resolve the same instance for its admin-triggered manual scrape — a bare
+// AddHostedService registration isn't injectable into controllers.
+builder.Services.AddSingleton<ShowtimesScrapeBackgroundService>();
+builder.Services.AddHostedService(sp => sp.GetRequiredService<ShowtimesScrapeBackgroundService>());
 
 // --- CORS ---
 //

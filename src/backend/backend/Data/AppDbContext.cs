@@ -31,6 +31,10 @@ public class AppDbContext : DbContext
     public DbSet<CineMindReminderLog> CineMindReminderLog => Set<CineMindReminderLog>();
     public DbSet<RouletteSpinHistory> RouletteSpinHistory => Set<RouletteSpinHistory>();
 
+    // Nightly-scraped showtimes cache (see ShowtimesScraperService). Wiped and
+    // refilled per theater on each scrape run; nothing else writes here.
+    public DbSet<ScrapedShowtime> ScrapedShowtimes => Set<ScrapedShowtime>();
+
     protected override void OnModelCreating(ModelBuilder builder)
     {
         base.OnModelCreating(builder);
@@ -80,5 +84,13 @@ public class AppDbContext : DbContext
         // once a thin genre pool is exhausted (see BuildPracticeSpinAsync).
         builder.Entity<RouletteSpinHistory>()
             .HasIndex(h => new { h.UserId, h.SeenAt });
+
+        // ── Scraped showtimes ─────────────────────────────────────────────
+
+        // The two real read shapes: "this theater's rows" (the nightly
+        // replace + the per-theater endpoint, which also filters by date) and
+        // the GroupBy-theater listing, both led by TheaterSlug.
+        builder.Entity<ScrapedShowtime>()
+            .HasIndex(s => new { s.TheaterSlug, s.ShowDate });
     }
 }
