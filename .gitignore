@@ -52,3 +52,4 @@ obj/
 *.ipa
 *.apk
 *.aab
+build-*.ipa
