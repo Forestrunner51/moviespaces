@@ -91,13 +91,31 @@ namespace Backend.Services
 
         public async Task RunScrapeAsync(CancellationToken ct)
         {
-            var city = _configuration["Showtimes:City"] ?? "dallas-tx";
+            // Comma-separated metro slugs (Cinema Clock URL form, e.g.
+            // "dallas-tx,houston-tx"). Growing coverage = editing this env
+            // var, no deploy. Legacy single-city key kept as fallback.
+            var cities = (_configuration["Showtimes:Cities"] ?? _configuration["Showtimes:City"] ?? "dallas-tx")
+                .Split(',', StringSplitOptions.RemoveEmptyEntries | StringSplitOptions.TrimEntries);
             var maxTheaters = _configuration.GetValue("Showtimes:MaxTheaters", 80);
             var today = DateOnly.FromDateTime(DateTime.UtcNow.AddHours(-6)); // theater-local (Central) "today"
 
-            _logger.LogInformation("Showtimes scrape starting for {City}.", city);
-            var slugs = await _scraper.FetchTheaterSlugsAsync(city, maxTheaters, ct);
-            _logger.LogInformation("Showtimes scrape found {Count} theaters.", slugs.Count);
+            var slugs = new List<string>();
+            foreach (var city in cities)
+            {
+                try
+                {
+                    var citySlugs = await _scraper.FetchTheaterSlugsAsync(city, maxTheaters, ct);
+                    _logger.LogInformation("Showtimes: {City} has {Count} theaters.", city, citySlugs.Count);
+                    slugs.AddRange(citySlugs);
+                }
+                catch (Exception ex) when (ex is not OperationCanceledException)
+                {
+                    // A bad/unknown city slug shouldn't sink the other metros.
+                    _logger.LogWarning(ex, "Showtimes: directory fetch failed for {City}.", city);
+                }
+                await _scraper.DelayBetweenRequestsAsync(ct);
+            }
+            slugs = slugs.Distinct().ToList();
 
             var succeeded = 0;
             var failed = 0;
