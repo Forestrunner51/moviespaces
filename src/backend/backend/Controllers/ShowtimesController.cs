@@ -41,7 +41,7 @@ namespace Backend.Controllers
             // whose data fully aged out drop off naturally, and the client
             // gets a lastUpdatedUtc to decide whether to warn. Data is never
             // hidden just for being old; it's hidden for being about the past.
-            var todayLocal = DateOnly.FromDateTime(DateTime.UtcNow.AddHours(-6));
+            var todayLocal = CentralTime.Today;
 
             var theaters = await _db.ScrapedShowtimes
                 .Where(s => s.ShowDate >= todayLocal)
@@ -90,13 +90,13 @@ namespace Backend.Controllers
             }
             else
             {
-                day = DateOnly.FromDateTime(DateTime.UtcNow.AddHours(-6)); // Central-local today
+                day = CentralTime.Today;
             }
 
             // The dates this theater has any FUTURE data for — drives the
             // client's date chips so it never offers a day that's already
             // passed (which is what stale cache rows would otherwise do).
-            var todayLocal = DateOnly.FromDateTime(DateTime.UtcNow.AddHours(-6));
+            var todayLocal = CentralTime.Today;
             var availableDates = await _db.ScrapedShowtimes
                 .Where(s => s.TheaterSlug == slug && s.ShowDate >= todayLocal)
                 .Select(s => s.ShowDate)
@@ -122,7 +122,7 @@ namespace Backend.Controllers
             // "meet you inside" case. Times are theater-local (Central).
             if (day == todayLocal)
             {
-                var centralNow = DateTime.UtcNow.AddHours(-6);
+                var centralNow = CentralTime.Now;
                 var nowMinutes = centralNow.Hour * 60 + centralNow.Minute;
                 rows = rows.Where(r => r.StartMinutes >= nowMinutes - 15).ToList();
             }

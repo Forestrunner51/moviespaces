@@ -37,16 +37,21 @@ export function buildGoogleShowtimesUrl(movieTitle: string, location?: string | 
 }
 
 // Prefers a real booking URL (e.g. a specific showtime page) when the group
-// has one; otherwise falls back to a generic Fandango search for the film so
-// there's always something useful to hand off to.
-export function buildTicketUrl(filmName: string, bookingUrl?: string | null): string {
+// has one; otherwise falls back to the Google showtimes search. The fallback
+// used to be Fandango's /search page, but that page is a client-side SPA that
+// often renders blank in the in-app browser (and scraped film titles don't
+// reliably match Fandango's naming) — Google's results always render and its
+// ticket buttons link into the real purchase flows.
+export function buildTicketUrl(
+  filmName: string,
+  bookingUrl?: string | null,
+  location?: string | null,
+): string {
   // bookingUrl is host-typed free text — anything that isn't a web URL
   // (a bare domain fragment, a non-http scheme) falls back to the search
   // rather than being handed to the browser as-is.
   const trimmed = bookingUrl?.trim() ?? "";
-  const base = /^https?:\/\//i.test(trimmed)
-    ? trimmed
-    : `https://www.fandango.com/search?q=${encodeURIComponent(filmName)}`;
+  const base = /^https?:\/\//i.test(trimmed) ? trimmed : buildGoogleShowtimesUrl(filmName, location);
   return withAffiliateTag(base);
 }
 

@@ -1,5 +1,5 @@
 import { useEffect, useState } from "react";
-import { View, Text, StyleSheet, TouchableOpacity, ActivityIndicator, ScrollView } from "react-native";
+import { View, Text, StyleSheet, TouchableOpacity, ActivityIndicator, ScrollView, TextInput } from "react-native";
 import { Ionicons } from "@expo/vector-icons";
 import { SpaceStyles, Palette, Type, Radius } from "@/frontend/constants/theme";
 import {
@@ -49,6 +49,7 @@ export function ShowtimePicker({ selection, onSelect }: Props) {
   // Collapsed once a time is chosen; re-expandable to change it.
   const [open, setOpen] = useState(true);
   const [showAllTheaters, setShowAllTheaters] = useState(false);
+  const [theaterQuery, setTheaterQuery] = useState("");
 
   useEffect(() => {
     let cancelled = false;
@@ -159,11 +160,28 @@ export function ShowtimePicker({ selection, onSelect }: Props) {
         </View>
       )}
 
-      {/* Step 1 — theater (nearest first) */}
+      {/* Step 1 — theater (nearest first, name-filterable) */}
       <Text style={styles.stepLabel}>THEATER</Text>
+      <View style={styles.searchRow}>
+        <Ionicons name="search-outline" size={16} color={Palette.textMuted} />
+        <TextInput
+          style={styles.searchInput}
+          placeholder="Search theaters..."
+          placeholderTextColor={Palette.textFaint}
+          value={theaterQuery}
+          onChangeText={setTheaterQuery}
+          autoCapitalize="none"
+          autoCorrect={false}
+        />
+      </View>
       {/* Vertical, nearest-first — the parent screen scrolls, so plain rows.
-          Capped at 8 until expanded so the list doesn't bury the steps below. */}
-      {(showAllTheaters ? theaters : theaters.slice(0, 8)).map((t) => (
+          Capped at 8 until expanded (searching always shows every match). */}
+      {(theaterQuery.trim()
+        ? theaters.filter((t) => t.name.toLowerCase().includes(theaterQuery.trim().toLowerCase()))
+        : showAllTheaters
+          ? theaters
+          : theaters.slice(0, 8)
+      ).map((t) => (
         <TouchableOpacity
           key={t.slug}
           activeOpacity={0.8}
@@ -179,7 +197,7 @@ export function ShowtimePicker({ selection, onSelect }: Props) {
           <Text style={styles.theaterRowCount}>{t.movieCount} films</Text>
         </TouchableOpacity>
       ))}
-      {theaters.length > 8 && (
+      {!theaterQuery.trim() && theaters.length > 8 && (
         <TouchableOpacity activeOpacity={0.8} onPress={() => setShowAllTheaters((p) => !p)}>
           <Text style={styles.showAllText}>
             {showAllTheaters ? "Show fewer" : `Show all ${theaters.length} theaters`}
@@ -356,5 +374,15 @@ const styles = StyleSheet.create({
     marginBottom: 6,
   },
   theaterRowCount: { ...Type.caption, color: Palette.textFaint },
+  searchRow: {
+    ...SpaceStyles.field,
+    flexDirection: "row",
+    alignItems: "center",
+    gap: 8,
+    paddingHorizontal: 12,
+    paddingVertical: 10,
+    marginBottom: 8,
+  },
+  searchInput: { flex: 1, ...Type.small, color: Palette.text, padding: 0 },
   showAllText: { ...Type.small, color: Palette.accent, fontWeight: "700", textAlign: "center", marginTop: 4 },
 });

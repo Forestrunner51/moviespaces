@@ -73,8 +73,8 @@ Everything here is committed on `main` and deployed unless noted.
 
 **Blocking the build:**
 - [ ] **Rotate the Supabase `JwtSecret`** — removed from code, but the old value is still in git history. Asked repeatedly, never confirmed done.
-- [ ] `moviespaces://auth/callback` in Supabase → Auth → URL Configuration → Redirect URLs (unconfirmed)
-- [ ] Reset-password email template → must show `{{ .Token }}` as visible text. **The app has no screen that handles a reset *link*** — `reset-password.tsx` calls `verifyOtp({ type: "recovery" })` and expects a typed code. The default link-based template is broken for this app.
+- [x] `moviespaces://auth/callback` in Supabase → Auth → URL Configuration → Redirect URLs — entered 2026‑08‑16; final proof is SSO round-tripping on the real build
+- [x] Reset-password email template → shows `{{ .Token }}` as visible text (updated 2026‑08‑16; test recovery email sent same day — confirm the code is visible in it). Context: **the app has no screen that handles a reset *link*** — `reset-password.tsx` calls `verifyOtp({ type: "recovery" })` and expects a typed code, so the default link-based template was broken for this app.
 - [ ] Email confirmation ON/OFF decision (code handles both; recommend ON)
 - [ ] Apple SSO — App ID capability + Supabase provider config entered, but **unverifiable until a real build exists** (needs the native module; Expo Go can't test it)
 
@@ -90,7 +90,7 @@ Everything here is committed on `main` and deployed unless noted.
 - [ ] **Demo account with real content** in review notes — most common rejection cause for login-gated apps
 
 **Non-blocking:**
-- [ ] Render cold-start decision (free tier sleeps; ~30s first request reads as "broken" to a new user)
+- [x] Render cold-start decision — web service upgraded to Starter ($7/mo, always-on) 2026‑08‑16; also makes the nightly showtimes scrape reliable
 - [ ] Delete the inert `Sentry__AuthToken` env var from Render (backend never reads it)
 
 ---
@@ -102,7 +102,7 @@ Everything here is committed on `main` and deployed unless noted.
 | App Review rejection (metadata/privacy/demo login) | High on first submit | Nail privacy labels; working demo account; budget ≥1 resubmit cycle |
 | **Apple SSO broken in the real build** | Medium | Config is entered but never tested. If it fails at QA, hide the button rather than ship it broken — a visibly broken auth button is a near-certain rejection |
 | Split-DB drift (Supabase vs .NET) | Low | Both live and linked; don't re-point either |
-| Render cold-start looks like a broken app | Medium | Consider always-on for launch week |
+| Render cold-start looks like a broken app | Resolved | Upgraded to always-on Starter instance 2026‑08‑16 |
 | Regression from a schema change | Medium | Has happened twice. Enumerate every write path before changing a column's shape |
 
 ---

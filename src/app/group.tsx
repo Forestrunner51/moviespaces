@@ -248,7 +248,7 @@ export default function GroupScreen() {
 
   const handleGetTickets = async () => {
     if (!group) return;
-    await openExternalUrl(buildTicketUrl(group.filmName, group.bookingUrl));
+    await openExternalUrl(buildTicketUrl(group.filmName, group.bookingUrl, group.cinemaName));
   };
 
   // cinemaName is often free-typed (a Home/Hosted address, "Sarah's
