@@ -31,12 +31,12 @@ Everything native only becomes real here: SSO, the "MovieSpaces" name, Bebas Neu
 - [ ] Verify the native bits now work: Apple sign-in button appears, Google sign-in doesn't crash, signup/login work
 
 ## PHASE 2 — Auth & dashboard config (unblocks SSO + password reset)
-- [ ] **Supabase → Auth → URL Configuration →** add redirect URL `moviespaces://auth/callback`
+- [x] **Supabase → Auth → URL Configuration →** add redirect URL `moviespaces://auth/callback` — entered 2026‑08‑16; not externally verifiable, so it's truly proven only when SSO round-trips back into the app on the real build (Phase 2 test line below)
 - [ ] **Google Cloud Console →** create OAuth 2.0 **Web** client; add redirect URI `https://hzkpqfitsxnxcdefkqwt.supabase.co/auth/v1/callback`
 - [ ] **Supabase → Auth → Providers → Google →** paste Client ID + Secret, enable
 - [ ] **Apple Developer →** App ID `com.newfahrenheit45.Moviespaces` → enable "Sign in with Apple" capability
 - [ ] **Supabase → Auth → Providers → Apple →** add bundle ID to Authorized Client IDs, enable
-- [ ] **Supabase → Auth → Email Templates → Reset Password →** template must surface the code via `{{ .Token }}` (password-reset OTP flow needs it)
+- [~] **Supabase → Auth → Email Templates → Reset Password →** template must surface the code via `{{ .Token }}` (password-reset OTP flow needs it) — updated 2026‑08‑16; a live test recovery email was sent to the owner's inbox that day — flip to [x] once that email visibly shows the code, not just a link
 - [x] **Signup now handles email confirmation ON or OFF** in code (`auth.tsx` — shows "check your email" when a session isn't returned). No code change needed either way now.
 - [ ] **Decide: email confirmation ON or OFF?** (Supabase → Auth → Providers → Email → "Confirm email") — recommend **ON** for launch (stops fake-email spam). Just flip the setting; the app already handles both.
 - [ ] Test each: Google sign-in, Apple sign-in, email signup, email login, forgot-password end-to-end on a real build
@@ -51,7 +51,7 @@ Everything native only becomes real here: SSO, the "MovieSpaces" name, Bebas Neu
 - [x] **Catalog re-seeded** — `surprise_me` flags populated, ~45 films added for Roulette genre coverage.
 - [ ] All Supabase migrations applied to the production DB (friends-only DM policy, reports/blocks, etc.). EF migrations auto-apply on backend boot — confirm the Render deploy actually restarted.
 - [ ] Confirm the `AddGroupPosterPath` EF migration ran (poster feature) — the backend auto-migrates on boot
-- [ ] Render cold-start awareness: free tier sleeps after inactivity → first request after idle is slow. Decide if a paid/always-on instance is needed for launch, or accept the cold start
+- [x] Render cold-start: **resolved 2026‑08‑16 — web service upgraded to Starter ($7/mo, always-on).** No more sleep/cold-start, and the nightly showtimes scrape can actually fire at its 9:00 UTC window (a sleeping free instance had no poll loop running). Can drop back to Free post-launch if desired.
 - [x] **Sentry fully wired** — client DSN in `eas.json` production, backend DSN on Render, `SENTRY_AUTH_TOKEN` in EAS project secrets (verified via `eas secret:list`), `SENTRY_DISABLE_AUTO_UPLOAD=false` so production stack traces are readable rather than minified.
 - [x] **Custom SMTP via Resend** — `moviespaces.org` bought + verified (DKIM/SPF/DMARC in Cloudflare). Supabase auth email no longer uses the throttled default sender.
 - [x] **`main` merged and deployed** — was 118 commits behind; none of the recent work was live until PR #105. CORS lockdown verified live in production via curl.

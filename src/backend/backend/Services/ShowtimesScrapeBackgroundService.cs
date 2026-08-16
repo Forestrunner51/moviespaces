@@ -97,7 +97,7 @@ namespace Backend.Services
             var cities = (_configuration["Showtimes:Cities"] ?? _configuration["Showtimes:City"] ?? "dallas-tx")
                 .Split(',', StringSplitOptions.RemoveEmptyEntries | StringSplitOptions.TrimEntries);
             var maxTheaters = _configuration.GetValue("Showtimes:MaxTheaters", 80);
-            var today = DateOnly.FromDateTime(DateTime.UtcNow.AddHours(-6)); // theater-local (Central) "today"
+            var today = CentralTime.Today; // theater-local "today"
 
             var slugs = new List<string>();
             foreach (var city in cities)
