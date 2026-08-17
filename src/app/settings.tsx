@@ -126,6 +126,23 @@ export default function SettingsScreen() {
     }
   };
 
+  // A logged-in user who can't remember their current password can't use the
+  // modal above (the re-auth check exists to stop unlocked-phone takeovers,
+  // so it can't be waived). Their path is the same email-code recovery the
+  // login screen offers — routed there with their own email prefilled so they
+  // don't have to log out to reach it.
+  const handleForgotCurrentPassword = async () => {
+    const {
+      data: { user },
+    } = await supabase.auth.getUser();
+    if (!user?.email) {
+      showToast("Couldn't confirm your account. Please sign in again.");
+      return;
+    }
+    setPasswordModalVisible(false);
+    router.push({ pathname: "/reset-password", params: { email: user.email } });
+  };
+
   const handleSignOut = () => {
     Alert.alert("Sign out?", undefined, [
       { text: "Cancel", style: "cancel" },
@@ -281,6 +298,13 @@ export default function SettingsScreen() {
               secureTextEntry
               autoCapitalize="none"
             />
+            <TouchableOpacity
+              onPress={handleForgotCurrentPassword}
+              style={styles.modalForgotLink}
+              disabled={changingPassword}
+            >
+              <Text style={styles.modalForgotText}>Forgot your current password?</Text>
+            </TouchableOpacity>
             <TextInput
               style={styles.modalInput}
               placeholder="New password"
@@ -391,4 +415,6 @@ const styles = StyleSheet.create({
   modalSaveButtonText: { ...Type.body, color: Palette.base, fontWeight: "700" },
   modalCancelButton: { alignItems: "center", padding: 12 },
   modalCancelButtonText: { ...Type.small, color: Palette.textMuted },
+  modalForgotLink: { alignSelf: "flex-start", marginTop: -8, marginBottom: 16 },
+  modalForgotText: { ...Type.small, color: Palette.accent, fontWeight: "600" },
 });

@@ -10,7 +10,7 @@ import {
   ScrollView,
   Platform,
 } from "react-native";
-import { useRouter } from "expo-router";
+import { useRouter, useLocalSearchParams } from "expo-router";
 import { supabase } from "@/frontend/config/supabase";
 import { Starfield } from "@/frontend/components/starfield";
 import { SpaceStyles, Palette, Type, Display, Radius } from "@/frontend/constants/theme";
@@ -24,9 +24,14 @@ import { useToast } from "@/frontend/components/toast";
 export default function ResetPasswordScreen() {
   const { showToast } = useToast();
   const router = useRouter();
+  // Settings' "Forgot your current password?" link routes here with the
+  // signed-in account's email so a logged-in user doesn't retype (or
+  // misremember) it. Everything else about the flow is identical.
+  const { email: emailParam } = useLocalSearchParams<{ email?: string }>();
+  const cameFromSettings = typeof emailParam === "string" && emailParam.length > 0;
   // "request" = ask for the email; "verify" = enter code + new password.
   const [stage, setStage] = useState<"request" | "verify">("request");
-  const [email, setEmail] = useState("");
+  const [email, setEmail] = useState(cameFromSettings ? emailParam : "");
   const [code, setCode] = useState("");
   const [newPassword, setNewPassword] = useState("");
   const [loading, setLoading] = useState(false);
@@ -176,7 +181,7 @@ export default function ResetPasswordScreen() {
         )}
 
         <TouchableOpacity onPress={() => router.back()} style={styles.switchLink}>
-          <Text style={styles.switchText}>Back to sign in</Text>
+          <Text style={styles.switchText}>{cameFromSettings ? "Back to settings" : "Back to sign in"}</Text>
         </TouchableOpacity>
       </ScrollView>
       </KeyboardAvoidingView>

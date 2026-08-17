@@ -10,7 +10,7 @@ import {
   fetchNearbyTheaters,
   NearbyTheater,
 } from "@/frontend/services/nearby-theaters";
-import { getCorporateRentalUrl } from "@/frontend/utils/theater-rentals";
+import { buildRentalInquiryUrl } from "@/frontend/services/ticket-links";
 import { cinemaChain } from "@/frontend/constants/theater-memberships";
 
 export default function RentATheaterScreen() {
@@ -39,12 +39,15 @@ export default function RentATheaterScreen() {
     });
   };
 
-  // Only offered for venues we can actually map to a real corporate rental
-  // program. getCorporateRentalUrl falls back to a Google search for anything
-  // unrecognized, which is noise on a neighborhood bar or community hall —
-  // those have no rental page to send someone to.
+  // Only offered for recognized cinema chains — a neighborhood bar or
+  // community hall has no rental page to send someone to. The link is a
+  // Google search for the venue's rental info rather than a hardcoded
+  // corporate URL: those vendor pages get restructured (Cinemark's
+  // /private-watch-party started redirecting to an unrelated article), and
+  // the app has no way to verify them live, so search is the only handoff
+  // that stays current.
   const handleViewRentalInfo = (theater: NearbyTheater) => {
-    WebBrowser.openBrowserAsync(getCorporateRentalUrl(theater.name));
+    WebBrowser.openBrowserAsync(buildRentalInquiryUrl(theater.name));
   };
 
   useEffect(() => {
