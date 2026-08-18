@@ -66,15 +66,18 @@ namespace Backend.Controllers
             var (puzzle, payload) = generated.Value;
             var today = puzzle.PuzzleDate;
 
-            // Start the server-side clock the first time this user sees
-            // today's puzzle. PK conflict = already seen = earliest wins, so
-            // re-fetching (or force-quitting and relaunching) never resets it.
-            if (!await _db.PuzzleFirstSeen.AnyAsync(p => p.UserId == userId && p.PuzzleDate == today))
-            {
-                _db.PuzzleFirstSeen.Add(new PuzzleFirstSeen { UserId = userId, PuzzleDate = today });
-                try { await _db.SaveChangesAsync(); }
-                catch (DbUpdateException) { _db.ChangeTracker.Clear(); } // concurrent first-fetch race
-            }
+            // Start the server-side clock the first time this user sees today's
+            // puzzle. Done as an atomic INSERT ... ON CONFLICT DO NOTHING rather
+            // than check-then-insert: the client fires this fetch twice in
+            // parallel on mount, and the old pattern let both pass the AnyAsync
+            // check and collide on the PK — a caught-but-EF-logged
+            // DbUpdateException on every race, which flooded the logs. Semantics
+            // are unchanged: earliest-seen wins (first_seen_utc is only set by
+            // the winning insert; a conflict leaves the existing row untouched).
+            await _db.Database.ExecuteSqlInterpolatedAsync(
+                $@"INSERT INTO ""PuzzleFirstSeen"" (user_id, puzzle_date, first_seen_utc)
+                   VALUES ({userId}, {today}, {DateTime.UtcNow})
+                   ON CONFLICT DO NOTHING");
 
             var progress = await _db.UserDailyProgress
                 .FirstOrDefaultAsync(p => p.UserId == userId && p.PuzzleDate == today);
