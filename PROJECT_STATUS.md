@@ -72,7 +72,7 @@ Everything here is committed on `main` and deployed unless noted.
 ## 4. What's still owed
 
 **Blocking the build:**
-- [ ] **Rotate the Supabase `JwtSecret`** — removed from code, but the old value is still in git history. Asked repeatedly, never confirmed done.
+- [x] **Rotate the Supabase `JwtSecret`** — DONE 2026‑08‑17. Migrated to asymmetric JWT signing keys + new API keys (`sb_publishable_`/`sb_secret_`); legacy anon/service_role keys disabled and the legacy secret revoked. Verified externally: a forged `service_role` token signed with the leaked secret (`15a1a5d5-…`, recovered from git history) is now rejected 401 by REST, the legacy key is out of JWKS, and the new keys work end‑to‑end (login, backend JWT validation, account deletion via Render). The value remains in git history but is now inert.
 - [x] `moviespaces://auth/callback` in Supabase → Auth → URL Configuration → Redirect URLs — entered 2026‑08‑16; final proof is SSO round-tripping on the real build
 - [x] Reset-password email template → shows `{{ .Token }}` as visible text (updated 2026‑08‑16; test recovery email sent same day — confirm the code is visible in it). Context: **the app has no screen that handles a reset *link*** — `reset-password.tsx` calls `verifyOtp({ type: "recovery" })` and expects a typed code, so the default link-based template was broken for this app.
 - [ ] Email confirmation ON/OFF decision (code handles both; recommend ON)

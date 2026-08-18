@@ -39,9 +39,10 @@ export default function AuthScreen() {
   const router = useRouter();
   // Both SSO buttons ship together or not at all: App Store guideline 4.8
   // requires Sign in with Apple wherever a third-party sign-in (Google) is
-  // offered, so hiding one and shipping the other is a rejection. Set back to
-  // true once BOTH providers are verified working on a real device.
-  const showSso = false;
+  // offered, so hiding one and shipping the other is a rejection. Enabled for
+  // the production build's real-device verification — if EITHER provider
+  // fails on that build, set back to false rather than ship a broken button.
+  const showSso = true;
 
   const [isSignUp, setIsSignUp] = useState(false);
   const [name, setName] = useState("");

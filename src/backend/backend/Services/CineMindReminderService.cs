@@ -73,6 +73,13 @@ namespace Backend.Services
 
             var today = DateOnly.FromDateTime(now);
 
+            // Cheap pre-check so the ~40 post-send passes per day exit without
+            // attempting the insert — EF logs every failed DbCommand at Error
+            // level before our catch runs, which was flooding Sentry with a
+            // PK-conflict "error" every 10 minutes for the rest of the day.
+            if (await db.CineMindReminderLog.AnyAsync(l => l.PuzzleDate == today, stoppingToken))
+                return;
+
             // Claim the day BEFORE sending. If two instances poll at once, the
             // primary-key conflict makes exactly one of them the sender —
             // sending first and recording after would let both fan out.
