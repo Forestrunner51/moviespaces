@@ -18,6 +18,11 @@ builder.WebHost.UseSentry(options =>
 {
     options.Dsn = builder.Configuration["Sentry:Dsn"];
     options.TracesSampleRate = 1.0;
+    // Turn on the Sentry Logs product. With this set, the app's existing
+    // ILogger calls (e.g. the scraper's LogInformation/LogWarning/LogError,
+    // which already use structured "{Placeholder}" params — the best-practice
+    // form) forward to Sentry as searchable logs, not just error events.
+    options.EnableLogs = true;
 });
 
 builder.Services.AddHttpClient();
