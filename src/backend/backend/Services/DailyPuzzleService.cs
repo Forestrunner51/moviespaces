@@ -532,11 +532,15 @@ namespace Backend.Services
                     // in-genre one beats a 4-film cross-genre one.
                     object? challenge = type switch
                     {
-                        "connection" => BuildConnectionForMovie(rng, pool, target, 4)
-                            ?? BuildConnectionForMovie(rng, pool, target, 3),
+                        // `pool` (genre-filtered) sources the films/answer so the
+                        // puzzle stays in-genre; `catalog` (full) sources the
+                        // wrong-answer options so a thin genre doesn't recycle the
+                        // same handful of distractors every spin.
+                        "connection" => BuildConnectionForMovie(rng, pool, target, catalog, 4)
+                            ?? BuildConnectionForMovie(rng, pool, target, catalog, 3),
                         "chronos" => BuildChronosForMovie(rng, pool, target, 4)
                             ?? BuildChronosForMovie(rng, pool, target, 3),
-                        "castDeduct" => BuildCastDeductForMovie(rng, pool, target),
+                        "castDeduct" => BuildCastDeductForMovie(rng, pool, target, catalog),
                         _ => null,
                     };
                     if (challenge != null)
@@ -649,7 +653,7 @@ namespace Backend.Services
         // since it needs one fewer film sharing the same person out of
         // whatever pool it's searching.
         private ConnectionChallenge? BuildConnectionForMovie(
-            Random rng, List<CatalogEntry> catalog, CatalogEntry target, int filmCount = 4)
+            Random rng, List<CatalogEntry> catalog, CatalogEntry target, List<CatalogEntry> distractorPool, int filmCount = 4)
         {
             var byActor = new Dictionary<string, List<CatalogEntry>>(StringComparer.OrdinalIgnoreCase);
             foreach (var entry in catalog)
@@ -702,7 +706,16 @@ namespace Backend.Services
                     .ToHashSet(StringComparer.OrdinalIgnoreCase)
                 : new HashSet<string>(StringComparer.OrdinalIgnoreCase);
 
-            var allPeople = (useActor ? byActor.Keys.AsEnumerable() : byDirector.Keys.AsEnumerable())
+            // Wrong-answer names come from the full distractorPool, not just the
+            // in-genre films above — otherwise a thin genre recycles the same
+            // few names each spin. alsoLinksAll (actors linking every shown film)
+            // is still excluded, so a wider pool can't smuggle in a real second
+            // answer; a director who isn't personKey can never direct all the
+            // shown films, so the director case is safe without it.
+            var allPeople = (useActor
+                    ? distractorPool.SelectMany(e => e.Cast)
+                    : distractorPool.Where(e => !string.IsNullOrWhiteSpace(e.Movie.Director)).Select(e => e.Movie.Director!))
+                .Distinct(StringComparer.OrdinalIgnoreCase)
                 .Where(p => !string.Equals(p, personKey, StringComparison.OrdinalIgnoreCase) && !alsoLinksAll.Contains(p))
                 .OrderBy(p => p, StringComparer.Ordinal)
                 .ToList();
@@ -734,7 +747,7 @@ namespace Backend.Services
             return new ChronosChallenge(presented, correctOrder);
         }
 
-        private CastDeductChallenge? BuildCastDeductForMovie(Random rng, List<CatalogEntry> catalog, CatalogEntry target)
+        private CastDeductChallenge? BuildCastDeductForMovie(Random rng, List<CatalogEntry> catalog, CatalogEntry target, List<CatalogEntry> distractorPool)
         {
             if (target.Cast.Count == 0) return null;
 
@@ -750,7 +763,11 @@ namespace Backend.Services
                 .ToList();
             var answer = shared[rng.Next(shared.Count)];
 
-            var distractors = catalog
+            // Wrong-answer actors come from the full distractorPool, not just
+            // the in-genre films — same variety fix as BuildConnectionForMovie.
+            // `shared` (actors in BOTH shown films) are excluded, so a wider
+            // pool can't introduce a valid answer.
+            var distractors = distractorPool
                 .SelectMany(e => e.Cast)
                 .Distinct(StringComparer.OrdinalIgnoreCase)
                 .Where(a => !shared.Contains(a, StringComparer.OrdinalIgnoreCase))

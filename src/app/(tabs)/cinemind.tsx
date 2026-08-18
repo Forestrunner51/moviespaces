@@ -650,9 +650,11 @@ interface MysteryGuessLogEntry {
 }
 
 const MAX_ATTEMPTS_BY_DIFFICULTY: Record<MysteryDifficulty, number> = {
-  easy: 4,
-  medium: 3,
-  hard: 2,
+  // Fewer tries than before, to offset the now-richer opening clues (plot is
+  // shown from the start): more information per guess, but fewer guesses.
+  easy: 3,
+  medium: 2,
+  hard: 1,
 };
 
 type ClueField = "year" | "decade" | "director" | "genre" | "plot" | "cast" | "poster";
@@ -661,25 +663,30 @@ type ClueField = "year" | "decade" | "director" | "genre" | "plot" | "cast" | "p
 // lower tiers; the ladder is filtered against what the puzzle actually
 // carries before any of it is sliced (see cluesForTier).
 const CLUE_LADDER: Record<MysteryDifficulty, ClueField[]> = {
-  // Hard means genuinely minimal information — no director/cast/poster ever.
-  hard: ["decade", "plot", "genre"],
+  // Plot leads every ladder: year + genre alone left the mystery near-
+  // unguessable, so the logline is now an opening clue at all difficulties.
+  // Hard still stays minimal beyond that — no director/cast/poster ever.
+  hard: ["plot", "decade", "genre"],
   // Deliberately a harder set than Easy at every tier: no poster, no director.
-  medium: ["year", "genre", "cast", "plot"],
-  easy: ["year", "director", "genre", "plot", "cast", "poster"],
+  medium: ["plot", "year", "genre", "cast"],
+  easy: ["plot", "year", "genre", "director", "cast", "poster"],
 };
 
 // How many clues each tier reveals. These counts are the actual difficulty
-// contract — they're what the tier ladder used to encode implicitly, kept
-// identical here so balance is unchanged.
+// contract. The opening tier now reveals enough to include the plot AND the
+// old year/genre, rather than just two clues — the whole point of the change,
+// since year + genre alone was too little to guess from.
 //
 // Each array's length MUST equal that difficulty's MAX_ATTEMPTS_BY_DIFFICULTY:
 // one entry per attempt. A shorter array would silently clamp the final
 // attempts to the last tier's clue count (so the last guess reveals nothing
 // new); a longer one would define tiers no player can ever reach.
 const CLUE_COUNT_BY_TIER: Record<MysteryDifficulty, number[]> = {
-  hard: [2, 3],
-  medium: [2, 3, 4],
-  easy: [2, 3, 4, 6],
+  // Lengths match MAX_ATTEMPTS_BY_DIFFICULTY (1 / 2 / 3). Hard's single guess
+  // reveals its full minimal clue set (plot + decade + genre) at once.
+  hard: [3],
+  medium: [3, 4],
+  easy: [3, 5, 6],
 };
 
 if (__DEV__) {
