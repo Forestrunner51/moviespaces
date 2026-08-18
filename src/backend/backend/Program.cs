@@ -244,8 +244,13 @@ if (string.IsNullOrEmpty(connectionString))
     throw new InvalidOperationException("CRITICAL: 'PostgresConnection' string was not found in appsettings.json!");
 }
 
-builder.Services.AddDbContext<AppDbContext>(options =>
-    options.UseNpgsql(connectionString));
+// Logs schema-level metadata for any failed SaveChanges (see the interceptor)
+// so redacted DbUpdateExceptions become one identifiable line.
+builder.Services.AddSingleton<PostgresErrorLoggingInterceptor>();
+builder.Services.AddDbContext<AppDbContext>((sp, options) =>
+    options
+        .UseNpgsql(connectionString)
+        .AddInterceptors(sp.GetRequiredService<PostgresErrorLoggingInterceptor>()));
 
 var app = builder.Build();
 
