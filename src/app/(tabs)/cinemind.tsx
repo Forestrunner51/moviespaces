@@ -938,9 +938,9 @@ function DifficultySelector({
   onSelect: (difficulty: MysteryDifficulty) => void;
 }) {
   const options: { key: MysteryDifficulty; emoji: string; label: string; blurb: string }[] = [
-    { key: "easy", emoji: "🟢", label: "Easy", blurb: "4 tries, full clues" },
-    { key: "medium", emoji: "🟡", label: "Medium", blurb: "3 tries, fewer clues" },
-    { key: "hard", emoji: "🔴", label: "Hard", blurb: "2 tries, decade + plot only" },
+    { key: "easy", emoji: "🟢", label: "Easy", blurb: "3 tries, full clues" },
+    { key: "medium", emoji: "🟡", label: "Medium", blurb: "2 tries, fewer clues" },
+    { key: "hard", emoji: "🔴", label: "Hard", blurb: "1 try, plot + decade + genre" },
   ];
 
   return (
