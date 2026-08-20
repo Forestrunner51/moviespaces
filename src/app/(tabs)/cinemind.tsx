@@ -370,7 +370,19 @@ export default function CineMindScreen() {
               />
             ))}
           </View>
-  
+
+          {/* Reachable mid-game so the leaderboard is viewable by everyone, not
+              only players who've already finished today (returning here keeps
+              your in-progress answers — they live in component state). */}
+          <TouchableOpacity
+            activeOpacity={0.8}
+            style={styles.leaderboardPeek}
+            onPress={() => setViewMode("leaderboard")}
+          >
+            <Ionicons name="trophy-outline" size={14} color={SpaceTheme.accentGold} />
+            <Text style={styles.leaderboardPeekText}>Today&apos;s leaderboard</Text>
+          </TouchableOpacity>
+
           {challengeIndex === 0 && (
             <View style={styles.card}>
               <Text style={styles.challengeLabel}>Challenge 1 of 5</Text>
@@ -384,6 +396,7 @@ export default function CineMindScreen() {
                   key={option}
                   label={option}
                   selected={connectionAnswer === option}
+                  locked={connectionAnswer !== null}
                   onPress={() => setConnectionAnswer(option)}
                 />
               ))}
@@ -436,6 +449,7 @@ export default function CineMindScreen() {
                   key={option}
                   label={option}
                   selected={castDeductAnswer === option}
+                  locked={castDeductAnswer !== null}
                   onPress={() => setCastDeductAnswer(option)}
                 />
               ))}
@@ -622,15 +636,21 @@ function Option({
   label,
   selected,
   onPress,
+  locked,
 }: {
   label: string;
   selected: boolean;
   onPress: () => void;
+  // Once any option in the challenge is chosen the whole set locks — the
+  // player commits to their first pick and can't change it (the un-picked
+  // options dim and stop responding).
+  locked?: boolean;
 }) {
   return (
     <TouchableOpacity
       activeOpacity={0.8}
-      style={[styles.option, selected && styles.optionSelected]}
+      disabled={locked}
+      style={[styles.option, selected && styles.optionSelected, locked && !selected && styles.optionLocked]}
       onPress={onPress}
     >
       <Ionicons
@@ -1054,6 +1074,9 @@ const styles = StyleSheet.create({
     marginBottom: 8,
   },
   optionSelected: { borderColor: SpaceTheme.glowCyan, backgroundColor: Palette.accentDim },
+  optionLocked: { opacity: 0.4 },
+  leaderboardPeek: { flexDirection: "row", alignItems: "center", justifyContent: "center", gap: 6, marginTop: 4, marginBottom: 8 },
+  leaderboardPeekText: { ...Type.small, color: SpaceTheme.accentGold },
   optionText: { flex: 1, color: SpaceTheme.starWhite, ...Type.body },
   optionTextSelected: { fontWeight: "700" },
   orderRow: {

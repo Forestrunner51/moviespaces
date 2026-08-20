@@ -10,12 +10,14 @@ import {
   TouchableOpacity,
 } from "react-native";
 import { router, useFocusEffect, useLocalSearchParams } from "expo-router";
+import { useSafeAreaInsets } from "react-native-safe-area-context";
 import { Ionicons } from "@expo/vector-icons";
 import { FriendsPanel } from "@/frontend/components/friends-panel";
 import { Starfield } from "@/frontend/components/starfield";
 import { MoviePoster } from "@/frontend/components/movie-poster";
 import { SpaceTheme, SpaceStyles, Palette, Type, Radius, Display } from "@/frontend/constants/theme";
 import { useUnreadCounts } from "@/frontend/hooks/use-unread-counts";
+import { useFriends } from "@/frontend/hooks/use-friends";
 import { useProfiles } from "@/frontend/hooks/use-profiles";
 import { AvatarStack } from "@/frontend/components/avatar";
 import { formatEventDate } from "@/frontend/utils/event-date";
@@ -148,6 +150,11 @@ function SpaceCard({
 }
 
 export default function MySpacesScreen() {
+  const insets = useSafeAreaInsets();
+  // Powers the pending-request count on the Friends tab so an incoming request
+  // is visible from anywhere in My Spaces, not only after opening Friends.
+  // Foreground-polled (see useFriends), so it pauses when backgrounded.
+  const { pendingRequests } = useFriends();
   const { tab: initialTab } = useLocalSearchParams<{ tab?: Tab }>();
   const [tab, setTab] = useState<Tab>(
     initialTab === "rent" || initialTab === "friends" ? initialTab : "spaces",
@@ -216,7 +223,7 @@ export default function MySpacesScreen() {
 
   return (
     <Starfield>
-      <View style={styles.container}>
+      <View style={[styles.container, { paddingTop: insets.top + 12 }]}>
         <Text style={[styles.title, SpaceStyles.glowText, SpaceStyles.wordmark]}>My Spaces</Text>
 
         <View style={styles.tabBar}>
@@ -237,6 +244,11 @@ export default function MySpacesScreen() {
                 <Text style={[styles.tabBarLabel, active && styles.tabBarLabelActive]} numberOfLines={1}>
                   {label}
                 </Text>
+                {key === "friends" && pendingRequests.length > 0 && (
+                  <View style={styles.tabBadge}>
+                    <Text style={styles.tabBadgeText}>{pendingRequests.length}</Text>
+                  </View>
+                )}
               </TouchableOpacity>
             );
           })}
@@ -381,7 +393,9 @@ export default function MySpacesScreen() {
 const styles = StyleSheet.create({
   container: {
     flex: 1,
-    paddingTop: 60,
+    // paddingTop is applied inline from safe-area insets so the header sits a
+    // consistent distance below the status bar / Dynamic Island on every
+    // device, instead of a fixed 60px that drifted across screen sizes.
     paddingHorizontal: 16,
   },
   // Display.heading, like every sibling tab's title — this was the one
@@ -416,6 +430,16 @@ const styles = StyleSheet.create({
   },
   tabBarLabel: { ...Type.small, fontWeight: "600", color: SpaceTheme.mutedOrbit },
   tabBarLabelActive: { color: SpaceTheme.glowCyan },
+  tabBadge: {
+    minWidth: 18,
+    height: 18,
+    paddingHorizontal: 5,
+    borderRadius: 9,
+    backgroundColor: SpaceTheme.supernovaPink,
+    alignItems: "center",
+    justifyContent: "center",
+  },
+  tabBadgeText: { ...Type.caption, color: SpaceTheme.starWhite, fontWeight: "700" },
   newSpaceButton: {
     flexDirection: "row",
     gap: 8,
