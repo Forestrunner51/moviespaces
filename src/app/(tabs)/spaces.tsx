@@ -18,6 +18,7 @@ import { MoviePoster } from "@/frontend/components/movie-poster";
 import { SpaceTheme, SpaceStyles, Palette, Type, Radius, Display } from "@/frontend/constants/theme";
 import { useUnreadCounts } from "@/frontend/hooks/use-unread-counts";
 import { useFriends } from "@/frontend/hooks/use-friends";
+import { CoachTip } from "@/frontend/components/coach-tip";
 import { useProfiles } from "@/frontend/hooks/use-profiles";
 import { AvatarStack } from "@/frontend/components/avatar";
 import { formatEventDate } from "@/frontend/utils/event-date";
@@ -241,6 +242,11 @@ export default function MySpacesScreen() {
             </TouchableOpacity>
           )}
         </View>
+
+        <CoachTip id="spaces-intro" icon="add-circle-outline">
+          Tap <Text style={{ fontWeight: "700" }}>New Space</Text> up top to plan a movie night, or the{" "}
+          <Text style={{ fontWeight: "700" }}>Friends</Text> tab to add people.
+        </CoachTip>
 
         <View style={styles.tabBar}>
           {TABS.map(({ key, label, icon }) => {

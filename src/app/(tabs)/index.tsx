@@ -14,6 +14,7 @@ import { Starfield } from "@/frontend/components/starfield";
 import { SpaceStyles, Palette, Type, Display } from "@/frontend/constants/theme";
 import { MoviePoster } from "@/frontend/components/movie-poster";
 import { AvatarStack } from "@/frontend/components/avatar";
+import { CoachTip } from "@/frontend/components/coach-tip";
 import { useProfiles } from "@/frontend/hooks/use-profiles";
 import { formatEventDate } from "@/frontend/utils/event-date";
 import { EVENT_CATEGORIES, eventCategoryOf } from "@/frontend/constants/event-categories";
@@ -254,6 +255,11 @@ export default function HomeScreen() {
       <ScrollView style={styles.flex} contentContainerStyle={styles.container}>
         <Text style={[styles.title, SpaceStyles.glowText, SpaceStyles.wordmark, styles.titleSpacing]}>MovieSpaces</Text>
         <Text style={styles.chooseSubtitle}>What do you want to do?</Text>
+
+        <CoachTip id="home-welcome" icon="hand-left-outline">
+          Welcome! Start by joining a screening near you, or create your own — your Spaces,
+          clubs, and the daily CineMind puzzle all live in the tabs below.
+        </CoachTip>
 
         {/* Joining leads, and it's a full card rather than a muted text link.
             Both hosting options below author an event from scratch — for a

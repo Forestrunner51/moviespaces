@@ -16,6 +16,7 @@ import { Ionicons } from "@expo/vector-icons";
 import { Starfield } from "@/frontend/components/starfield";
 import { MoviePoster } from "@/frontend/components/movie-poster";
 import { LockedStateView } from "@/frontend/components/locked-state-view";
+import { CoachTip } from "@/frontend/components/coach-tip";
 import { ResultDot } from "@/frontend/components/result-dot";
 import { CineMindStatsCard } from "@/frontend/components/cinemind-stats";
 import { GlobalLeaderboardView } from "@/frontend/components/cinemind-global-leaderboard";
@@ -358,6 +359,10 @@ export default function CineMindScreen() {
           <Header elapsedMs={elapsedMs} />
   
           <Text style={styles.puzzleNumber}>CineMind #{puzzle.puzzleNumber}</Text>
+          <CoachTip id="cinemind-intro" icon="bulb-outline">
+            Five film challenges, once a day. Fewer guesses means more points — and don&apos;t
+            forget to come back tomorrow to keep your streak.
+          </CoachTip>
           <View style={styles.progressRow}>
             {[0, 1, 2, 3, 4].map((i) => (
               <View
