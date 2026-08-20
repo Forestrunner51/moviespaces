@@ -3,6 +3,7 @@ import { View, Text, StyleSheet, ScrollView, TouchableOpacity, ActivityIndicator
 import { useLocalSearchParams, router } from "expo-router";
 import { Ionicons } from "@expo/vector-icons";
 import { Starfield } from "@/frontend/components/starfield";
+import { MoviePoster } from "@/frontend/components/movie-poster";
 import { SpaceStyles, Palette, Type, Display, Radius } from "@/frontend/constants/theme";
 import { useToast } from "@/frontend/components/toast";
 import { authFetch } from "@/frontend/services/api";
@@ -13,6 +14,7 @@ interface DiscoverSpace {
   displayName: string;
   spaceCode: string | null;
   genreCategory: string | null;
+  posterPath: string | null;
   memberCount: number;
   playedTodayCount: number;
   todayAvgScore: number | null;
@@ -35,7 +37,12 @@ const ICON_BY_GENRE: Record<string, keyof typeof Ionicons.glyphMap> = {
 // empty one just shows every public club.
 export default function SpaceDiscoveryScreen() {
   const { showToast } = useToast();
-  const { genres } = useLocalSearchParams<{ genres?: string }>();
+  const { genres, onboarding } = useLocalSearchParams<{ genres?: string; onboarding?: string }>();
+  // Reached two ways: as the last step of onboarding (where "Continue"
+  // finalizes onboarding) or as a plain browse screen from Explore (where
+  // there's a real screen to go back to). Only the onboarding entry passes
+  // this flag, so everywhere else gets a back button instead of "Continue".
+  const isOnboarding = onboarding === "1";
   const [spaces, setSpaces] = useState<DiscoverSpace[]>([]);
   const [loading, setLoading] = useState(true);
   const [errorText, setErrorText] = useState<string | null>(null);
@@ -94,6 +101,16 @@ export default function SpaceDiscoveryScreen() {
   return (
     <Starfield>
       <ScrollView contentContainerStyle={styles.content}>
+        {!isOnboarding && (
+          <TouchableOpacity
+            activeOpacity={0.8}
+            style={styles.backButton}
+            onPress={() => (router.canGoBack() ? router.back() : router.replace("/(tabs)/explore"))}
+          >
+            <Ionicons name="chevron-back" size={22} color={Palette.text} />
+            <Text style={styles.backButtonText}>Back</Text>
+          </TouchableOpacity>
+        )}
         <Text style={styles.title}>Discover Your Cinema Clubs</Text>
         <Text style={styles.subtitle}>
           {genres ? "Matching your picks" : "Every public Community Space"} — join any that look good.
@@ -120,10 +137,10 @@ export default function SpaceDiscoveryScreen() {
           spaces.map((space) => (
             <View key={space.id} style={styles.card}>
               <View style={styles.cardHeader}>
-                <Ionicons
-                  name={ICON_BY_GENRE[space.genreCategory ?? ""] ?? "videocam-outline"}
-                  size={22}
-                  color={Palette.accent}
+                <MoviePoster
+                  uri={space.posterPath}
+                  width={44}
+                  fallbackIcon={ICON_BY_GENRE[space.genreCategory ?? ""] ?? "videocam-outline"}
                 />
                 <View style={{ flex: 1 }}>
                   <Text style={styles.cardTitle}>{space.displayName}</Text>
@@ -169,18 +186,20 @@ export default function SpaceDiscoveryScreen() {
             </View>
           ))}
 
-        <TouchableOpacity
-          activeOpacity={0.85}
-          style={[styles.continueButton, finishing && styles.continueButtonDisabled]}
-          onPress={handleContinue}
-          disabled={finishing}
-        >
-          {finishing ? (
-            <ActivityIndicator color={Palette.base} />
-          ) : (
-            <Text style={styles.continueButtonText}>Continue</Text>
-          )}
-        </TouchableOpacity>
+        {isOnboarding && (
+          <TouchableOpacity
+            activeOpacity={0.85}
+            style={[styles.continueButton, finishing && styles.continueButtonDisabled]}
+            onPress={handleContinue}
+            disabled={finishing}
+          >
+            {finishing ? (
+              <ActivityIndicator color={Palette.base} />
+            ) : (
+              <Text style={styles.continueButtonText}>Continue</Text>
+            )}
+          </TouchableOpacity>
+        )}
       </ScrollView>
     </Starfield>
   );
@@ -188,6 +207,8 @@ export default function SpaceDiscoveryScreen() {
 
 const styles = StyleSheet.create({
   content: { paddingTop: 60, paddingHorizontal: 16, paddingBottom: 40 },
+  backButton: { flexDirection: "row", alignItems: "center", alignSelf: "flex-start", gap: 2, marginBottom: 8, paddingVertical: 4, paddingRight: 8 },
+  backButtonText: { ...Type.body, color: Palette.text },
   title: { ...Display.heading, color: Palette.text, textAlign: "center" },
   subtitle: {
     ...Type.small,

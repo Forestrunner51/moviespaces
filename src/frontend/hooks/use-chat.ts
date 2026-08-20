@@ -10,6 +10,11 @@ export interface Message {
   receiver_id: string;
   content: string;
   created_at: string;
+  // Set only on optimistic local messages: `pending` while the insert is in
+  // flight, `failed` if it errored (the bubble stays so it can be retried).
+  // Real messages loaded from the server never carry these.
+  pending?: boolean;
+  failed?: boolean;
 }
 
 // chatTargetId arrives via a deep-linkable route param
@@ -127,19 +132,18 @@ export function useChat(chatTargetId: string) {
 
   const sendMessage = async (content: string) => {
     if (!currentUserId || !validTargetId || !content.trim()) return { success: false };
+    // Declared outside the try so the catch can find this exact bubble by id.
+    const tempId = `temp_${Date.now()}`;
+    const newMsg: Message = {
+      id: tempId,
+      sender_id: currentUserId,
+      receiver_id: validTargetId,
+      content,
+      created_at: new Date().toISOString(),
+      pending: true,
+    };
+    setMessages((prev) => [...prev, newMsg]); // optimistic
     try {
-      const tempId = `temp_${Date.now()}`;
-      const newMsg: Message = {
-        id: tempId,
-        sender_id: currentUserId,
-        receiver_id: validTargetId,
-        content,
-        created_at: new Date().toISOString(),
-      };
-
-      // Optimistic update
-      setMessages((prev) => [...prev, newMsg]);
-
       const { data, error } = await supabase
         .from("messages")
         .insert([
@@ -168,15 +172,26 @@ export function useChat(chatTargetId: string) {
       return { success: true };
     } catch (err) {
       console.error("Error sending message:", err);
-      // Remove optimistic message on error
-      fetchHistory();
+      // Keep the optimistic bubble but mark it failed, so it stays on screen
+      // in a red "not sent" state the user can tap to retry — instead of
+      // silently vanishing (the old fetchHistory() rollback).
+      setMessages((prev) =>
+        prev.map((m) => (m.id === tempId ? { ...m, pending: false, failed: true } : m)),
+      );
       return { success: false };
     }
+  };
+
+  // Re-send a failed message: drop the failed bubble and send it fresh.
+  const retryMessage = (failed: Message) => {
+    setMessages((prev) => prev.filter((m) => m.id !== failed.id));
+    return sendMessage(failed.content);
   };
 
   return {
     currentUserId,
     messages,
+    retryMessage,
     loading,
     sendMessage,
     refresh: fetchHistory,

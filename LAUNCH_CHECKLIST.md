@@ -28,15 +28,15 @@ Everything native only becomes real here: SSO, the "MovieSpaces" name, Bebas Neu
 - [ ] Build succeeds and is signed with the distribution cert / provisioning profile
 - [ ] `eas submit --platform ios` (or upload the .ipa) to App Store Connect → TestFlight
 - [ ] Install via TestFlight on a real device; confirm the app launches and the name/font/icon are correct
-- [ ] Verify the native bits now work: Apple sign-in button appears, Google sign-in doesn't crash, signup/login work
+- [~] Verify the native bits now work: Apple sign-in button appears, Google sign-in doesn't crash, signup/login work — **both SSO providers verified on a local dev build 2026‑08‑18** (`npx expo run:ios`); re-confirm on the TestFlight build
 
 ## PHASE 2 — Auth & dashboard config (unblocks SSO + password reset)
 - [x] **Supabase → Auth → URL Configuration →** add redirect URL `moviespaces://auth/callback` — entered 2026‑08‑16; not externally verifiable, so it's truly proven only when SSO round-trips back into the app on the real build (Phase 2 test line below)
-- [ ] **Google Cloud Console →** create OAuth 2.0 **Web** client; add redirect URI `https://hzkpqfitsxnxcdefkqwt.supabase.co/auth/v1/callback`
-- [ ] **Supabase → Auth → Providers → Google →** paste Client ID + Secret, enable
-- [ ] **Apple Developer →** App ID `com.newfahrenheit45.Moviespaces` → enable "Sign in with Apple" capability
-- [ ] **Supabase → Auth → Providers → Apple →** add bundle ID to Authorized Client IDs, enable
-- [~] **Supabase → Auth → Email Templates → Reset Password →** template must surface the code via `{{ .Token }}` (password-reset OTP flow needs it) — updated 2026‑08‑16; a live test recovery email was sent to the owner's inbox that day — flip to [x] once that email visibly shows the code, not just a link
+- [x] **Google Cloud Console →** OAuth 2.0 **Web** client with redirect URI `https://hzkpqfitsxnxcdefkqwt.supabase.co/auth/v1/callback` — done 2026‑08‑18. The earlier failure was an **iOS**-type client (no secret); a Web client fixed it.
+- [x] **Supabase → Auth → Providers → Google →** Client ID + Secret pasted, enabled — verified end-to-end on the dev build 2026‑08‑18 (seamless sign-in).
+- [x] **Apple "Sign in with Apple" capability** — added via `ios.usesAppleSignIn: true` in `app.json` (adds the `com.apple.developer.applesignin` entitlement; the plugin alone did not). Automatic signing registers it on the App ID. Verified on the dev build 2026‑08‑18.
+- [x] **Supabase → Auth → Providers → Apple →** enabled (provider shows `apple: true`); verified round-tripping on the dev build 2026‑08‑18.
+- [x] **Supabase → Auth → Email Templates → Reset Password →** surfaces the code via `{{ .Token }}` — updated 2026‑08‑16.
 - [x] **Signup now handles email confirmation ON or OFF** in code (`auth.tsx` — shows "check your email" when a session isn't returned). No code change needed either way now.
 - [ ] **Decide: email confirmation ON or OFF?** (Supabase → Auth → Providers → Email → "Confirm email") — recommend **ON** for launch (stops fake-email spam). Just flip the setting; the app already handles both.
 - [ ] Test each: Google sign-in, Apple sign-in, email signup, email login, forgot-password end-to-end on a real build

@@ -506,11 +506,23 @@ export default function CreateSpaceScreen() {
     setShowDate(formatDate(when));
     setTimeValue(when);
 
+    // The scraped showtime gives only a raw title (no IMDb id/year), so resolve
+    // the poster by searching OMDb for it. Don't just take the first hit with
+    // art: for a title shared with a more famous film (e.g. "One Night" vs an
+    // Adele concert film) OMDb ranks the famous one first. A film currently in
+    // theaters is a *recent* release, so prefer an exact title match and, among
+    // those, the newest year — which lands on the real theatrical film. Fall
+    // back to the old "first with a poster" only when nothing matches exactly.
     setPosterPath(null);
     searchMovies(sel.movieTitle)
       .then((outcome) => {
-        const poster = outcome.results.find((r) => r.posterPath)?.posterPath;
-        if (poster) setPosterPath(poster);
+        const wanted = sel.movieTitle.trim().toLowerCase();
+        const withPoster = outcome.results.filter((r) => r.posterPath);
+        const exact = withPoster.filter((r) => r.title.trim().toLowerCase() === wanted);
+        const pick = (exact.length ? exact : withPoster)
+          .slice()
+          .sort((a, b) => (b.releaseYear ?? 0) - (a.releaseYear ?? 0))[0];
+        if (pick?.posterPath) setPosterPath(pick.posterPath);
       })
       .catch(() => {});
   };
@@ -537,10 +549,20 @@ export default function CreateSpaceScreen() {
     }
 
     let totalCostCents: number | null = null;
-    if (spaceType === "private_rental" && totalCost.trim()) {
+    if (spaceType === "private_rental") {
+      // Price is required for a private rental so guests always know the cost
+      // up front. Blank isn't allowed — a free event is stated explicitly as 0.
+      // The field lives in the collapsed "More options" section, so reveal it
+      // when the error fires or the user can't see what they're being asked to fix.
+      if (!totalCost.trim()) {
+        setMoreOptionsOpen(true);
+        showToast("Set a price for this event (enter 0 if it's free).");
+        return;
+      }
       const amount = parseFloat(totalCost);
       if (isNaN(amount) || amount < 0) {
-        showToast("Enter a valid cost, or leave it blank for a free event.");
+        setMoreOptionsOpen(true);
+        showToast("Enter a valid price (enter 0 if it's free).");
         return;
       }
       totalCostCents = amount > 0 ? Math.round(amount * 100) : null;
@@ -674,6 +696,9 @@ export default function CreateSpaceScreen() {
               onPress={() => {
                 setSpaceType("private_rental");
                 setBookingUrl("");
+                // Reveal the details section so the now-required price is
+                // visible immediately rather than only after a failed submit.
+                setMoreOptionsOpen(true);
               }}
             >
               <Ionicons
@@ -1054,7 +1079,7 @@ export default function CreateSpaceScreen() {
 
               <TextInput
                 style={styles.input}
-                placeholder={`Total Venue / ${EVENT_NOUN[rentalActivityType]} Cost (Optional)`}
+                placeholder={`Total Venue / ${EVENT_NOUN[rentalActivityType]} Cost (required — 0 if free)`}
                 placeholderTextColor={Palette.textMuted}
                 value={totalCost}
                 onChangeText={setTotalCost}

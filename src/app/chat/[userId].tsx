@@ -11,6 +11,7 @@ import {
   ActivityIndicator,
 } from "react-native";
 import { useLocalSearchParams, Stack } from "expo-router";
+import { Ionicons } from "@expo/vector-icons";
 import { useSafeAreaInsets } from "react-native-safe-area-context";
 import { Starfield } from "@/frontend/components/starfield";
 import { SpaceTheme, Palette, Type, Radius } from "@/frontend/constants/theme";
@@ -23,7 +24,7 @@ export default function ChatScreen() {
     userId: string;
     name?: string;
   }>();
-  const { currentUserId, messages, loading, sendMessage } = useChat(userId);
+  const { currentUserId, messages, loading, sendMessage, retryMessage } = useChat(userId);
   const [text, setText] = useState("");
   const listRef = useRef<FlatList>(null);
   // See group-chat/[id].tsx for why a hardcoded offset caused the Send button
@@ -45,11 +46,10 @@ export default function ChatScreen() {
     const result = await sendMessage(content);
     sendingRef.current = false;
     if (!result.success) {
-      // The optimistic bubble is rolled back by the hook's fetchHistory; tell
-      // the user why instead of letting the message just silently disappear
-      // (most likely cause: you can only DM accepted friends).
-      showToast("You can only message people you're friends with. Send them a friend request first.");
-      setText(content);
+      // The message now stays on screen as a red "not sent" bubble you can tap
+      // to retry (see renderItem), so we don't restore the input. Still surface
+      // the most likely reason — you can only DM accepted friends.
+      showToast("Not sent — you can only message people you're friends with.");
       return;
     }
     listRef.current?.scrollToEnd({ animated: true });
@@ -58,14 +58,23 @@ export default function ChatScreen() {
   const renderItem = ({ item }: { item: Message }) => {
     const isMe = item.sender_id === currentUserId;
     return (
-      <View
-        style={[
-          styles.bubble,
-          isMe ? styles.bubbleMe : styles.bubbleThem,
-          { alignSelf: isMe ? "flex-end" : "flex-start" },
-        ]}
-      >
-        <Text style={[styles.bubbleText, isMe && styles.bubbleTextMe]}>{item.content}</Text>
+      <View style={[styles.msgWrap, { alignSelf: isMe ? "flex-end" : "flex-start" }]}>
+        <View
+          style={[
+            styles.bubble,
+            isMe ? styles.bubbleMe : styles.bubbleThem,
+            item.failed && styles.bubbleFailed,
+            item.pending && styles.bubblePending,
+          ]}
+        >
+          <Text style={[styles.bubbleText, isMe && styles.bubbleTextMe]}>{item.content}</Text>
+        </View>
+        {item.failed && (
+          <TouchableOpacity onPress={() => retryMessage(item)} style={styles.retryRow} activeOpacity={0.7}>
+            <Ionicons name="alert-circle" size={13} color={Palette.danger} />
+            <Text style={styles.retryText}>Not sent · Tap to retry</Text>
+          </TouchableOpacity>
+        )}
       </View>
     );
   };
@@ -118,13 +127,16 @@ export default function ChatScreen() {
 const styles = StyleSheet.create({
   container: { flex: 1 },
   list: { padding: 16, gap: 8 },
+  msgWrap: { maxWidth: "80%", marginBottom: 8 },
   bubble: {
-    maxWidth: "78%",
     paddingHorizontal: 12,
     paddingVertical: 9,
     borderRadius: Radius.medium,
-    marginBottom: 8,
   },
+  bubbleFailed: { borderWidth: 1, borderColor: Palette.dangerBorder },
+  bubblePending: { opacity: 0.6 },
+  retryRow: { flexDirection: "row", alignItems: "center", gap: 4, alignSelf: "flex-end", marginTop: 3, paddingVertical: 2 },
+  retryText: { ...Type.caption, color: Palette.danger, fontWeight: "600" },
   bubbleMe: { backgroundColor: Palette.accent },
   // A received message is a raised surface, not a bordered card — bubbles sit
   // directly on the background in a stack, so the extra outline just added

@@ -32,7 +32,7 @@ export default function OnboardingInterestsScreen() {
   };
 
   const handleFindSpaces = () => {
-    router.push({ pathname: "/space-discovery", params: { genres: selected.join(",") } });
+    router.push({ pathname: "/space-discovery", params: { genres: selected.join(","), onboarding: "1" } });
   };
 
   return (

@@ -409,6 +409,47 @@ namespace Backend.Controllers
                 ? allPublicClubs
                 : allPublicClubs.Where(g => g.GenreCategory != null && requested.Contains(g.GenreCategory)).ToList();
 
+            // A representative poster per club: a real film from the club's
+            // genre, so a club card shows movie art instead of a bare icon.
+            // Chosen deterministically by the club id (stable across reloads,
+            // not a new film every fetch). Clubs whose genre has no catalog
+            // films fall back to the icon the client already renders.
+            var neededGenres = clubs
+                .Where(c => c.GenreCategory != null)
+                .Select(c => c.GenreCategory!)
+                .ToHashSet(StringComparer.OrdinalIgnoreCase);
+            var postersByGenre = new Dictionary<string, List<string>>(StringComparer.OrdinalIgnoreCase);
+            if (neededGenres.Count > 0)
+            {
+                var catalog = await _db.CineMindMovies
+                    .Where(m => m.PosterPath != null && m.PosterPath != "")
+                    .Select(m => new { m.GenresJson, m.PosterPath })
+                    .ToListAsync();
+                foreach (var m in catalog)
+                {
+                    List<string>? filmGenres;
+                    try { filmGenres = JsonSerializer.Deserialize<List<string>>(m.GenresJson); }
+                    catch { filmGenres = null; }
+                    if (filmGenres == null) continue;
+                    foreach (var g in filmGenres)
+                    {
+                        if (!neededGenres.Contains(g)) continue;
+                        if (!postersByGenre.TryGetValue(g, out var list)) postersByGenre[g] = list = new();
+                        list.Add(m.PosterPath!);
+                    }
+                }
+            }
+            string? PosterForClub(Group club)
+            {
+                if (club.GenreCategory != null
+                    && postersByGenre.TryGetValue(club.GenreCategory, out var posters)
+                    && posters.Count > 0)
+                {
+                    return posters[(int)((uint)club.Id.GetHashCode() % (uint)posters.Count)];
+                }
+                return null;
+            }
+
             var today = DateOnly.FromDateTime(DateTime.UtcNow);
             var allMemberIds = clubs
                 .SelectMany(c => c.Members.Select(m => m.UserId))
@@ -450,6 +491,7 @@ namespace Backend.Controllers
                     displayName = r.club.FilmName,
                     spaceCode = r.club.SpaceCode,
                     genreCategory = r.club.GenreCategory,
+                    posterPath = PosterForClub(r.club),
                     memberCount = r.memberCount,
                     playedTodayCount = r.playedTodayCount,
                     todayAvgScore = r.todayAvgScore,

@@ -10,12 +10,15 @@ import {
   TouchableOpacity,
 } from "react-native";
 import { router, useFocusEffect, useLocalSearchParams } from "expo-router";
+import { useSafeAreaInsets } from "react-native-safe-area-context";
 import { Ionicons } from "@expo/vector-icons";
 import { FriendsPanel } from "@/frontend/components/friends-panel";
 import { Starfield } from "@/frontend/components/starfield";
 import { MoviePoster } from "@/frontend/components/movie-poster";
 import { SpaceTheme, SpaceStyles, Palette, Type, Radius, Display } from "@/frontend/constants/theme";
 import { useUnreadCounts } from "@/frontend/hooks/use-unread-counts";
+import { useFriends } from "@/frontend/hooks/use-friends";
+import { CoachTip } from "@/frontend/components/coach-tip";
 import { useProfiles } from "@/frontend/hooks/use-profiles";
 import { AvatarStack } from "@/frontend/components/avatar";
 import { formatEventDate } from "@/frontend/utils/event-date";
@@ -148,6 +151,11 @@ function SpaceCard({
 }
 
 export default function MySpacesScreen() {
+  const insets = useSafeAreaInsets();
+  // Powers the pending-request count on the Friends tab so an incoming request
+  // is visible from anywhere in My Spaces, not only after opening Friends.
+  // Foreground-polled (see useFriends), so it pauses when backgrounded.
+  const { pendingRequests } = useFriends();
   const { tab: initialTab } = useLocalSearchParams<{ tab?: Tab }>();
   const [tab, setTab] = useState<Tab>(
     initialTab === "rent" || initialTab === "friends" ? initialTab : "spaces",
@@ -216,8 +224,29 @@ export default function MySpacesScreen() {
 
   return (
     <Starfield>
-      <View style={styles.container}>
-        <Text style={[styles.title, SpaceStyles.glowText, SpaceStyles.wordmark]}>My Spaces</Text>
+      <View style={[styles.container, { paddingTop: insets.top + 12 }]}>
+        <View style={styles.headerRow}>
+          <Text style={[styles.title, SpaceStyles.glowText, SpaceStyles.wordmark]}>My Spaces</Text>
+          {tab !== "friends" && (
+            <TouchableOpacity
+              activeOpacity={0.8}
+              style={styles.headerCreateButton}
+              onPress={() => router.push(tab === "rent" ? "/rent-a-theater" : "/create-space")}
+            >
+              <Ionicons
+                name={tab === "rent" ? "storefront-outline" : "add-circle-outline"}
+                size={16}
+                color={SpaceTheme.backgroundVoid}
+              />
+              <Text style={styles.headerCreateButtonText}>{tab === "rent" ? "Find Venue" : "New Space"}</Text>
+            </TouchableOpacity>
+          )}
+        </View>
+
+        <CoachTip id="spaces-intro" icon="add-circle-outline">
+          Tap <Text style={{ fontWeight: "700" }}>New Space</Text> up top to plan a movie night, or the{" "}
+          <Text style={{ fontWeight: "700" }}>Friends</Text> tab to add people.
+        </CoachTip>
 
         <View style={styles.tabBar}>
           {TABS.map(({ key, label, icon }) => {
@@ -237,6 +266,11 @@ export default function MySpacesScreen() {
                 <Text style={[styles.tabBarLabel, active && styles.tabBarLabelActive]} numberOfLines={1}>
                   {label}
                 </Text>
+                {key === "friends" && pendingRequests.length > 0 && (
+                  <View style={styles.tabBadge}>
+                    <Text style={styles.tabBadgeText}>{pendingRequests.length}</Text>
+                  </View>
+                )}
               </TouchableOpacity>
             );
           })}
@@ -251,14 +285,6 @@ export default function MySpacesScreen() {
             <ActivityIndicator size="large" color={SpaceTheme.glowCyan} style={{ flex: 1 }} />
           ) : (
             <>
-              <TouchableOpacity
-                activeOpacity={0.8}
-                style={styles.newSpaceButton}
-                onPress={() => router.push("/rent-a-theater")}
-              >
-                <Ionicons name="storefront-outline" size={18} color={SpaceTheme.backgroundVoid} />
-                <Text style={styles.newSpaceButtonText}>Find a Venue</Text>
-              </TouchableOpacity>
               <Text style={styles.subtitle}>Watch parties you&apos;re part of</Text>
               <View style={styles.categoryFilterRow}>
                 <TouchableOpacity
@@ -330,14 +356,6 @@ export default function MySpacesScreen() {
           <ActivityIndicator size="large" color={SpaceTheme.glowCyan} style={{ flex: 1 }} />
         ) : (
           <>
-            <TouchableOpacity
-              activeOpacity={0.8}
-              style={styles.newSpaceButton}
-              onPress={() => router.push("/create-space")}
-            >
-              <Ionicons name="add-circle-outline" size={18} color={SpaceTheme.backgroundVoid} />
-              <Text style={styles.newSpaceButtonText}>New Space</Text>
-            </TouchableOpacity>
             <Text style={styles.subtitle}>Your movie groups and memberships</Text>
             <FlatList
               data={gatheringSpaces}
@@ -381,7 +399,9 @@ export default function MySpacesScreen() {
 const styles = StyleSheet.create({
   container: {
     flex: 1,
-    paddingTop: 60,
+    // paddingTop is applied inline from safe-area insets so the header sits a
+    // consistent distance below the status bar / Dynamic Island on every
+    // device, instead of a fixed 60px that drifted across screen sizes.
     paddingHorizontal: 16,
   },
   // Display.heading, like every sibling tab's title — this was the one
@@ -390,8 +410,23 @@ const styles = StyleSheet.create({
   title: {
     ...Display.heading,
     color: SpaceTheme.starWhite,
-    marginBottom: 4,
   },
+  headerRow: {
+    flexDirection: "row",
+    alignItems: "center",
+    justifyContent: "space-between",
+    marginBottom: 12,
+  },
+  headerCreateButton: {
+    flexDirection: "row",
+    alignItems: "center",
+    gap: 6,
+    backgroundColor: SpaceTheme.supernovaPink,
+    paddingVertical: 8,
+    paddingHorizontal: 12,
+    borderRadius: Radius.medium,
+  },
+  headerCreateButtonText: { ...Type.small, color: SpaceTheme.backgroundVoid, fontWeight: "700" },
   subtitle: { ...Type.small, color: SpaceTheme.mutedOrbit, marginBottom: 16 },
   tabBar: {
     flexDirection: "row",
@@ -416,17 +451,16 @@ const styles = StyleSheet.create({
   },
   tabBarLabel: { ...Type.small, fontWeight: "600", color: SpaceTheme.mutedOrbit },
   tabBarLabelActive: { color: SpaceTheme.glowCyan },
-  newSpaceButton: {
-    flexDirection: "row",
-    gap: 8,
+  tabBadge: {
+    minWidth: 18,
+    height: 18,
+    paddingHorizontal: 5,
+    borderRadius: 9,
     backgroundColor: SpaceTheme.supernovaPink,
-    padding: 14,
-    borderRadius: Radius.medium,
     alignItems: "center",
     justifyContent: "center",
-    marginBottom: 12,
   },
-  newSpaceButtonText: { color: SpaceTheme.backgroundVoid, fontWeight: "700", ...Type.body },
+  tabBadgeText: { ...Type.caption, color: SpaceTheme.starWhite, fontWeight: "700" },
   card: {
     ...SpaceStyles.glassCard,
     flexDirection: "row",

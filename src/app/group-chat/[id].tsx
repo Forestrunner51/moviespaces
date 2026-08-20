@@ -12,6 +12,7 @@ import {
   Alert,
 } from "react-native";
 import { useLocalSearchParams, Stack } from "expo-router";
+import { Ionicons } from "@expo/vector-icons";
 import { useSafeAreaInsets } from "react-native-safe-area-context";
 import { Starfield } from "@/frontend/components/starfield";
 import { SpaceTheme, Palette, Type, Radius } from "@/frontend/constants/theme";
@@ -36,7 +37,7 @@ export default function GroupChatScreen() {
   // the hook as .eq("group_type", undefined): an empty history and a send
   // that violates the DB check constraint. "group" is the only value ever
   // written (see GroupChatType), so defaulting is always correct.
-  const { currentUserId, messages, loading, sendMessage } = useGroupChat(type ?? "group", id);
+  const { currentUserId, messages, loading, sendMessage, retryMessage } = useGroupChat(type ?? "group", id);
   // Header height, derived from the safe-area top inset + the standard iOS
   // nav-bar content height (44). A hardcoded offset doesn't account for the
   // top inset (which varies with notch/Dynamic Island/no-notch), so the
@@ -82,13 +83,9 @@ export default function GroupChatScreen() {
     const result = await sendMessage(content);
     sendingRef.current = false;
     if (!result.success) {
-      // Every sendMessage failure path (RLS rejection, network error, or
-      // currentUserId not loaded yet) was previously swallowed here — the
-      // input cleared as if it sent, nothing appeared in the chat, and there
-      // was no indication anything went wrong. Restore the draft so nothing
-      // typed is lost, and say why.
-      setText(content);
-      showToast(result.error || "Message not sent — still connecting. Try again in a moment.");
+      // The message now stays as a red "not sent" bubble you can tap to retry
+      // (see renderItem), so we don't restore the input. Still say why.
+      showToast(result.error || "Message not sent — tap it to retry.");
       return;
     }
     listRef.current?.scrollToEnd({ animated: true });
@@ -137,8 +134,24 @@ export default function GroupChatScreen() {
     const isMe = item.sender_id === currentUserId;
     if (isMe) {
       return (
-        <View style={[styles.bubble, styles.bubbleMe, { alignSelf: "flex-end" }]}>
-          <Text style={[styles.bubbleText, styles.bubbleTextMe]}>{item.content}</Text>
+        <View style={styles.myMsgWrap}>
+          <View
+            style={[
+              styles.bubble,
+              styles.bubbleMe,
+              { maxWidth: "100%", marginBottom: 0 },
+              item.failed && styles.bubbleFailed,
+              item.pending && styles.bubblePending,
+            ]}
+          >
+            <Text style={[styles.bubbleText, styles.bubbleTextMe]}>{item.content}</Text>
+          </View>
+          {item.failed && (
+            <TouchableOpacity onPress={() => retryMessage(item)} style={styles.retryRow} activeOpacity={0.7}>
+              <Ionicons name="alert-circle" size={13} color={Palette.danger} />
+              <Text style={styles.retryText}>Not sent · Tap to retry</Text>
+            </TouchableOpacity>
+          )}
         </View>
       );
     }
@@ -237,6 +250,11 @@ const styles = StyleSheet.create({
     marginBottom: 8,
   },
   bubbleMe: { backgroundColor: Palette.accent },
+  myMsgWrap: { alignSelf: "flex-end", alignItems: "flex-end", maxWidth: "80%", marginBottom: 8 },
+  bubbleFailed: { borderWidth: 1, borderColor: Palette.dangerBorder },
+  bubblePending: { opacity: 0.6 },
+  retryRow: { flexDirection: "row", alignItems: "center", gap: 4, marginTop: 3, paddingVertical: 2 },
+  retryText: { ...Type.caption, color: Palette.danger, fontWeight: "600" },
   // Raised surface, not a bordered card — bubbles stack directly on the
   // background, so an outline on every one was pure noise.
   bubbleThem: { backgroundColor: Palette.raised },

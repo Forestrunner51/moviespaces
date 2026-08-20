@@ -1,6 +1,6 @@
 # MovieSpaces — Technical Product Status & Launch Plan
 
-**Owner:** solo dev · **Status doc date:** 2026‑08‑08 · **Goal: ship to the App Store and be done.**
+**Owner:** solo dev · **Status doc date:** 2026‑08‑08, refreshed 2026‑08‑18 · **Goal: ship to the App Store and be done.**
 **Companion doc:** `LAUNCH_CHECKLIST.md` (tactical, tick-through). This doc is the architectural + PM view.
 
 > Written to be read cold by a new session. The previous version of this doc was dated 2026‑07‑24 and was badly stale — treat anything not in this file as unverified.
@@ -75,11 +75,17 @@ Everything here is committed on `main` and deployed unless noted.
 - [x] **Rotate the Supabase `JwtSecret`** — DONE 2026‑08‑17. Migrated to asymmetric JWT signing keys + new API keys (`sb_publishable_`/`sb_secret_`); legacy anon/service_role keys disabled and the legacy secret revoked. Verified externally: a forged `service_role` token signed with the leaked secret (`15a1a5d5-…`, recovered from git history) is now rejected 401 by REST, the legacy key is out of JWKS, and the new keys work end‑to‑end (login, backend JWT validation, account deletion via Render). The value remains in git history but is now inert.
 - [x] `moviespaces://auth/callback` in Supabase → Auth → URL Configuration → Redirect URLs — entered 2026‑08‑16; final proof is SSO round-tripping on the real build
 - [x] Reset-password email template → shows `{{ .Token }}` as visible text (updated 2026‑08‑16; test recovery email sent same day — confirm the code is visible in it). Context: **the app has no screen that handles a reset *link*** — `reset-password.tsx` calls `verifyOtp({ type: "recovery" })` and expects a typed code, so the default link-based template was broken for this app.
-- [ ] Email confirmation ON/OFF decision (code handles both; recommend ON)
-- [ ] Apple SSO — App ID capability + Supabase provider config entered, but **unverifiable until a real build exists** (needs the native module; Expo Go can't test it)
+- [ ] Email confirmation ON/OFF decision (code handles both; recommend ON). Currently **OFF** (Supabase `mailer_autoconfirm: true`, confirmed 2026‑08‑18) — one toggle to flip.
+- [x] **Both SSO providers verified working 2026‑08‑18** on a local dev build (`npx expo run:ios`, NOT Expo Go). Google needed a **Web**-type Google Cloud OAuth client + its Client Secret in Supabase (an iOS-type client has no secret → the "Unable to exchange external code" failure). Apple needed **`ios.usesAppleSignIn: true`** in `app.json` — the `expo-apple-authentication` plugin alone did NOT add the `com.apple.developer.applesignin` entitlement, so Apple failed with AuthorizationError 1000 until that flag was set and the app rebuilt. `showSso` is now `true`. Only the TestFlight round-trip remains to seal it.
+
+**Fixed since the 08‑08 doc (all committed to `feature/pushingdata`, deployed on Render):**
+- Showtimes scraper produced no data since 08‑14 — root cause was `Showtimes__Cities` set to the bogus value `15` (→ 404 on the directory fetch). Reset to `dallas-tx`; scrape works again. A verified 45-metro slug list exists for post‑launch expansion.
+- Sentry structured **Logs** enabled (client + backend); EF per‑statement SQL logging dropped to Warning so it doesn't flood the log quota.
+- The recurring `DbUpdateException` flood was the CineMind first‑seen insert racing on parallel puzzle fetches — fixed with an atomic `INSERT … ON CONFLICT DO NOTHING`.
+- CineMind Mystery: plot now shown from the first clue; tries cut to easy 3 / medium 2 / hard 1 to compensate. Roulette practice now draws wrong‑answer options from the full catalog (was genre‑limited/repetitive).
 
 **The actual gate:**
-- [ ] **Fresh `eas build --platform ios --profile production`** → TestFlight. Everything above is unverified on a real device until this exists. Note: Expo Go **cannot** test Google or Apple SSO — custom URL scheme + native module both require a real build. This caused real confusion; don't repeat it.
+- [ ] **Fresh `eas build --platform ios --profile production`** → TestFlight. SSO is now proven on a dev build, so this is safe to spend. Note: Expo Go **cannot** test SSO — custom URL scheme + native module both require a real build (`expo run:ios` dev build or the production build).
 - [ ] **Real-device QA pass, two accounts.** Full checklist in `LAUNCH_CHECKLIST.md` Phase 4. Pay specific attention to things never run once: the "Exact Ticket Link" flow, the toast rendering on screens with and without a native header, Roulette genre purity, CineMind repeat-avoidance.
 
 **App Store Connect:**
@@ -100,7 +106,7 @@ Everything here is committed on `main` and deployed unless noted.
 | Risk | Likelihood | Mitigation |
 |---|---|---|
 | App Review rejection (metadata/privacy/demo login) | High on first submit | Nail privacy labels; working demo account; budget ≥1 resubmit cycle |
-| **Apple SSO broken in the real build** | Medium | Config is entered but never tested. If it fails at QA, hide the button rather than ship it broken — a visibly broken auth button is a near-certain rejection |
+| Apple SSO broken in the real build | Low | **Verified working on a local dev build 2026‑08‑18** (entitlement added via `ios.usesAppleSignIn`). Only the TestFlight round-trip remains; `showSso` can still be flipped to `false` if it regresses |
 | Split-DB drift (Supabase vs .NET) | Low | Both live and linked; don't re-point either |
 | Render cold-start looks like a broken app | Resolved | Upgraded to always-on Starter instance 2026‑08‑16 |
 | Regression from a schema change | Medium | Has happened twice. Enumerate every write path before changing a column's shape |
