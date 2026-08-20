@@ -148,6 +148,7 @@ interface MyClub {
   id: string;
   displayName: string;
   genreCategory: string | null;
+  posterPath: string | null;
   memberCount: number;
   playedTodayCount: number;
 }
@@ -333,6 +334,13 @@ export default function HomeScreen() {
                   style={styles.clubChip}
                   onPress={() => router.push({ pathname: "/group", params: { groupId: item.id } })}
                 >
+                  <MoviePoster
+                    uri={item.posterPath}
+                    width={132}
+                    height={82}
+                    fallbackIcon="videocam-outline"
+                    style={{ marginBottom: 10 }}
+                  />
                   <Text style={styles.clubChipTitle} numberOfLines={1}>
                     {item.displayName}
                   </Text>

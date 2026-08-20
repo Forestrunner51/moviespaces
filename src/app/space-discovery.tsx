@@ -3,6 +3,7 @@ import { View, Text, StyleSheet, ScrollView, TouchableOpacity, ActivityIndicator
 import { useLocalSearchParams, router } from "expo-router";
 import { Ionicons } from "@expo/vector-icons";
 import { Starfield } from "@/frontend/components/starfield";
+import { MoviePoster } from "@/frontend/components/movie-poster";
 import { SpaceStyles, Palette, Type, Display, Radius } from "@/frontend/constants/theme";
 import { useToast } from "@/frontend/components/toast";
 import { authFetch } from "@/frontend/services/api";
@@ -13,6 +14,7 @@ interface DiscoverSpace {
   displayName: string;
   spaceCode: string | null;
   genreCategory: string | null;
+  posterPath: string | null;
   memberCount: number;
   playedTodayCount: number;
   todayAvgScore: number | null;
@@ -135,10 +137,10 @@ export default function SpaceDiscoveryScreen() {
           spaces.map((space) => (
             <View key={space.id} style={styles.card}>
               <View style={styles.cardHeader}>
-                <Ionicons
-                  name={ICON_BY_GENRE[space.genreCategory ?? ""] ?? "videocam-outline"}
-                  size={22}
-                  color={Palette.accent}
+                <MoviePoster
+                  uri={space.posterPath}
+                  width={44}
+                  fallbackIcon={ICON_BY_GENRE[space.genreCategory ?? ""] ?? "videocam-outline"}
                 />
                 <View style={{ flex: 1 }}>
                   <Text style={styles.cardTitle}>{space.displayName}</Text>
