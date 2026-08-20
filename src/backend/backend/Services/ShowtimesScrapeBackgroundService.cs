@@ -117,6 +117,11 @@ namespace Backend.Services
             }
             slugs = slugs.Distinct().ToList();
 
+            // Captured before any theater is written this run, so every theater
+            // refreshed below gets a ScrapedAtUtc >= this. Anything still older
+            // afterwards is a theater this run didn't touch — purged at the end.
+            var scrapeStart = DateTime.UtcNow;
+
             var succeeded = 0;
             var failed = 0;
 
@@ -160,6 +165,23 @@ namespace Backend.Services
                 _logger.LogInformation(
                     "Showtimes scrape finished: {Ok} theaters updated, {Failed} failed.",
                     succeeded, failed);
+            }
+
+            // Purge theaters this run didn't refresh. Without this, rows from
+            // earlier scrapes pile up — the directory rotates which theaters it
+            // returns, and nightly + manual runs stack — until each showing ages
+            // out ~a week later, leaving hundreds of stale theaters in the list.
+            // Only after a run that actually produced data, so a fully-failed
+            // scrape can't wipe the whole cache.
+            if (succeeded > 0)
+            {
+                using var scope = _scopeFactory.CreateScope();
+                var db = scope.ServiceProvider.GetRequiredService<AppDbContext>();
+                var removed = await db.ScrapedShowtimes
+                    .Where(s => s.ScrapedAtUtc < scrapeStart)
+                    .ExecuteDeleteAsync(ct);
+                if (removed > 0)
+                    _logger.LogInformation("Showtimes: purged {Count} stale rows from earlier scrapes.", removed);
             }
         }
 
