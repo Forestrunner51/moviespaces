@@ -224,7 +224,23 @@ export default function MySpacesScreen() {
   return (
     <Starfield>
       <View style={[styles.container, { paddingTop: insets.top + 12 }]}>
-        <Text style={[styles.title, SpaceStyles.glowText, SpaceStyles.wordmark]}>My Spaces</Text>
+        <View style={styles.headerRow}>
+          <Text style={[styles.title, SpaceStyles.glowText, SpaceStyles.wordmark]}>My Spaces</Text>
+          {tab !== "friends" && (
+            <TouchableOpacity
+              activeOpacity={0.8}
+              style={styles.headerCreateButton}
+              onPress={() => router.push(tab === "rent" ? "/rent-a-theater" : "/create-space")}
+            >
+              <Ionicons
+                name={tab === "rent" ? "storefront-outline" : "add-circle-outline"}
+                size={16}
+                color={SpaceTheme.backgroundVoid}
+              />
+              <Text style={styles.headerCreateButtonText}>{tab === "rent" ? "Find Venue" : "New Space"}</Text>
+            </TouchableOpacity>
+          )}
+        </View>
 
         <View style={styles.tabBar}>
           {TABS.map(({ key, label, icon }) => {
@@ -263,14 +279,6 @@ export default function MySpacesScreen() {
             <ActivityIndicator size="large" color={SpaceTheme.glowCyan} style={{ flex: 1 }} />
           ) : (
             <>
-              <TouchableOpacity
-                activeOpacity={0.8}
-                style={styles.newSpaceButton}
-                onPress={() => router.push("/rent-a-theater")}
-              >
-                <Ionicons name="storefront-outline" size={18} color={SpaceTheme.backgroundVoid} />
-                <Text style={styles.newSpaceButtonText}>Find a Venue</Text>
-              </TouchableOpacity>
               <Text style={styles.subtitle}>Watch parties you&apos;re part of</Text>
               <View style={styles.categoryFilterRow}>
                 <TouchableOpacity
@@ -342,14 +350,6 @@ export default function MySpacesScreen() {
           <ActivityIndicator size="large" color={SpaceTheme.glowCyan} style={{ flex: 1 }} />
         ) : (
           <>
-            <TouchableOpacity
-              activeOpacity={0.8}
-              style={styles.newSpaceButton}
-              onPress={() => router.push("/create-space")}
-            >
-              <Ionicons name="add-circle-outline" size={18} color={SpaceTheme.backgroundVoid} />
-              <Text style={styles.newSpaceButtonText}>New Space</Text>
-            </TouchableOpacity>
             <Text style={styles.subtitle}>Your movie groups and memberships</Text>
             <FlatList
               data={gatheringSpaces}
@@ -404,8 +404,23 @@ const styles = StyleSheet.create({
   title: {
     ...Display.heading,
     color: SpaceTheme.starWhite,
-    marginBottom: 4,
   },
+  headerRow: {
+    flexDirection: "row",
+    alignItems: "center",
+    justifyContent: "space-between",
+    marginBottom: 12,
+  },
+  headerCreateButton: {
+    flexDirection: "row",
+    alignItems: "center",
+    gap: 6,
+    backgroundColor: SpaceTheme.supernovaPink,
+    paddingVertical: 8,
+    paddingHorizontal: 12,
+    borderRadius: Radius.medium,
+  },
+  headerCreateButtonText: { ...Type.small, color: SpaceTheme.backgroundVoid, fontWeight: "700" },
   subtitle: { ...Type.small, color: SpaceTheme.mutedOrbit, marginBottom: 16 },
   tabBar: {
     flexDirection: "row",
@@ -440,17 +455,6 @@ const styles = StyleSheet.create({
     justifyContent: "center",
   },
   tabBadgeText: { ...Type.caption, color: SpaceTheme.starWhite, fontWeight: "700" },
-  newSpaceButton: {
-    flexDirection: "row",
-    gap: 8,
-    backgroundColor: SpaceTheme.supernovaPink,
-    padding: 14,
-    borderRadius: Radius.medium,
-    alignItems: "center",
-    justifyContent: "center",
-    marginBottom: 12,
-  },
-  newSpaceButtonText: { color: SpaceTheme.backgroundVoid, fontWeight: "700", ...Type.body },
   card: {
     ...SpaceStyles.glassCard,
     flexDirection: "row",
