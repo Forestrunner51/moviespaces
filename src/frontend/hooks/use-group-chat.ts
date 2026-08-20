@@ -16,6 +16,11 @@ export interface GroupMessage {
   sender_name?: string;
   sender_username?: string | null;
   sender_avatar_url?: string | null;
+  // Set only on optimistic local messages: `pending` in flight, `failed` if
+  // the insert errored (bubble stays so it can be retried). Server rows never
+  // carry these.
+  pending?: boolean;
+  failed?: boolean;
 }
 
 export function useGroupChat(groupType: GroupChatType, groupId: string) {
@@ -167,6 +172,7 @@ export function useGroupChat(groupType: GroupChatType, groupId: string) {
         sender_name: profileCacheRef.current[currentUserId]?.display_name,
         sender_username: profileCacheRef.current[currentUserId]?.username ?? null,
         sender_avatar_url: profileCacheRef.current[currentUserId]?.avatar_url ?? null,
+        pending: true,
       };
       setMessages((prev) => [...prev, newMsg]);
 
@@ -207,15 +213,21 @@ export function useGroupChat(groupType: GroupChatType, groupId: string) {
       return { success: true };
     } catch (err: any) {
       console.error("Error sending group message:", err);
-      // Remove the optimistic bubble directly. Rolling back via
-      // fetchHistory() didn't work: its merge deliberately preserves temp_
-      // messages the server doesn't have yet, so the failed send survived
-      // every subsequent poll — shown as sent on screen while the input
-      // restored the draft and a toast said it wasn't.
-      setMessages((prev) => prev.filter((m) => m.id !== tempId));
+      // Keep the optimistic bubble but mark it failed, so it stays on screen in
+      // a red "not sent" state the user can tap to retry (fetchHistory's merge
+      // preserves temp_ messages, so it survives polls until retried/removed).
+      setMessages((prev) =>
+        prev.map((m) => (m.id === tempId ? { ...m, pending: false, failed: true } : m)),
+      );
       return { success: false, error: err.message };
     }
   };
 
-  return { currentUserId, messages, loading, sendMessage, refresh: fetchHistory };
+  // Re-send a failed message: drop the failed bubble and send it fresh.
+  const retryMessage = (failed: GroupMessage) => {
+    setMessages((prev) => prev.filter((m) => m.id !== failed.id));
+    return sendMessage(failed.content);
+  };
+
+  return { currentUserId, messages, loading, sendMessage, retryMessage, refresh: fetchHistory };
 }
