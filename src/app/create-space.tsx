@@ -549,10 +549,20 @@ export default function CreateSpaceScreen() {
     }
 
     let totalCostCents: number | null = null;
-    if (spaceType === "private_rental" && totalCost.trim()) {
+    if (spaceType === "private_rental") {
+      // Price is required for a private rental so guests always know the cost
+      // up front. Blank isn't allowed — a free event is stated explicitly as 0.
+      // The field lives in the collapsed "More options" section, so reveal it
+      // when the error fires or the user can't see what they're being asked to fix.
+      if (!totalCost.trim()) {
+        setMoreOptionsOpen(true);
+        showToast("Set a price for this event (enter 0 if it's free).");
+        return;
+      }
       const amount = parseFloat(totalCost);
       if (isNaN(amount) || amount < 0) {
-        showToast("Enter a valid cost, or leave it blank for a free event.");
+        setMoreOptionsOpen(true);
+        showToast("Enter a valid price (enter 0 if it's free).");
         return;
       }
       totalCostCents = amount > 0 ? Math.round(amount * 100) : null;
@@ -686,6 +696,9 @@ export default function CreateSpaceScreen() {
               onPress={() => {
                 setSpaceType("private_rental");
                 setBookingUrl("");
+                // Reveal the details section so the now-required price is
+                // visible immediately rather than only after a failed submit.
+                setMoreOptionsOpen(true);
               }}
             >
               <Ionicons
@@ -1066,7 +1079,7 @@ export default function CreateSpaceScreen() {
 
               <TextInput
                 style={styles.input}
-                placeholder={`Total Venue / ${EVENT_NOUN[rentalActivityType]} Cost (Optional)`}
+                placeholder={`Total Venue / ${EVENT_NOUN[rentalActivityType]} Cost (required — 0 if free)`}
                 placeholderTextColor={Palette.textMuted}
                 value={totalCost}
                 onChangeText={setTotalCost}

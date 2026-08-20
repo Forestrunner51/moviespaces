@@ -937,7 +937,18 @@ function MysteryChallenge({
             </TouchableOpacity>
           ))}
           {!catalogLoading && catalog != null && query.length > 0 && matches.length === 0 && (
-            <Text style={styles.mysteryNoMatchesText}>No matches — check the spelling?</Text>
+            <>
+              <Text style={styles.mysteryNoMatchesText}>
+                No matches — check the spelling, or skip if you don&apos;t know it.
+              </Text>
+              {/* A non-movie / "I don't know" input finds nothing to guess, so
+                  the player would otherwise be stuck (Next stays disabled until
+                  this challenge resolves). Skipping scores it 0 — same as
+                  running out of attempts — and lets the other challenges count. */}
+              <TouchableOpacity activeOpacity={0.85} style={styles.mysterySkipButton} onPress={onSkip}>
+                <Text style={styles.mysterySkipButtonText}>I don&apos;t know — skip this one</Text>
+              </TouchableOpacity>
+            </>
           )}
           <Text style={styles.mysteryAttemptsText}>
             Attempt {attemptsUsed + 1} of {maxAttempts}
