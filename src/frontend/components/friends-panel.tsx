@@ -166,7 +166,7 @@ export function FriendsPanel() {
     <View style={styles.container}>
       <TextInput
         style={styles.input}
-        placeholder="Search users by name or @username..."
+        placeholder="Search by name or @username"
         placeholderTextColor={SpaceTheme.mutedOrbit}
         value={query}
         onChangeText={handleSearch}
