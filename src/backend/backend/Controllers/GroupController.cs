@@ -383,6 +383,58 @@ namespace Backend.Controllers
             return Ok(new { added, total = defaults.Length });
         }
 
+        // POST /api/group/community-clubs — anyone can create a public community
+        // club (a themed, evergreen Space others discover and join). The
+        // user-facing counterpart to the admin seed above: same Group shape
+        // (IsPublic, no screening time, high capacity) but owned by the creator,
+        // and guarded because it's user-generated content — name is profanity-
+        // filtered, genre is allow-listed, and one account is capped so it can't
+        // spam the public directory.
+        [HttpPost("community-clubs")]
+        [EnableRateLimiting("write-heavy")]
+        public async Task<IActionResult> CreateCommunityClub([FromBody] CreateClubRequest req)
+        {
+            var userId = GetUserId();
+            if (string.IsNullOrEmpty(userId)) return Unauthorized(new { error = "Unauthorized" });
+
+            var name = (req.Name ?? "").Trim();
+            if (name.Length == 0) return BadRequest(new { error = "Give your club a name." });
+            var lenError = CheckLength(name, GroupFieldLimits.Title, "The club name");
+            if (lenError != null) return BadRequest(new { error = lenError });
+
+            // Allow-listed to the genres the app has icons/posters for; anything
+            // else collapses to General rather than creating an unfilterable one-off.
+            var validGenres = new HashSet<string>(StringComparer.OrdinalIgnoreCase)
+                { "Blockbusters", "Horror", "Sci-Fi", "Action", "Indie", "General" };
+            var genre = validGenres.Contains(req.GenreCategory ?? "") ? req.GenreCategory! : "General";
+
+            // Cap clubs per creator so one account can't flood the public directory.
+            var owned = await _db.Groups.CountAsync(g => g.IsPublic && g.UserId == userId);
+            if (owned >= 5)
+                return BadRequest(new { error = "You've reached the limit of 5 clubs. Delete one to create another." });
+
+            var cleanName = _profanityFilter.CleanOrFallback(name, "Movie Club");
+            var cleanHost = _profanityFilter.CleanOrFallback(req.HostName ?? "", "A Movie Fan");
+
+            var club = new Group
+            {
+                Slug = GenerateSlug(cleanName),
+                SpaceCode = await GenerateUniqueSpaceCodeAsync(),
+                HostName = cleanHost,
+                UserId = userId,
+                FilmName = cleanName,
+                IsPublic = true,
+                GenreCategory = genre,
+                SpaceType = "public_gathering",
+                MaxCapacity = 5000,
+                ScreeningTime = null,
+            };
+            club.Members.Add(new GroupMember { GroupId = club.Id, Name = cleanHost, UserId = userId, Confirmed = true });
+            _db.Groups.Add(club);
+            await _db.SaveChangesAsync();
+            return Ok(new { groupId = club.Id });
+        }
+
         // GET /api/group/community-spaces/discover?genres=Horror,Sci-Fi
         //
         // Browse-before-joining: onboarding shows these as preview cards and
@@ -1491,6 +1543,10 @@ namespace Backend.Controllers
         string? EventCategory,
         bool? IsPrivate
     );
+
+    // Anyone-can-create community club: just a name + genre. HostName is the
+    // creator's display name for the "created by" label (falls back if blank).
+    public record CreateClubRequest(string Name, string? GenreCategory, string? HostName);
 
     // SpaceCode is only checked when joining a private Space (see JoinGroup)
     // — optional so the request shape stays the same for every public join.

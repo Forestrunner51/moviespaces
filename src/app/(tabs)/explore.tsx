@@ -319,6 +319,15 @@ export default function ExploreScreen() {
             <Text style={styles.clubsChipText}>Browse Community Clubs</Text>
             <Ionicons name="chevron-forward" size={14} color={SpaceTheme.accentGold} />
           </TouchableOpacity>
+          <TouchableOpacity
+            activeOpacity={0.8}
+            style={styles.clubsChip}
+            onPress={() => router.push("/create-club")}
+          >
+            <Ionicons name="add-circle-outline" size={15} color={SpaceTheme.accentGold} />
+            <Text style={styles.clubsChipText}>Create a Club</Text>
+            <Ionicons name="chevron-forward" size={14} color={SpaceTheme.accentGold} />
+          </TouchableOpacity>
         </View>
 
         <FlatList

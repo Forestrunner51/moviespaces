@@ -143,6 +143,7 @@ function Layout() {
         <Stack.Screen name="roulette" options={{ title: "Movie Roulette" }} />
         <Stack.Screen name="onboarding-interests" options={{ headerShown: false }} />
         <Stack.Screen name="space-discovery" options={{ headerShown: false }} />
+        <Stack.Screen name="create-club" options={{ headerShown: false }} />
       </Stack>
     </ThemeProvider>
   );
