@@ -408,8 +408,9 @@ namespace Backend.Controllers
                 { "Blockbusters", "Horror", "Sci-Fi", "Action", "Indie", "General" };
             var genre = validGenres.Contains(req.GenreCategory ?? "") ? req.GenreCategory! : "General";
 
-            // Cap clubs per creator so one account can't flood the public directory.
-            var owned = await _db.Groups.CountAsync(g => g.IsPublic && g.UserId == userId);
+            // Cap clubs per creator so one account can't flood the public
+            // directory (match groups excluded — they're not browsable clubs).
+            var owned = await _db.Groups.CountAsync(g => g.IsPublic && g.MatchMovieKey == null && g.UserId == userId);
             if (owned >= 5)
                 return BadRequest(new { error = "You've reached the limit of 5 clubs. Delete one to create another." });
 
@@ -435,6 +436,72 @@ namespace Backend.Controllers
             return Ok(new { groupId = club.Id });
         }
 
+        // POST /api/group/match — Match mode: pick a movie you want to see and
+        // land in THE open group for that movie. The first person for a film
+        // creates the group; everyone after joins it (up to a small cap), so
+        // people who want the same movie converge into one crew instead of each
+        // starting their own. No waiting pool — you're grouped instantly, which
+        // is what makes it usable before there's user density.
+        [HttpPost("match")]
+        [EnableRateLimiting("write-heavy")]
+        public async Task<IActionResult> MatchForMovie([FromBody] MatchRequest req)
+        {
+            var userId = GetUserId();
+            if (string.IsNullOrEmpty(userId)) return Unauthorized(new { error = "Unauthorized" });
+
+            var title = (req.MovieTitle ?? "").Trim();
+            if (title.Length == 0) return BadRequest(new { error = "Pick a movie to match on." });
+            var lenError = CheckLength(title, GroupFieldLimits.Title, "The movie title");
+            if (lenError != null) return BadRequest(new { error = lenError });
+
+            // The key that unifies everyone who wants the same film: the imdb id
+            // when we have it (exact), else the normalized title.
+            var key = !string.IsNullOrWhiteSpace(req.ImdbId)
+                ? req.ImdbId!.Trim().ToLowerInvariant()
+                : title.ToLowerInvariant();
+            if (key.Length > 120) key = key.Substring(0, 120);
+
+            var cleanHost = _profanityFilter.CleanOrFallback(req.HostName ?? "", "A Movie Fan");
+
+            // Find an open (non-full, non-cancelled) match group for this movie.
+            var candidates = await _db.Groups
+                .Include(g => g.Members)
+                .Where(g => g.MatchMovieKey == key && g.Status != "cancelled")
+                .ToListAsync();
+            var openGroup = candidates.FirstOrDefault(g => g.Members.Count < g.MaxCapacity);
+
+            if (openGroup != null)
+            {
+                if (openGroup.Members.Any(m => m.UserId == userId))
+                    return Ok(new { groupId = openGroup.Id, alreadyIn = true, memberCount = openGroup.Members.Count });
+                openGroup.Members.Add(new GroupMember { GroupId = openGroup.Id, Name = cleanHost, UserId = userId, Confirmed = true });
+                await _db.SaveChangesAsync();
+                return Ok(new { groupId = openGroup.Id, joined = true, memberCount = openGroup.Members.Count });
+            }
+
+            var group = new Group
+            {
+                Slug = GenerateSlug(title),
+                SpaceCode = await GenerateUniqueSpaceCodeAsync(),
+                HostName = cleanHost,
+                UserId = userId,
+                FilmName = title,
+                PosterPath = req.PosterPath,
+                MatchMovieKey = key,
+                IsPublic = true,
+                SpaceType = "public_gathering",
+                EventCategory = "movie",
+                // Small cap — a match crew is intimate, not a 5000-person club;
+                // a fresh group spawns once one fills.
+                MaxCapacity = 12,
+                ScreeningTime = null,
+            };
+            group.Members.Add(new GroupMember { GroupId = group.Id, Name = cleanHost, UserId = userId, Confirmed = true });
+            _db.Groups.Add(group);
+            await _db.SaveChangesAsync();
+            return Ok(new { groupId = group.Id, created = true, memberCount = 1 });
+        }
+
         // GET /api/group/community-spaces/discover?genres=Horror,Sci-Fi
         //
         // Browse-before-joining: onboarding shows these as preview cards and
@@ -455,7 +522,9 @@ namespace Backend.Controllers
             // Filtered in memory, not in the query — see the same
             // OrdinalIgnoreCase/SQL-translation note on the join endpoint.
             var allPublicClubs = await _db.Groups.Include(g => g.Members)
-                .Where(g => g.IsPublic)
+                // MatchMovieKey == null excludes Match-mode groups — they're
+                // IsPublic (for evergreen treatment) but aren't browsable clubs.
+                .Where(g => g.IsPublic && g.MatchMovieKey == null)
                 .ToListAsync();
             var clubs = requested.Count == 0
                 ? allPublicClubs
@@ -1547,6 +1616,10 @@ namespace Backend.Controllers
     // Anyone-can-create community club: just a name + genre. HostName is the
     // creator's display name for the "created by" label (falls back if blank).
     public record CreateClubRequest(string Name, string? GenreCategory, string? HostName);
+
+    // Match mode: the movie you want to see. ImdbId when picked from search
+    // (exact match key), PosterPath for the group card, HostName for membership.
+    public record MatchRequest(string MovieTitle, string? ImdbId, string? PosterPath, string? HostName);
 
     // SpaceCode is only checked when joining a private Space (see JoinGroup)
     // — optional so the request shape stays the same for every public join.
