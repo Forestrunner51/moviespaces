@@ -280,6 +280,21 @@ export default function HomeScreen() {
           <Ionicons name="chevron-forward" size={20} color={Palette.textMuted} />
         </TouchableOpacity>
 
+        <TouchableOpacity
+          activeOpacity={0.85}
+          style={styles.chooseCard}
+          onPress={() => router.push("/match")}
+        >
+          <Ionicons name="people-outline" size={28} color={Palette.accent} />
+          <View style={{ flex: 1 }}>
+            <Text style={styles.chooseCardTitle}>Find Your Movie Crew</Text>
+            <Text style={styles.chooseCardSubtitle}>
+              Pick a movie and get matched into a group with others who want to see it
+            </Text>
+          </View>
+          <Ionicons name="chevron-forward" size={20} color={Palette.textMuted} />
+        </TouchableOpacity>
+
         {/* Titles say where it happens, not just what you do — "Watch a
             Movie" and "Host a Watch Party" both read as hosting, and you can
             watch a movie at a watch party, so the old split only made sense

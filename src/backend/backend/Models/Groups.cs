@@ -87,6 +87,14 @@ namespace Backend.Models
         [MaxLength(64)]
         public string? GenreCategory { get; set; }
 
+        // Non-null only on "match" groups (Match mode): the movie key (imdb id
+        // or normalized title) everyone in the group wanted to see. Used to find
+        // the open group for a movie so interested people converge into one
+        // group instead of each creating their own. Null for every other Space.
+        [Column("match_movie_key")]
+        [MaxLength(120)]
+        public string? MatchMovieKey { get; set; }
+
         [MaxLength(GroupFieldLimits.Name)]
         public string HostName { get; set; } = "";
 
