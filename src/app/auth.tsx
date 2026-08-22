@@ -119,9 +119,12 @@ export default function AuthScreen() {
         showToast(error.message);
       } else if (data.session) {
         // Email confirmation is OFF in Supabase — signUp returned a live
-        // session, so drop them straight into the app.
+        // session. A brand-new account always gets the genre-picker
+        // onboarding, regardless of the device flag afterAuthSuccess checks:
+        // that flag is per-device, so the second account created on a phone
+        // used to skip onboarding entirely.
         await AsyncStorage.setItem("userName", name.trim());
-        await afterAuthSuccess(router);
+        router.replace("/onboarding-interests");
       } else {
         // Email confirmation is ON — no session yet; the account isn't usable
         // until they click the link we just emailed. Without handling this,
