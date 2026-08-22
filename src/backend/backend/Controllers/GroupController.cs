@@ -468,13 +468,25 @@ namespace Backend.Controllers
                 .Include(g => g.Members)
                 .Where(g => g.MatchMovieKey == key && g.Status != "cancelled")
                 .ToListAsync();
+            // Already in a crew for this movie — including one that has since
+            // filled up — go back to it. Checking only the open group here put
+            // members of a full crew into a second crew for the same film on
+            // a repeat tap (caught in local testing).
+            var mine = candidates.FirstOrDefault(g => g.Members.Any(m => m.UserId == userId));
+            if (mine != null)
+                return Ok(new { groupId = mine.Id, alreadyIn = true, memberCount = mine.Members.Count });
+
             var openGroup = candidates.FirstOrDefault(g => g.Members.Count < g.MaxCapacity);
 
             if (openGroup != null)
             {
-                if (openGroup.Members.Any(m => m.UserId == userId))
-                    return Ok(new { groupId = openGroup.Id, alreadyIn = true, memberCount = openGroup.Members.Count });
-                openGroup.Members.Add(new GroupMember { GroupId = openGroup.Id, Name = cleanHost, UserId = userId, Confirmed = true });
+                // _db.GroupMembers.Add (not openGroup.Members.Add): openGroup is a
+                // tracked entity and GroupMember.Id is client-generated, so EF
+                // can't tell the new row is new — via the navigation it marks it
+                // Modified, issues an UPDATE that hits 0 rows, and throws
+                // DbUpdateConcurrencyException (500 on every join). Same pattern
+                // as JoinGroup/JoinGroupWeb below.
+                _db.GroupMembers.Add(new GroupMember { GroupId = openGroup.Id, Name = cleanHost, UserId = userId, Confirmed = true });
                 await _db.SaveChangesAsync();
                 return Ok(new { groupId = openGroup.Id, joined = true, memberCount = openGroup.Members.Count });
             }
