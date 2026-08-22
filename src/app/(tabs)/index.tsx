@@ -280,56 +280,35 @@ export default function HomeScreen() {
           <Ionicons name="chevron-forward" size={20} color={Palette.textMuted} />
         </TouchableOpacity>
 
-        <TouchableOpacity
-          activeOpacity={0.85}
-          style={styles.chooseCard}
-          onPress={() => router.push("/match")}
-        >
-          <Ionicons name="people-outline" size={28} color={Palette.accent} />
-          <View style={{ flex: 1 }}>
-            <Text style={styles.chooseCardTitle}>Find Your Movie Crew</Text>
-            <Text style={styles.chooseCardSubtitle}>
-              Pick a movie and get matched into a group with others who want to see it
-            </Text>
-          </View>
-          <Ionicons name="chevron-forward" size={20} color={Palette.textMuted} />
-        </TouchableOpacity>
-
-        {/* Titles say where it happens, not just what you do — "Watch a
-            Movie" and "Host a Watch Party" both read as hosting, and you can
-            watch a movie at a watch party, so the old split only made sense
-            after you'd been through both. */}
-        <TouchableOpacity
-          activeOpacity={0.85}
-          style={styles.chooseCard}
-          onPress={() =>
-            router.push({ pathname: "/create-space", params: { spaceType: "public_gathering" } })
-          }
-        >
-          <Ionicons name="film-outline" size={28} color={Palette.accent} />
-          <View style={{ flex: 1 }}>
+        {/* Hosting is the secondary path (a new user with no friends yet
+            should join first), so the two host options share one compact
+            row instead of two more full-width cards — four identical
+            full-width cards in a column read as a wall. Titles say where it
+            happens, not just what you do. */}
+        <Text style={styles.hostLabel}>Or host your own</Text>
+        <View style={styles.hostRow}>
+          <TouchableOpacity
+            activeOpacity={0.85}
+            style={styles.hostCard}
+            onPress={() =>
+              router.push({ pathname: "/create-space", params: { spaceType: "public_gathering" } })
+            }
+          >
+            <Ionicons name="film-outline" size={24} color={Palette.accent} />
             <Text style={styles.chooseCardTitle}>See a Movie at a Theater</Text>
-            <Text style={styles.chooseCardSubtitle}>
-              Pick a showtime at a nearby theater and invite friends along
-            </Text>
-          </View>
-          <Ionicons name="chevron-forward" size={20} color={Palette.textMuted} />
-        </TouchableOpacity>
+            <Text style={styles.chooseCardSubtitle}>Pick a showtime, invite friends</Text>
+          </TouchableOpacity>
 
-        <TouchableOpacity
-          activeOpacity={0.85}
-          style={styles.chooseCard}
-          onPress={() => router.push("/rent-a-theater")}
-        >
-          <Ionicons name="storefront-outline" size={28} color={Palette.accent} />
-          <View style={{ flex: 1 }}>
+          <TouchableOpacity
+            activeOpacity={0.85}
+            style={styles.hostCard}
+            onPress={() => router.push("/rent-a-theater")}
+          >
+            <Ionicons name="storefront-outline" size={24} color={Palette.accent} />
             <Text style={styles.chooseCardTitle}>Host at Your Own Venue</Text>
-            <Text style={styles.chooseCardSubtitle}>
-              Your place, a bar, or a rented space — movie night, fight night, or a finale
-            </Text>
-          </View>
-          <Ionicons name="chevron-forward" size={20} color={Palette.textMuted} />
-        </TouchableOpacity>
+            <Text style={styles.chooseCardSubtitle}>Your place, a bar, or a rented space</Text>
+          </TouchableOpacity>
+        </View>
 
         <TouchableOpacity
           activeOpacity={0.7}
@@ -486,6 +465,15 @@ const styles = StyleSheet.create({
     marginBottom: 2,
   },
   chooseCardSubtitle: { ...Type.small, color: Palette.textMuted },
+  hostLabel: { ...Type.small, color: Palette.textMuted, marginTop: 4, marginBottom: 10 },
+  hostRow: { flexDirection: "row", gap: 12, marginBottom: 12 },
+  hostCard: {
+    ...SpaceStyles.glassCard,
+    flex: 1,
+    padding: 14,
+    gap: 6,
+    alignItems: "flex-start",
+  },
   sectionTitle: {
     ...Display.section,
     color: Palette.textMuted,

@@ -21,6 +21,8 @@ Nothing downstream matters until you can build → run → test a flow without f
 - [ ] Get on a normal network (iPhone Personal Hotspot gives a `192.168.x` IP — avoids the CGNAT/ATS issue and the tunnel entirely)
 - [ ] Confirm you can run the app on a real device or simulator and navigate all main screens
 - [ ] `npx expo start -c` habit when JS behaves stale (several past "bugs" were stale bundles)
+- [ ] If a new screen/card "doesn't appear", check `lsof -nP -iTCP:8081` — a days-old Metro holding the port serves the stale bundle and `expo start -c` silently fails to bind (bit us 2026-08-22)
+- [ ] Local `npx expo run:ios` needs `SENTRY_DISABLE_AUTO_UPLOAD=true` (now in `.env`); without it the Sentry Xcode phase fails the build with "An organization ID or slug is required"
 
 ## PHASE 1 — First real (cloud) build → TestFlight  ← biggest milestone
 Everything native only becomes real here: SSO, the "MovieSpaces" name, Bebas Neue font, crypto polyfill.
