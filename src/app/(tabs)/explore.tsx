@@ -284,6 +284,35 @@ export default function ExploreScreen() {
         <Text style={[styles.title, SpaceStyles.glowText, SpaceStyles.wordmark]}>Explore Spaces</Text>
         <Text style={styles.subtitle}>Open Spaces near you, filtered your way</Text>
 
+        {/* Movie Crew — the Timeleft-style path. Lives here rather than on
+            Home because Explore is where you go to find people you don't
+            know yet, and this is the most direct way to do that: pick a
+            film, get seated with up to five strangers who picked it too. */}
+        <TouchableOpacity
+          activeOpacity={0.85}
+          style={styles.crewHero}
+          onPress={() => router.push("/match")}
+          accessibilityRole="button"
+          accessibilityLabel="Get matched into a movie crew"
+        >
+          <View style={styles.crewSeats}>
+            {[0, 1, 2].map((i) => (
+              <View key={i} style={[styles.crewSeat, i > 0 && { marginLeft: -10 }]}>
+                <Ionicons name="person" size={14} color={Palette.accent} />
+              </View>
+            ))}
+            <View style={[styles.crewSeat, styles.crewSeatOpen, { marginLeft: -10 }]}>
+              <Text style={styles.crewSeatPlus}>+</Text>
+            </View>
+          </View>
+          <View style={{ flex: 1 }}>
+            <Text style={styles.crewHeroKicker}>MOVIE CREW</Text>
+            <Text style={styles.crewHeroTitle}>Get seated with strangers who want the same film</Text>
+            <Text style={styles.crewHeroSub}>Pick a movie · we match you with up to 5 others · plan it together</Text>
+          </View>
+          <Ionicons name="chevron-forward" size={20} color={Palette.accent} />
+        </TouchableOpacity>
+
         <View style={styles.linkRow}>
           {/* A code still matters for a private Space (IsPrivate) — those are
               excluded from this feed the same way private rentals used to be,
@@ -644,11 +673,38 @@ const styles = StyleSheet.create({
   },
   title: { ...Display.heading, color: Palette.text },
   subtitle: { ...Type.small, color: SpaceTheme.mutedOrbit, marginBottom: 16 },
+  crewHero: {
+    ...SpaceStyles.glassCard,
+    borderColor: Palette.accentBorder,
+    backgroundColor: Palette.accentDim,
+    flexDirection: "row",
+    alignItems: "center",
+    gap: 14,
+    padding: 14,
+    marginBottom: 14,
+  },
+  crewSeats: { flexDirection: "row", alignItems: "center" },
+  crewSeat: {
+    width: 30,
+    height: 30,
+    borderRadius: Radius.pill,
+    backgroundColor: Palette.raised,
+    borderWidth: 2,
+    borderColor: Palette.accentBorder,
+    alignItems: "center",
+    justifyContent: "center",
+  },
+  crewSeatOpen: { borderStyle: "dashed", backgroundColor: "transparent" },
+  crewSeatPlus: { color: Palette.accent, fontSize: 16, fontWeight: "700", lineHeight: 18 },
+  crewHeroKicker: { ...Display.section, color: Palette.accent, marginBottom: 2 },
+  crewHeroTitle: { ...Type.body, fontWeight: "700", color: Palette.text },
+  crewHeroSub: { ...Type.caption, color: Palette.textMuted, marginTop: 3 },
   linkRow: {
     flexDirection: "row",
+    flexWrap: "wrap",
     justifyContent: "center",
     alignItems: "center",
-    gap: 16,
+    gap: 10,
     marginBottom: 10,
   },
   codeEntryLink: {

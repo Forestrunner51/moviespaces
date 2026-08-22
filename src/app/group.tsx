@@ -66,6 +66,9 @@ interface Group {
   // empty in that case, which is not the same as "nobody is going."
   membersHidden: boolean;
   genreCategory: string | null;
+  // Non-null for a Movie Crew (match mode): a small group of strangers
+  // seated together because they picked the same film. See match.tsx.
+  matchMovieKey: string | null;
   userId: string;
   hostName: string;
   cinemaId: number | null;
@@ -92,8 +95,12 @@ interface Group {
 
 export default function GroupScreen() {
   const { showToast } = useToast();
-  const { groupId, code } = useLocalSearchParams<{
+  const { groupId, code, matched } = useLocalSearchParams<{
     groupId: string;
+    // Set by match.tsx on arrival so the crew card can do the reveal
+    // ("you're first in" vs "you're in") instead of a toast lost to the
+    // navigation. Absent on every later visit.
+    matched?: "created" | "joined" | "already";
     // Present when arriving via join-by-code.tsx or a shared link that
     // embedded it — forwarded to /join so a private Space's join call can
     // present it. Absent for someone who found the group id some other way,
@@ -720,6 +727,11 @@ export default function GroupScreen() {
   const isMember =
     !!currentUserId && groupMembers.some((m) => m.userId === currentUserId);
   const myMember = groupMembers.find((m) => m.userId === currentUserId);
+  // A crew has no real host — whoever tapped first — so any seated member
+  // can set the where/when (the backend's EditGroup allows the same).
+  const isCrew = !!group.matchMovieKey;
+  const canEdit = isHost || (isCrew && isMember);
+  const crewHasPlan = !!group.screeningTime || !!group.cinemaName;
   // Legacy Spaces predate the screeningTime column and have no exact event
   // time — falling back to createdAt (same pattern as profile.tsx's spaces
   // list) means they're still treated as past rather than staying "active"
@@ -797,9 +809,13 @@ export default function GroupScreen() {
                 </View>
               )}
             </View>
-            <Text style={styles.subtitle}>Hosted by {group.hostName}</Text>
+            <Text style={styles.subtitle}>
+              {isCrew
+                ? `Movie Crew · ${groupMembers.length} of ${group.maxCapacity} seats`
+                : `Hosted by ${group.hostName}`}
+            </Text>
           </View>
-          {isHost && !hasPassed && (
+          {canEdit && !hasPassed && (
             <TouchableOpacity
               activeOpacity={0.8}
               onPress={openEditModal}
@@ -813,29 +829,100 @@ export default function GroupScreen() {
           )}
         </View>
 
+        {/* Movie Crew reveal — the Timeleft "your table" moment. Seats fill
+            with faces as people pick this film; open seats stay dashed so a
+            crew of one reads as "forming", not "empty". */}
+        {isCrew && (
+          <View style={styles.crewCard}>
+            <View style={styles.crewSeats}>
+              {Array.from({ length: group.maxCapacity }).map((_, i) => {
+                const m = groupMembers[i];
+                return m ? (
+                  <View key={m.id} style={styles.crewSeatFilled}>
+                    <Avatar uri={memberProfiles.get(m.userId)?.avatarUrl} name={m.name} size={36} />
+                  </View>
+                ) : (
+                  <View key={`open-${i}`} style={styles.crewSeatOpen}>
+                    <Ionicons name="person-outline" size={14} color={Palette.textFaint} />
+                  </View>
+                );
+              })}
+            </View>
+            <Text style={styles.crewTitle}>
+              {matched === "created" || (isMember && groupMembers.length === 1)
+                ? "You're first in."
+                : matched === "joined"
+                  ? "You're in."
+                  : isMember
+                    ? `${groupMembers.length} of ${group.maxCapacity} seats filled.`
+                    : `${groupMembers.length} of ${group.maxCapacity} seats filled`}
+            </Text>
+            <Text style={styles.crewBody}>
+              {isMember && groupMembers.length === 1
+                ? `We'll seat the next people who pick ${group.filmName}. Invite a friend to get it moving.`
+                : isMember
+                  ? crewHasPlan
+                    ? "Plans are set — see you there."
+                    : "Say hi in chat and agree on a theater and showtime together."
+                  : `A small crew of up to ${group.maxCapacity} who want to see ${group.filmName}.`}
+            </Text>
+            {isMember && !crewHasPlan && (
+              <View style={styles.crewActions}>
+                <TouchableOpacity
+                  activeOpacity={0.85}
+                  style={styles.crewPrimary}
+                  onPress={openEditModal}
+                  accessibilityRole="button"
+                  accessibilityLabel="Set the theater and showtime"
+                >
+                  <Ionicons name="calendar-outline" size={15} color={Palette.base} />
+                  <Text style={styles.crewPrimaryText}>Set the showtime</Text>
+                </TouchableOpacity>
+                {groupMembers.length === 1 && (
+                  <TouchableOpacity
+                    activeOpacity={0.85}
+                    style={styles.crewSecondary}
+                    onPress={shareLink}
+                    accessibilityRole="button"
+                    accessibilityLabel="Invite a friend to this crew"
+                  >
+                    <Ionicons name="share-social-outline" size={15} color={Palette.accent} />
+                    <Text style={styles.crewSecondaryText}>Invite</Text>
+                  </TouchableOpacity>
+                )}
+              </View>
+            )}
+          </View>
+        )}
+
+        {/* A crew with nothing planned yet has no when/where to show — the
+            crew card above carries that state instead of a blank date line
+            and an empty location row. */}
         {/* When/where, given the weight it deserves. This is an events app —
             the date used to render at 13px underneath the venue, smaller than
             the venue name itself. */}
-        <View style={styles.whenWhere}>
-          {/* Date, time and the relative label share one baseline so they read
-              as a single fact. Previously they were three stacked lines at
-              three different sizes, fonts and colours inside a top-and-bottom
-              bordered box, which bracketed the whole thing off as a slab
-              dropped into the page rather than part of it. */}
-          <View style={styles.whenRow}>
-            <Text style={styles.whenDate}>{eventDate.date}</Text>
-            <Text style={styles.whenTime}>{eventDate.time}</Text>
-            {!!eventDate.relative && !hasPassed && (
-              <Text style={styles.whenRelative}>{eventDate.relative}</Text>
-            )}
+        {!(isCrew && !crewHasPlan) && (
+          <View style={styles.whenWhere}>
+            {/* Date, time and the relative label share one baseline so they read
+                as a single fact. Previously they were three stacked lines at
+                three different sizes, fonts and colours inside a top-and-bottom
+                bordered box, which bracketed the whole thing off as a slab
+                dropped into the page rather than part of it. */}
+            <View style={styles.whenRow}>
+              <Text style={styles.whenDate}>{eventDate.date}</Text>
+              <Text style={styles.whenTime}>{eventDate.time}</Text>
+              {!!eventDate.relative && !hasPassed && (
+                <Text style={styles.whenRelative}>{eventDate.relative}</Text>
+              )}
+            </View>
+            <View style={styles.whereRow}>
+              <Ionicons name="location-outline" size={14} color={Palette.textFaint} />
+              <Text style={styles.whereText} numberOfLines={2}>
+                {group.cinemaName}
+              </Text>
+            </View>
           </View>
-          <View style={styles.whereRow}>
-            <Ionicons name="location-outline" size={14} color={Palette.textFaint} />
-            <Text style={styles.whereText} numberOfLines={2}>
-              {group.cinemaName}
-            </Text>
-          </View>
-        </View>
+        )}
 
         <View style={styles.manualRow}>
           <Text style={styles.manualBadge}>Showtime set by the host</Text>
@@ -1426,6 +1513,54 @@ const styles = StyleSheet.create({
   },
   // baseline, not center — the three sizes on this row need to sit on a
   // shared baseline or the smaller ones float mid-way up the big date.
+  crewCard: {
+    ...SpaceStyles.glassCard,
+    borderColor: Palette.accentBorder,
+    padding: 16,
+    marginBottom: 20,
+    gap: 6,
+  },
+  crewSeats: { flexDirection: "row", gap: 8, marginBottom: 8 },
+  crewSeatFilled: {
+    borderRadius: Radius.pill,
+    borderWidth: 2,
+    borderColor: Palette.accentBorder,
+  },
+  crewSeatOpen: {
+    width: 40,
+    height: 40,
+    borderRadius: Radius.pill,
+    borderWidth: 2,
+    borderStyle: "dashed",
+    borderColor: Palette.borderStrong,
+    alignItems: "center",
+    justifyContent: "center",
+  },
+  crewTitle: { ...Type.body, fontWeight: "700", color: Palette.text },
+  crewBody: { ...Type.small, color: Palette.textMuted },
+  crewActions: { flexDirection: "row", gap: 10, marginTop: 10 },
+  crewPrimary: {
+    flexDirection: "row",
+    alignItems: "center",
+    gap: 6,
+    paddingVertical: 10,
+    paddingHorizontal: 14,
+    borderRadius: Radius.pill,
+    backgroundColor: Palette.accent,
+  },
+  crewPrimaryText: { ...Type.small, fontWeight: "700", color: Palette.base },
+  crewSecondary: {
+    flexDirection: "row",
+    alignItems: "center",
+    gap: 6,
+    paddingVertical: 10,
+    paddingHorizontal: 14,
+    borderRadius: Radius.pill,
+    borderWidth: 1,
+    borderColor: Palette.accentBorder,
+    backgroundColor: Palette.accentDim,
+  },
+  crewSecondaryText: { ...Type.small, fontWeight: "700", color: Palette.accent },
   whenRow: { flexDirection: "row", alignItems: "baseline", flexWrap: "wrap", gap: 10 },
   whenDate: { ...Display.date, color: Palette.text },
   // Muted, not amber. Amber is the accent — having the time *and* the

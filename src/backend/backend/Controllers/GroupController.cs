@@ -442,6 +442,8 @@ namespace Backend.Controllers
         // people who want the same movie converge into one crew instead of each
         // starting their own. No waiting pool — you're grouped instantly, which
         // is what makes it usable before there's user density.
+        public const int MatchCrewSize = 6;
+
         [HttpPost("match")]
         [EnableRateLimiting("write-heavy")]
         public async Task<IActionResult> MatchForMovie([FromBody] MatchRequest req)
@@ -504,8 +506,10 @@ namespace Backend.Controllers
                 SpaceType = "public_gathering",
                 EventCategory = "movie",
                 // Small cap — a match crew is intimate, not a 5000-person club;
-                // a fresh group spawns once one fills.
-                MaxCapacity = 12,
+                // a fresh group spawns once one fills. Six is the Timeleft
+                // dinner-table number: big enough to feel like a group,
+                // small enough that everyone actually talks.
+                MaxCapacity = MatchCrewSize,
                 ScreeningTime = null,
             };
             group.Members.Add(new GroupMember { GroupId = group.Id, Name = cleanHost, UserId = userId, Confirmed = true });
@@ -1402,7 +1406,14 @@ namespace Backend.Controllers
             var userId = GetUserId();
             var group = await _db.Groups.FindAsync(id);
             if (group == null) return NotFound();
-            if (group.UserId != userId) return Forbid();
+            // Match-mode crews have no real host — "host" is just whoever
+            // tapped the movie first, and if they never come back the crew
+            // would be stuck with no way to set a theater or showtime. Any
+            // seated member can fill in the where/when for a crew.
+            var isCrewMember = group.MatchMovieKey != null
+                && !string.IsNullOrEmpty(userId)
+                && await _db.GroupMembers.AnyAsync(m => m.GroupId == id && m.UserId == userId);
+            if (group.UserId != userId && !isCrewMember) return Forbid();
 
             if (req.MaxCapacity.HasValue)
             {
