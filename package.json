@@ -60,7 +60,8 @@
     "web": "expo start --web",
     "lint": "expo lint",
     "test": "dotnet test src/backend/Moviespaces.slnx",
-    "check": "npx tsc --noEmit && npm run lint && npm test"
+    "check": "npx tsc --noEmit && npm run lint && npm test",
+    "dev": "expo start --clear --tunnel --port 8082"
   },
   "private": true
 }
