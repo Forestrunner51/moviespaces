@@ -277,18 +277,15 @@ export default function MatchScreen() {
   };
 
   const kindMeta = KINDS.find((k) => k.kind === kind)!;
+  // One line, always: kind · film … Change. The film title ellipsizes rather
+  // than wrapping under the icon.
   const crumbs = (
     <View style={styles.crumbs}>
       <Ionicons name={kindMeta.icon} size={14} color={Palette.accent} />
-      <Text style={styles.crumbText}>{kindMeta.title}</Text>
-      {movie && stage !== "film" && stage !== "pickShowing" && (
-        <>
-          <Text style={styles.crumbDot}>·</Text>
-          <Text style={styles.crumbText} numberOfLines={1}>
-            {movie.title}
-          </Text>
-        </>
-      )}
+      <Text style={styles.crumbText} numberOfLines={1}>
+        {kindMeta.title}
+        {movie && stage !== "film" && stage !== "pickShowing" ? `  ·  ${movie.title}` : ""}
+      </Text>
       <TouchableOpacity onPress={() => setStage("kind")} hitSlop={8} accessibilityRole="button">
         <Text style={styles.crumbChange}>Change</Text>
       </TouchableOpacity>
@@ -683,9 +680,8 @@ const styles = StyleSheet.create({
   kicker: { ...Display.section, color: Palette.accent, marginBottom: 4 },
   title: { ...Display.heading, color: Palette.text, marginBottom: 12 },
   subtitle: { ...Type.small, color: Palette.textMuted, marginBottom: 8 },
-  crumbs: { flexDirection: "row", alignItems: "center", gap: 6, marginBottom: 6 },
-  crumbText: { ...Type.small, fontFamily: Font.semibold, color: Palette.accent, flexShrink: 1 },
-  crumbDot: { ...Type.small, color: Palette.textFaint },
+  crumbs: { flexDirection: "row", alignItems: "center", gap: 6, marginBottom: 10 },
+  crumbText: { ...Type.small, fontFamily: Font.semibold, color: Palette.accent, flex: 1 },
   crumbChange: { ...Type.small, color: Palette.textMuted, textDecorationLine: "underline", marginLeft: 6 },
   kinds: { gap: 12, marginTop: 4 },
   kindCard: {
