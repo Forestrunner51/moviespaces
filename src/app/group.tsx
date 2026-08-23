@@ -28,7 +28,7 @@ import { QuickAction } from "@/frontend/components/quick-action";
 import { MoviePoster } from "@/frontend/components/movie-poster";
 import { SpaceTheme, SpaceStyles, Palette, Type, Radius, Display, Font } from "@/frontend/constants/theme";
 import { buildTicketUrl } from "@/frontend/services/ticket-links";
-import { activityLabel, activityEmoji } from "@/frontend/constants/activities";
+import { POST_ACTIVITIES, activityEmoji, activityLabel } from "@/frontend/constants/activities";
 import { useFriends } from "@/frontend/hooks/use-friends";
 import { CineMindLeaderboard } from "@/frontend/components/cinemind-leaderboard";
 import { EVENT_CATEGORIES, eventCategoryOf } from "@/frontend/constants/event-categories";
@@ -56,6 +56,8 @@ interface Member {
   confirmed: boolean;
   // Movie Crew: self-reported "ticket in hand". Social signal, not a gate.
   hasTicket?: boolean;
+  // Movie Crew: CSV of POST_ACTIVITIES keys this member is up for after.
+  afterActivities?: string | null;
   userId: string;
 }
 interface Group {
@@ -492,6 +494,34 @@ export default function GroupScreen() {
   const [editShowtime, setEditShowtime] = useState<ShowtimeSelection | null>(null);
   const isTheaterCrewOf = (g: Group | null) =>
     !!g?.matchMovieKey && g.spaceType !== "private_rental";
+
+  // Crew per-member "up for after" votes. Toggling rewrites the caller's own
+  // set; counts come from every member's CSV.
+  const [afterSaving, setAfterSaving] = useState<string | null>(null);
+  const myAfterSet = (m?: { afterActivities?: string | null }) =>
+    new Set((m?.afterActivities ?? "").split(",").filter(Boolean));
+  const handleToggleAfter = async (key: string) => {
+    if (!group || !myMember || afterSaving) return;
+    const mine = myAfterSet(myMember);
+    if (mine.has(key)) mine.delete(key);
+    else mine.add(key);
+    setAfterSaving(key);
+    try {
+      const res = await authFetch(`${process.env.EXPO_PUBLIC_API_URL}/api/group/${group.id}/after`, {
+        method: "POST",
+        body: JSON.stringify({ activities: Array.from(mine) }),
+      });
+      if (!res.ok) {
+        showToast("Couldn't save that — try again.");
+        return;
+      }
+      await fetchGroup();
+    } catch {
+      showToast("Network error — please try again.");
+    } finally {
+      setAfterSaving(null);
+    }
+  };
 
   // Crew "ticket in hand" toggle — own row only, optimistic, refetch after.
   const [ticketSaving, setTicketSaving] = useState(false);
@@ -1044,6 +1074,38 @@ export default function GroupScreen() {
                   {groupMembers.filter((m) => m.hasTicket).length}/{groupMembers.length} ticketed
                 </Text>
               </TouchableOpacity>
+            )}
+            {/* Afterwards — per-member votes ("3 up for drinks"), the crew's
+                icebreaker. Members toggle their own; everyone sees counts. */}
+            {(isMember || groupMembers.some((m) => myAfterSet(m).size > 0)) && (
+              <View style={styles.voteBlock}>
+                <Text style={styles.voteLabel}>UP FOR AFTER</Text>
+                <View style={styles.voteRow}>
+                  {POST_ACTIVITIES.filter(
+                    (a) => isMember || groupMembers.some((m) => myAfterSet(m).has(a.key)),
+                  ).map((a) => {
+                    const count = groupMembers.filter((m) => myAfterSet(m).has(a.key)).length;
+                    const mine = myAfterSet(myMember).has(a.key);
+                    return (
+                      <TouchableOpacity
+                        key={a.key}
+                        activeOpacity={0.8}
+                        style={[styles.voteChip, mine && styles.voteChipMine]}
+                        onPress={() => handleToggleAfter(a.key)}
+                        disabled={!isMember || afterSaving !== null}
+                        accessibilityRole="button"
+                        accessibilityState={{ selected: mine }}
+                        accessibilityLabel={`${a.label}${count > 0 ? `, ${count} up for it` : ""}`}
+                      >
+                        <Text style={[styles.voteChipText, mine && styles.voteChipTextMine]}>
+                          {a.emoji} {a.label}
+                          {count > 0 ? `  ${count}` : ""}
+                        </Text>
+                      </TouchableOpacity>
+                    );
+                  })}
+                </View>
+              </View>
             )}
             {isMember && !crewHasPlan && (
               <View style={styles.crewActions}>
@@ -1825,6 +1887,20 @@ const styles = StyleSheet.create({
   crewTitle: { ...Type.body, fontWeight: "700", color: Palette.text },
   crewBody: { ...Type.small, color: Palette.textMuted },
   crewActions: { flexDirection: "row", gap: 10, marginTop: 10 },
+  voteBlock: { marginTop: 12 },
+  voteLabel: { ...Display.section, fontSize: 13, lineHeight: 16, color: Palette.textFaint, marginBottom: 8 },
+  voteRow: { flexDirection: "row", flexWrap: "wrap", gap: 8 },
+  voteChip: {
+    paddingVertical: 6,
+    paddingHorizontal: 11,
+    borderRadius: Radius.pill,
+    borderWidth: 1,
+    borderColor: Palette.border,
+    backgroundColor: Palette.raised,
+  },
+  voteChipMine: { borderColor: Palette.accentBorder, backgroundColor: Palette.accentDim },
+  voteChipText: { ...Type.caption, color: Palette.textMuted },
+  voteChipTextMine: { color: Palette.accent, fontFamily: Font.semibold },
   crewPrimary: {
     flexDirection: "row",
     alignItems: "center",

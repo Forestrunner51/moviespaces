@@ -23,6 +23,7 @@ import { authFetch } from "@/frontend/services/api";
 import { resolveDisplayName } from "@/frontend/services/display-name";
 import { searchMovies, Movie } from "@/frontend/services/movies";
 import { formatEventDate } from "@/frontend/utils/event-date";
+import { POST_ACTIVITIES } from "@/frontend/constants/activities";
 import {
   fetchNearbyTheaters,
   getDeviceLocation,
@@ -124,6 +125,10 @@ export default function MatchScreen() {
   const [movie, setMovie] = useState<PickedMovie | null>(null);
   const [showtime, setShowtime] = useState<ShowtimeSelection | null>(null);
   const [hasTicket, setHasTicket] = useState(false);
+  // Optional "up for after" picks — become the starter's per-member votes.
+  const [afterPicks, setAfterPicks] = useState<string[]>([]);
+  const toggleAfter = (key: string) =>
+    setAfterPicks((prev) => (prev.includes(key) ? prev.filter((k) => k !== key) : [...prev, key]));
   const [submitting, setSubmitting] = useState(false);
 
   // --- crews already forming (both kinds) ---
@@ -268,6 +273,7 @@ export default function MatchScreen() {
           HostName: hostName,
           Kind: kind,
           HasTicket: hasTicket,
+          AfterActivities: afterPicks,
           ...body,
         }),
       });
@@ -488,6 +494,28 @@ export default function MatchScreen() {
                   I already have my ticket for this showing
                 </Text>
               </TouchableOpacity>
+
+              <Text style={styles.stepLabel}>UP FOR ANYTHING AFTER?</Text>
+              <View style={styles.afterRow}>
+                {POST_ACTIVITIES.map((a) => {
+                  const on = afterPicks.includes(a.key);
+                  return (
+                    <TouchableOpacity
+                      key={a.key}
+                      activeOpacity={0.8}
+                      style={[styles.afterChip, on && styles.afterChipOn]}
+                      onPress={() => toggleAfter(a.key)}
+                      accessibilityRole="button"
+                      accessibilityState={{ selected: on }}
+                    >
+                      <Text style={[styles.afterChipText, on && styles.afterChipTextOn]}>
+                        {a.emoji} {a.label}
+                      </Text>
+                    </TouchableOpacity>
+                  );
+                })}
+              </View>
+              <Text style={styles.placeHint}>Optional — the crew sees who&apos;s up for what.</Text>
 
               <TouchableOpacity
                 activeOpacity={0.85}
@@ -772,6 +800,28 @@ export default function MatchScreen() {
               </View>
               <Text style={styles.placeHint}>Leave blank if it&apos;s free. Shown to the crew as a per-person share.</Text>
 
+              <Text style={styles.stepLabel}>UP FOR ANYTHING AFTER?</Text>
+              <View style={styles.afterRow}>
+                {POST_ACTIVITIES.map((a) => {
+                  const on = afterPicks.includes(a.key);
+                  return (
+                    <TouchableOpacity
+                      key={a.key}
+                      activeOpacity={0.8}
+                      style={[styles.afterChip, on && styles.afterChipOn]}
+                      onPress={() => toggleAfter(a.key)}
+                      accessibilityRole="button"
+                      accessibilityState={{ selected: on }}
+                    >
+                      <Text style={[styles.afterChipText, on && styles.afterChipTextOn]}>
+                        {a.emoji} {a.label}
+                      </Text>
+                    </TouchableOpacity>
+                  );
+                })}
+              </View>
+              <Text style={styles.placeHint}>Optional — the crew sees who&apos;s up for what.</Text>
+
               {/* Inline validation instead of a toast — the toast lands on top
                   of this form's title and reads as a glitch. The button stays
                   dim until the fields are in. */}
@@ -969,6 +1019,18 @@ const styles = StyleSheet.create({
   pickerDone: { alignSelf: "flex-end", paddingVertical: 8, paddingHorizontal: 16, marginTop: 4 },
   pickerDoneText: { ...Type.small, fontFamily: Font.bold, color: Palette.accent },
   formHint: { ...Type.caption, color: Palette.textMuted, marginTop: 14 },
+  afterRow: { flexDirection: "row", flexWrap: "wrap", gap: 8 },
+  afterChip: {
+    paddingVertical: 7,
+    paddingHorizontal: 12,
+    borderRadius: Radius.pill,
+    borderWidth: 1,
+    borderColor: Palette.border,
+    backgroundColor: Palette.raised,
+  },
+  afterChipOn: { borderColor: Palette.accentBorder, backgroundColor: Palette.accentDim },
+  afterChipText: { ...Type.caption, color: Palette.textMuted },
+  afterChipTextOn: { color: Palette.accent, fontFamily: Font.semibold },
   costPrefix: { ...Type.body, color: Palette.textMuted },
   keyboardBar: {
     backgroundColor: Palette.raised,

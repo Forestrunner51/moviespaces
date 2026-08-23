@@ -265,6 +265,12 @@ namespace Backend.Models
         // Not verified — its value is social (the crew can see who's locked
         // in before buying), not a gate.
         public bool HasTicket { get; set; } = false;
+        // Movie Crew: comma-separated POST_ACTIVITIES keys this member voted
+        // "up for after" (drinks, food, spoiler chat…) — per-member, so the
+        // crew card can show "3 of 5 up for drinks". Same CSV-in-a-column
+        // pattern as profiles.theater_memberships.
+        [MaxLength(200)]
+        public string? AfterActivities { get; set; }
         public DateTime JoinedAt { get; set; } = DateTime.UtcNow;
     }
 }
