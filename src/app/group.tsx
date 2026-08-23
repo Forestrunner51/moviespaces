@@ -1013,7 +1013,7 @@ export default function GroupScreen() {
             </Text>
             <Text style={styles.crewBody}>
               {isMember && groupMembers.length === 1
-                ? `We'll seat the next people who pick ${group.filmName}. Invite a friend to get it moving.`
+                ? `Anyone who picks this showing of ${group.filmName} will be added here.`
                 : isMember
                   ? crewHasPlan
                     ? "Plans are set — see you there."
@@ -1429,7 +1429,9 @@ export default function GroupScreen() {
           )}
         </View>
 
-        {isHost && group.status !== "booked" && !hasPassed && (
+        {/* Crews: everyone buys their own ticket, so there's no group
+            booking to mark — the ticket toggle is the signal. */}
+        {isHost && !isCrew && group.status !== "booked" && !hasPassed && (
           <ActionButton
             icon={allConfirmed ? "checkmark-circle-outline" : "hourglass-outline"}
             label={
@@ -1444,7 +1446,7 @@ export default function GroupScreen() {
           />
         )}
 
-        {isHost && group.status === "booked" && !hasPassed && (
+        {isHost && !isCrew && group.status === "booked" && !hasPassed && (
           <ActionButton
             icon="arrow-undo-outline"
             label="Unbook (Revert to Pending)"
