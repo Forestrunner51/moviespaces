@@ -832,12 +832,12 @@ function MysteryChallenge({
 
   const nearMissFeedback = (m: CatalogMovie): string[] => {
     const feedback: string[] = [];
-    if (!isTv && clues.director && m.director === clues.director) feedback.push("🎬 Same director");
-    if (m.cast.some((actor) => clues.cast.includes(actor))) feedback.push("🎭 Shares cast");
+    if (!isTv && clues.director && m.director === clues.director) feedback.push("Same director");
+    if (m.cast.some((actor) => clues.cast.includes(actor))) feedback.push("Shares cast");
     if (m.releaseYear !== clues.releaseYear && Math.abs(m.releaseYear - clues.releaseYear) <= 2) {
-      feedback.push("📅 Close year");
+      feedback.push("Close year");
     }
-    return feedback.length > 0 ? feedback : ["❄️ Cold — no strong connection"];
+    return feedback.length > 0 ? feedback : ["No strong connection"];
   };
 
   const handlePick = (m: CatalogMovie) => {
@@ -898,7 +898,7 @@ function MysteryChallenge({
 
       {resolved ? (
         <Text style={styles.mysteryResolvedText}>
-          {solvedGuess ? "🏆 Solved!" : "Out of attempts — the answer reveals when you submit."}
+          {solvedGuess ? "Solved" : "Out of attempts — the answer reveals when you submit."}
         </Text>
       ) : catalogError ? (
         // Retry alone used to be the only way out of here, which meant a
@@ -973,9 +973,9 @@ function DifficultySelector({
   onSelect: (difficulty: MysteryDifficulty) => void;
 }) {
   const options: { key: MysteryDifficulty; emoji: string; label: string; blurb: string }[] = [
-    { key: "easy", emoji: "🟢", label: "Easy", blurb: "3 tries, full clues" },
-    { key: "medium", emoji: "🟡", label: "Medium", blurb: "2 tries, fewer clues" },
-    { key: "hard", emoji: "🔴", label: "Hard", blurb: "1 try, plot + decade + genre" },
+    { key: "easy", emoji: "", label: "Easy", blurb: "3 tries, full clues" },
+    { key: "medium", emoji: "", label: "Medium", blurb: "2 tries, fewer clues" },
+    { key: "hard", emoji: "", label: "Hard", blurb: "1 try, plot + decade + genre" },
   ];
 
   return (
@@ -995,7 +995,7 @@ function DifficultySelector({
             onPress={() => onSelect(opt.key)}
           >
             <Text style={styles.difficultyPillLabel}>
-              {opt.emoji} {opt.label}
+              {opt.label}
             </Text>
             <Text style={styles.difficultyPillBlurb}>{opt.blurb}</Text>
           </TouchableOpacity>

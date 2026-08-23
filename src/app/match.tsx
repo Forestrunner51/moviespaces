@@ -49,13 +49,13 @@ const KINDS: {
     kind: "theater",
     icon: "film-outline",
     title: "At a theater",
-    body: "Meet a crew at a real showing near you. Tickets are on you, company is on us.",
+    body: "Meet up at a showing near you. Everyone buys their own ticket.",
   },
   {
     kind: "venue",
     icon: "home-outline",
     title: "At a venue",
-    body: "A watch party — someone's place, a bar, a rented room. The crew hosts it together.",
+    body: "A watch party at someone's place, a bar, or a rented room.",
   },
 ];
 
@@ -271,8 +271,6 @@ export default function MatchScreen() {
           <Text style={styles.backText}>Back</Text>
         </TouchableOpacity>
 
-        <Text style={styles.kicker}>MOVIE CREW</Text>
-
         {/* ── 1. kind ───────────────────────────────────────────── */}
         {stage === "kind" && (
           <>
@@ -299,8 +297,7 @@ export default function MatchScreen() {
               ))}
             </View>
             <Text style={styles.fineprint}>
-              Either way you end up in a crew of up to {MATCH_CREW_SIZE} who picked the same film
-              and showing.
+              Groups are capped at {MATCH_CREW_SIZE} people who picked the same film and showing.
             </Text>
           </>
         )}
@@ -397,7 +394,7 @@ export default function MatchScreen() {
                       </View>
                       <View style={[styles.seatPill, c.alreadyIn && styles.seatPillMuted]}>
                         <Text style={[styles.seatPillText, c.alreadyIn && styles.seatPillTextMuted]}>
-                          {c.alreadyIn ? "You're in" : open === 1 ? "Last seat" : "Join"}
+                          {c.alreadyIn ? "Joined" : open === 1 ? "1 seat left" : "Join"}
                         </Text>
                       </View>
                     </TouchableOpacity>
@@ -410,9 +407,7 @@ export default function MatchScreen() {
                   accessibilityRole="button"
                 >
                   <Ionicons name="add-circle-outline" size={18} color={Palette.accent} />
-                  <Text style={styles.startOwnText}>
-                    None of these work — start your own{kind === "theater" ? " showing" : ""}
-                  </Text>
+                  <Text style={styles.startOwnText}>Start your own</Text>
                 </TouchableOpacity>
               </ScrollView>
             )}
@@ -510,7 +505,7 @@ export default function MatchScreen() {
                     color={hasTicket ? Palette.positive : Palette.textMuted}
                   />
                   <Text style={[styles.ticketToggleText, hasTicket && styles.ticketToggleTextOn]}>
-                    I already have my ticket for this showing
+                    I already have a ticket for this showing
                   </Text>
                 </TouchableOpacity>
               )}
@@ -527,13 +522,12 @@ export default function MatchScreen() {
                 ) : (
                   <>
                     <Ionicons name="people-outline" size={18} color={Palette.base} />
-                    <Text style={styles.primaryText}>Start the crew</Text>
+                    <Text style={styles.primaryText}>Start the group</Text>
                   </>
                 )}
               </TouchableOpacity>
               <Text style={styles.fineprint}>
-                Anyone who picks this film and the same showing gets seated with you, up to{" "}
-                {MATCH_CREW_SIZE}.
+                Anyone who picks this showing is added to your group, up to {MATCH_CREW_SIZE}.
               </Text>
             </ScrollView>
           </>
@@ -555,7 +549,6 @@ const styles = StyleSheet.create({
     paddingRight: 8,
   },
   backText: { ...Type.body, color: Palette.text },
-  kicker: { ...Display.section, color: Palette.accent, marginBottom: 4 },
   title: { ...Display.heading, color: Palette.text, marginBottom: 16 },
   crumbs: { flexDirection: "row", alignItems: "center", gap: 6, marginBottom: 6 },
   crumbText: { ...Type.small, fontFamily: Font.semibold, color: Palette.accent, flexShrink: 1 },

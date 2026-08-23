@@ -28,7 +28,7 @@ import { QuickAction } from "@/frontend/components/quick-action";
 import { MoviePoster } from "@/frontend/components/movie-poster";
 import { SpaceTheme, SpaceStyles, Palette, Type, Radius, Display, Font } from "@/frontend/constants/theme";
 import { buildTicketUrl } from "@/frontend/services/ticket-links";
-import { activityLabel, activityEmoji } from "@/frontend/constants/activities";
+import { activityLabel } from "@/frontend/constants/activities";
 import { useFriends } from "@/frontend/hooks/use-friends";
 import { CineMindLeaderboard } from "@/frontend/components/cinemind-leaderboard";
 import { EVENT_CATEGORIES, eventCategoryOf } from "@/frontend/constants/event-categories";
@@ -501,7 +501,7 @@ export default function GroupScreen() {
         return;
       }
       await fetchGroup();
-      if (!myMember.hasTicket) showToast("Ticket in hand 🎟  The crew can see you're locked in.", "success");
+      if (!myMember.hasTicket) showToast("Marked as ticketed — the crew can see you're going.", "success");
     } catch {
       showToast("Network error — please try again.");
     } finally {
@@ -884,19 +884,18 @@ export default function GroupScreen() {
         {celebrate && (
           <View style={styles.celebrate}>
             <View style={styles.celebrateTop}>
-              <Text style={styles.celebrateEmoji}>{matched === "created" ? "🎬" : "🎉"}</Text>
               <View style={{ flex: 1 }}>
                 <Text style={styles.celebrateTitle}>
-                  {matched === "created" ? "You started it." : "You're in."}
+                  {matched === "created" ? "You started this one." : "You're in."}
                 </Text>
                 <Text style={styles.celebrateBody}>
                   {matched === "created"
                     ? isCrew
-                      ? "Your crew is open — the next people who pick this showing land here."
-                      : "Your Space is live. Invite people and it fills up."
+                      ? "Anyone who picks this showing will be added here."
+                      : "Share the link so people can join."
                     : groupMembers.length > 1
-                      ? `Say hi to the other ${groupMembers.length - 1} — everyone's a little new here.`
-                      : "Say hi in chat when the next person lands."}
+                      ? `${groupMembers.length - 1} other${groupMembers.length - 1 === 1 ? "" : "s"} going. The chat is open.`
+                      : "You're the first one here. The chat is open."}
                 </Text>
               </View>
               <TouchableOpacity onPress={() => setCelebrate(false)} hitSlop={10} accessibilityRole="button" accessibilityLabel="Dismiss">
@@ -926,8 +925,7 @@ export default function GroupScreen() {
                 }
                 accessibilityRole="button"
               >
-                <Ionicons name="chatbubbles" size={15} color={Palette.base} />
-                <Text style={styles.celebrateChatText}>Say hi 👋</Text>
+                <Text style={styles.celebrateChatText}>Open chat</Text>
               </TouchableOpacity>
             </View>
           </View>
@@ -968,14 +966,14 @@ export default function GroupScreen() {
             </Text>
             <Text style={styles.crewBody}>
               {isMember && groupMembers.length === 1
-                ? `We'll seat the next people who pick ${group.filmName}. Invite a friend to get it moving.`
+                ? `Anyone who picks this showing of ${group.filmName} will be added here.`
                 : isMember
                   ? crewHasPlan
-                    ? "Plans are set — see you there."
+                    ? "Plans are set."
                     : group.spaceType === "private_rental"
-                      ? "Say hi in chat and work out who hosts, where, and when."
-                      : "Say hi in chat and agree on a theater and showtime together."
-                  : `A small crew of up to ${group.maxCapacity} who want to see ${group.filmName}.`}
+                      ? "Work out who hosts, where, and when in the chat."
+                      : "Agree on a theater and showtime in the chat."
+                  : `Up to ${group.maxCapacity} people going to ${group.filmName}.`}
             </Text>
             {isMember && group.spaceType !== "private_rental" && (
               <TouchableOpacity
@@ -993,7 +991,7 @@ export default function GroupScreen() {
                   color={myMember?.hasTicket ? Palette.positive : Palette.textMuted}
                 />
                 <Text style={[styles.ticketToggleText, myMember?.hasTicket && styles.ticketToggleTextOn]}>
-                  {myMember?.hasTicket ? "Ticket in hand" : "I've got my ticket"}
+                  {myMember?.hasTicket ? "Ticketed" : "I have a ticket"}
                 </Text>
                 <Text style={styles.ticketCount}>
                   {groupMembers.filter((m) => m.hasTicket).length}/{groupMembers.length} ticketed
@@ -1101,7 +1099,7 @@ export default function GroupScreen() {
               {group.postActivities.split(",").map((key) => (
                 <View key={key} style={styles.afterBadge}>
                   <Text style={styles.afterBadgeText}>
-                    {activityEmoji(key)} {activityLabel(key)}
+                    {activityLabel(key)}
                   </Text>
                 </View>
               ))}
@@ -1677,25 +1675,21 @@ const styles = StyleSheet.create({
   celebrate: {
     ...SpaceStyles.glassCard,
     borderColor: Palette.positiveBorder,
-    backgroundColor: Palette.positiveDim,
     padding: 14,
     marginBottom: 16,
   },
   celebrateTop: { flexDirection: "row", alignItems: "flex-start", gap: 10 },
-  celebrateEmoji: { fontSize: 26, lineHeight: 32 },
   celebrateTitle: { fontFamily: Font.bold, fontSize: 18, lineHeight: 22, color: Palette.text },
   celebrateBody: { ...Type.small, color: Palette.textMuted, marginTop: 2 },
   celebrateRow: { flexDirection: "row", alignItems: "center", justifyContent: "space-between", marginTop: 12 },
   celebrateChat: {
-    flexDirection: "row",
-    alignItems: "center",
-    gap: 6,
     paddingVertical: 8,
     paddingHorizontal: 14,
-    borderRadius: Radius.pill,
-    backgroundColor: Palette.positive,
+    borderRadius: Radius.small,
+    borderWidth: 1,
+    borderColor: Palette.borderStrong,
   },
-  celebrateChatText: { ...Type.small, fontFamily: Font.bold, color: Palette.base },
+  celebrateChatText: { ...Type.small, fontFamily: Font.semibold, color: Palette.text },
   crewCard: {
     ...SpaceStyles.glassCard,
     borderColor: Palette.accentBorder,

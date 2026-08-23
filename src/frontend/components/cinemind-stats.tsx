@@ -59,7 +59,7 @@ export function CineMindStatsCard({ stats }: CineMindStatsCardProps) {
 
       {stats.perfectCount > 0 && (
         <Text style={styles.perfectNote}>
-          🏆 {stats.perfectCount} perfect {stats.perfectCount === 1 ? "game" : "games"}
+          {stats.perfectCount} perfect {stats.perfectCount === 1 ? "game" : "games"}
         </Text>
       )}
     </View>

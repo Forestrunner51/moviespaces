@@ -103,7 +103,7 @@ function FeedCard({ space }: { space: NearbySpace }) {
         <View style={{ flex: 1 }}>
           <Text style={styles.feedLead} numberOfLines={2}>
             <Text style={styles.feedName}>{space.hostName}</Text>
-            {isWatchParty ? " is hosting " : " is seeing "}
+            {isWatchParty ? " is hosting " : " is going to "}
             <Text style={styles.feedName}>{space.filmName}</Text>
           </Text>
           <Text style={styles.feedWhenLine} numberOfLines={1}>
@@ -137,11 +137,11 @@ function FeedCard({ space }: { space: NearbySpace }) {
                 max={4}
               />
               <Text style={styles.feedMeta}>
-                {others.length === 1 ? "1 other is in" : `${others.length} others are in`}
+                {others.length === 1 ? "1 other going" : `${others.length} others going`}
               </Text>
             </>
           ) : (
-            <Text style={styles.feedMeta}>Be the first to join</Text>
+            <Text style={styles.feedMeta}>No one else yet</Text>
           )}
         </View>
         <TouchableOpacity
@@ -151,15 +151,12 @@ function FeedCard({ space }: { space: NearbySpace }) {
           disabled={joining}
           hitSlop={6}
           accessibilityRole="button"
-          accessibilityLabel={`I'm in for ${space.filmName}`}
+          accessibilityLabel={`Join ${space.filmName}`}
         >
           {joining ? (
-            <ActivityIndicator color={Palette.base} size="small" />
+            <ActivityIndicator color={Palette.text} size="small" />
           ) : (
-            <>
-              <Ionicons name="hand-right" size={14} color={Palette.base} />
-              <Text style={styles.imInText}>I&apos;m in</Text>
-            </>
+            <Text style={styles.imInText}>Join</Text>
           )}
         </TouchableOpacity>
       </View>
@@ -182,11 +179,9 @@ interface MyClub {
 // stable for the life of the screen and only changes when Home remounts.
 const HEADLINES = [
   "Who are you\nwatching with?",
-  "Big screen,\nnew faces.",
-  "Pick a film.\nFind your crew.",
-  "Nobody should\nsee it alone.",
-  "What are we\nseeing tonight?",
-  "Good movie.\nBetter company.",
+  "What are you\nseeing this week?",
+  "Anything good\nplaying?",
+  "Find someone\nto see it with.",
 ];
 
 export default function HomeScreen() {
@@ -296,19 +291,13 @@ export default function HomeScreen() {
           accessibilityRole="button"
           accessibilityLabel="Make new friends in a movie crew"
         >
-          <View style={styles.heroIcon}>
-            <Ionicons name="people" size={24} color={Palette.base} />
-          </View>
           <View style={{ flex: 1 }}>
-            <Text style={styles.heroKicker}>Movie Crew</Text>
-            <Text style={styles.heroTitle}>Make some new friends</Text>
+            <Text style={styles.heroTitle}>Movie Crew</Text>
             <Text style={styles.heroSubtitle}>
-              Pick a film and a showing — we put you in a crew of up to 6 who picked the same
+              Pick a showing. You get grouped with up to five other people going to it.
             </Text>
           </View>
-          <View style={styles.heroArrow}>
-            <Ionicons name="arrow-forward" size={18} color={Palette.accent} />
-          </View>
+          <Ionicons name="chevron-forward" size={20} color={Palette.textMuted} />
         </TouchableOpacity>
 
         {/* Hosting: two cards with a line each on what they mean, under the
@@ -322,12 +311,9 @@ export default function HomeScreen() {
             accessibilityRole="button"
             accessibilityLabel="Host at a theater"
           >
-            <View style={styles.hostIcon}>
-              <Ionicons name="film-outline" size={20} color={Palette.accent} />
-            </View>
             <Text style={styles.hostTitle}>At a theater</Text>
             <Text style={styles.hostBody}>
-              Pick a real showing near you and open it up — friends or anyone can join.
+              Pick a showing near you. Friends or anyone can join.
             </Text>
           </TouchableOpacity>
           <TouchableOpacity
@@ -337,12 +323,9 @@ export default function HomeScreen() {
             accessibilityRole="button"
             accessibilityLabel="Host at your own place"
           >
-            <View style={styles.hostIcon}>
-              <Ionicons name="home-outline" size={20} color={Palette.accent} />
-            </View>
             <Text style={styles.hostTitle}>At your place</Text>
             <Text style={styles.hostBody}>
-              A watch party at home, a bar, or a rented room. You set the time and the guest list.
+              Home, a bar, or a rented room. You set the time and the guest list.
             </Text>
           </TouchableOpacity>
         </View>
@@ -438,57 +421,20 @@ const styles = StyleSheet.create({
   heroCard: {
     ...SpaceStyles.glassCard,
     borderColor: Palette.accentBorder,
-    backgroundColor: Palette.accentDim,
     flexDirection: "row",
     alignItems: "center",
     gap: 14,
     padding: 16,
     marginBottom: 6,
   },
-  heroIcon: {
-    width: 48,
-    height: 48,
-    borderRadius: Radius.pill,
-    backgroundColor: Palette.accent,
-    alignItems: "center",
-    justifyContent: "center",
-  },
-  heroKicker: {
-    ...Type.caption,
-    fontFamily: Font.semibold,
-    color: Palette.accent,
-    textTransform: "uppercase",
-    letterSpacing: 0.8,
-    marginBottom: 2,
-  },
   heroTitle: { fontFamily: Font.bold, fontSize: 19, lineHeight: 24, color: Palette.text },
   heroSubtitle: { ...Type.small, color: Palette.textMuted, marginTop: 3 },
-  heroArrow: {
-    width: 34,
-    height: 34,
-    borderRadius: Radius.pill,
-    borderWidth: 1,
-    borderColor: Palette.accentBorder,
-    alignItems: "center",
-    justifyContent: "center",
-  },
   hostRow: { flexDirection: "row", gap: 12 },
   hostCard: {
     ...SpaceStyles.glassCard,
     flex: 1,
     padding: 14,
     alignItems: "flex-start",
-  },
-  hostIcon: {
-    width: 38,
-    height: 38,
-    borderRadius: Radius.pill,
-    backgroundColor: Palette.accentDim,
-    borderWidth: 1,
-    borderColor: Palette.accentBorder,
-    alignItems: "center",
-    justifyContent: "center",
-    marginBottom: 10,
   },
   hostTitle: { fontFamily: Font.bold, fontSize: 17, lineHeight: 22, color: Palette.text, marginBottom: 4 },
   hostBody: { ...Type.caption, fontSize: 13, lineHeight: 18, color: Palette.textMuted },
@@ -521,22 +467,20 @@ const styles = StyleSheet.create({
     borderWidth: 1,
     borderColor: Palette.accentBorder,
   },
-  feedChipText: { ...Type.caption, fontFamily: Font.bold, color: Palette.accent, textTransform: "uppercase", fontSize: 11, lineHeight: 14 },
+  feedChipText: { ...Type.caption, fontFamily: Font.semibold, color: Palette.accent, fontSize: 12, lineHeight: 15 },
   feedBody: { flexDirection: "row", alignItems: "center", gap: 10, marginTop: 12 },
   feedPeople: { flex: 1, flexDirection: "row", alignItems: "center", gap: 8 },
   feedMeta: { ...Type.caption, color: Palette.textFaint, flexShrink: 1 },
   imIn: {
-    flexDirection: "row",
+    paddingVertical: 7,
+    paddingHorizontal: 16,
+    borderRadius: Radius.small,
+    borderWidth: 1,
+    borderColor: Palette.borderStrong,
+    minWidth: 72,
     alignItems: "center",
-    gap: 6,
-    paddingVertical: 8,
-    paddingHorizontal: 14,
-    borderRadius: Radius.pill,
-    backgroundColor: Palette.accent,
-    minWidth: 84,
-    justifyContent: "center",
   },
-  imInText: { ...Type.small, fontFamily: Font.bold, color: Palette.base },
+  imInText: { ...Type.small, fontFamily: Font.semibold, color: Palette.text },
   sectionTitle: {
     ...Display.section,
     color: Palette.textMuted,

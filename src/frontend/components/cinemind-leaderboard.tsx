@@ -68,7 +68,7 @@ export function CineMindLeaderboard({ spaceId }: CineMindLeaderboardProps) {
             {entry.name}
             {entry.isYou ? " (you)" : ""}
           </Text>
-          {entry.streakCount > 1 && <Text style={styles.streak}>🔥{entry.streakCount}</Text>}
+          {entry.streakCount > 1 && <Text style={styles.streak}>{entry.streakCount}-day streak</Text>}
           <Text style={styles.time}>{formatDuration(entry.timeTakenMs)}</Text>
           <Text style={styles.score}>{entry.score}</Text>
         </View>
@@ -87,12 +87,8 @@ export function CineMindLeaderboard({ spaceId }: CineMindLeaderboardProps) {
   );
 }
 
-// Medals for the top three, plain numbers below — the visual reward is the
-// point of a daily leaderboard.
+// Plain rank numbers; the row highlight and score carry the reward.
 function medalFor(rank: number): string {
-  if (rank === 1) return "🥇";
-  if (rank === 2) return "🥈";
-  if (rank === 3) return "🥉";
   return `${rank}`;
 }
 
