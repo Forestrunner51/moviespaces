@@ -7,6 +7,8 @@ import {
   FlatList,
   ScrollView,
   Platform,
+  InputAccessoryView,
+  Keyboard,
 } from "react-native";
 import { Text, TextInput } from "@/frontend/components/scaled-text";
 import { router } from "expo-router";
@@ -21,9 +23,18 @@ import { authFetch } from "@/frontend/services/api";
 import { resolveDisplayName } from "@/frontend/services/display-name";
 import { searchMovies, Movie } from "@/frontend/services/movies";
 import { formatEventDate } from "@/frontend/utils/event-date";
+import {
+  fetchNearbyTheaters,
+  getDeviceLocation,
+  type Coordinates,
+  type NearbyTheater,
+} from "@/frontend/services/nearby-theaters";
 
 // Keep in sync with GroupController.MatchCrewSize.
 const MATCH_CREW_SIZE = 6;
+// iOS decimal keyboards have no Return key; this accessory bar is the only
+// way out of the cost field (same pattern as create-space).
+const COST_ACCESSORY_ID = "crewVenueCost";
 
 // Movie Crew: the Timeleft pattern applied to movies — get grouped with up
 // to six people going to the same showing. Two flows:
@@ -168,10 +179,53 @@ export default function MatchScreen() {
 
   // --- venue: place + time ---
   const [venueName, setVenueName] = useState("");
+  // Google Places typeahead for the place (same text-search endpoint the
+  // theater modal in create-space uses — it returns any place or address,
+  // not just theaters), so nobody has to paste an address by hand. Picking
+  // a result also carries coordinates onto the crew for distance/directions.
+  const [placePick, setPlacePick] = useState<NearbyTheater | null>(null);
+  const [placeResults, setPlaceResults] = useState<NearbyTheater[] | null>(null);
+  const [placeSearching, setPlaceSearching] = useState(false);
+  const [coords, setCoords] = useState<Coordinates | null>(null);
+  useEffect(() => {
+    if (stage !== "venueShowing" || coords) return;
+    getDeviceLocation().then((c) => c && setCoords(c)).catch(() => {});
+  }, [stage, coords]);
+  const placeTimer = useRef<ReturnType<typeof setTimeout> | null>(null);
+  const onVenueText = (text: string) => {
+    setVenueName(text);
+    setPlacePick(null);
+    if (placeTimer.current) clearTimeout(placeTimer.current);
+    const q = text.trim();
+    if (q.length < 2 || !coords) {
+      setPlaceResults(null);
+      setPlaceSearching(false);
+      return;
+    }
+    setPlaceSearching(true);
+    placeTimer.current = setTimeout(() => {
+      fetchNearbyTheaters(coords, 40233.6, q)
+        .then((r) => setPlaceResults(r.slice(0, 6)))
+        .catch(() => setPlaceResults([]))
+        .finally(() => setPlaceSearching(false));
+    }, 400);
+  };
+  const pickPlace = (pl: NearbyTheater) => {
+    setPlacePick(pl);
+    setVenueName(pl.address && !pl.name.includes(pl.address) ? `${pl.name}, ${pl.address}` : pl.name);
+    setPlaceResults(null);
+  };
   const [dateValue, setDateValue] = useState<Date | null>(null);
   const [timeValue, setTimeValue] = useState<Date | null>(null);
   const [datePickerVisible, setDatePickerVisible] = useState(false);
   const [timePickerVisible, setTimePickerVisible] = useState(false);
+  const [venueCost, setVenueCost] = useState("");
+  const venueCostCents = (() => {
+    const t = venueCost.trim();
+    if (!t) return null;
+    const n = parseFloat(t);
+    return Number.isFinite(n) && n >= 0 ? Math.round(n * 100) : NaN;
+  })();
 
   const pickKind = (k: CrewKind) => {
     setKind(k);
@@ -247,22 +301,20 @@ export default function MatchScreen() {
     });
   };
 
+  const venueReady =
+    venueName.trim().length > 0 && !!dateValue && !!timeValue && !Number.isNaN(venueCostCents);
   const startVenueCrew = () => {
-    if (!venueName.trim()) {
-      showToast("Name the place — your address, a bar, a rented room.");
-      return;
-    }
-    if (!dateValue || !timeValue) {
-      showToast("Pick a date and a time.");
-      return;
-    }
+    if (!venueReady || !dateValue || !timeValue) return;
     const combined = new Date(dateValue);
     combined.setHours(timeValue.getHours(), timeValue.getMinutes(), 0, 0);
     return submit({
-      CinemaName: venueName.trim(),
+      CinemaName: venueName.trim().slice(0, 250),
       ScreeningTime: combined.toISOString(),
       ShowDate: formatDate(combined),
       ShowTime: formatTime(combined),
+      TheaterLatitude: placePick?.latitude ?? null,
+      TheaterLongitude: placePick?.longitude ?? null,
+      TotalCostCents: venueCostCents,
     });
   };
 
@@ -277,18 +329,15 @@ export default function MatchScreen() {
   };
 
   const kindMeta = KINDS.find((k) => k.kind === kind)!;
+  // One line, always: kind · film … Change. The film title ellipsizes rather
+  // than wrapping under the icon.
   const crumbs = (
     <View style={styles.crumbs}>
       <Ionicons name={kindMeta.icon} size={14} color={Palette.accent} />
-      <Text style={styles.crumbText}>{kindMeta.title}</Text>
-      {movie && stage !== "film" && stage !== "pickShowing" && (
-        <>
-          <Text style={styles.crumbDot}>·</Text>
-          <Text style={styles.crumbText} numberOfLines={1}>
-            {movie.title}
-          </Text>
-        </>
-      )}
+      <Text style={styles.crumbText} numberOfLines={1}>
+        {kindMeta.title}
+        {movie && stage !== "film" && stage !== "pickShowing" ? `  ·  ${movie.title}` : ""}
+      </Text>
       <TouchableOpacity onPress={() => setStage("kind")} hitSlop={8} accessibilityRole="button">
         <Text style={styles.crumbChange}>Change</Text>
       </TouchableOpacity>
@@ -578,14 +627,54 @@ export default function MatchScreen() {
             <Text style={styles.title}>Where and when?</Text>
             <ScrollView keyboardShouldPersistTaps="handled" contentContainerStyle={{ paddingBottom: 60 }}>
               <Text style={styles.stepLabel}>PLACE</Text>
-              <TextInput
-                style={styles.field}
-                placeholder="Your address, a bar, a rented room…"
-                placeholderTextColor={Palette.textFaint}
-                value={venueName}
-                onChangeText={setVenueName}
-                maxLength={250}
-              />
+              <View style={styles.placeBox}>
+                <Ionicons name="location-outline" size={18} color={Palette.textMuted} />
+                <TextInput
+                  style={styles.placeInput}
+                  placeholder="Search a bar, a venue, or an address…"
+                  placeholderTextColor={Palette.textFaint}
+                  value={venueName}
+                  onChangeText={onVenueText}
+                  maxLength={250}
+                  autoCorrect={false}
+                  clearButtonMode="while-editing"
+                />
+                {placeSearching && <ActivityIndicator color={Palette.accent} size="small" />}
+                {placePick && !placeSearching && (
+                  <Ionicons name="checkmark-circle" size={18} color={Palette.positive} />
+                )}
+              </View>
+              {!coords && venueName.trim().length >= 2 && (
+                <Text style={styles.placeHint}>
+                  Turn on location to search places — or type the address as-is.
+                </Text>
+              )}
+              {placeResults && placeResults.length > 0 && (
+                <View style={styles.placeList}>
+                  {placeResults.map((pl) => (
+                    <TouchableOpacity
+                      key={pl.placeId}
+                      activeOpacity={0.8}
+                      style={styles.placeRow}
+                      onPress={() => pickPlace(pl)}
+                      accessibilityRole="button"
+                      accessibilityLabel={`${pl.name}, ${pl.address}`}
+                    >
+                      <Text style={styles.placeName} numberOfLines={1}>
+                        {pl.name}
+                      </Text>
+                      {!!pl.address && (
+                        <Text style={styles.placeAddress} numberOfLines={1}>
+                          {pl.address}
+                        </Text>
+                      )}
+                    </TouchableOpacity>
+                  ))}
+                </View>
+              )}
+              {placeResults && placeResults.length === 0 && !placeSearching && (
+                <Text style={styles.placeHint}>No places found — you can keep the text as typed.</Text>
+              )}
               <Text style={styles.stepLabel}>DATE</Text>
               <TouchableOpacity
                 activeOpacity={0.8}
@@ -614,6 +703,19 @@ export default function MatchScreen() {
                   onDismiss={() => setDatePickerVisible(false)}
                 />
               )}
+              {Platform.OS === "ios" && datePickerVisible && (
+                <TouchableOpacity
+                  activeOpacity={0.8}
+                  style={styles.pickerDone}
+                  onPress={() => {
+                    if (!dateValue) setDateValue(new Date());
+                    setDatePickerVisible(false);
+                  }}
+                  accessibilityRole="button"
+                >
+                  <Text style={styles.pickerDoneText}>Done</Text>
+                </TouchableOpacity>
+              )}
               <Text style={styles.stepLabel}>TIME</Text>
               <TouchableOpacity
                 activeOpacity={0.8}
@@ -641,12 +743,56 @@ export default function MatchScreen() {
                   onDismiss={() => setTimePickerVisible(false)}
                 />
               )}
+              {Platform.OS === "ios" && timePickerVisible && (
+                <TouchableOpacity
+                  activeOpacity={0.8}
+                  style={styles.pickerDone}
+                  onPress={() => {
+                    if (!timeValue) setTimeValue(new Date());
+                    setTimePickerVisible(false);
+                  }}
+                  accessibilityRole="button"
+                >
+                  <Text style={styles.pickerDoneText}>Done</Text>
+                </TouchableOpacity>
+              )}
+
+              <Text style={styles.stepLabel}>COST</Text>
+              <View style={styles.placeBox}>
+                <Text style={styles.costPrefix}>$</Text>
+                <TextInput
+                  style={styles.placeInput}
+                  placeholder="Total cost, if any — split per person"
+                  placeholderTextColor={Palette.textFaint}
+                  value={venueCost}
+                  onChangeText={setVenueCost}
+                  keyboardType="decimal-pad"
+                  inputAccessoryViewID={Platform.OS === "ios" ? COST_ACCESSORY_ID : undefined}
+                />
+              </View>
+              <Text style={styles.placeHint}>Leave blank if it&apos;s free. Shown to the crew as a per-person share.</Text>
+
+              {/* Inline validation instead of a toast — the toast lands on top
+                  of this form's title and reads as a glitch. The button stays
+                  dim until the fields are in. */}
+              {!venueReady && (
+                <Text style={styles.formHint}>
+                  {!venueName.trim()
+                    ? "Add a place to start."
+                    : !dateValue
+                      ? "Pick a date."
+                      : !timeValue
+                        ? "Pick a time."
+                        : "Enter a valid cost, or leave it blank."}
+                </Text>
+              )}
               <TouchableOpacity
                 activeOpacity={0.85}
-                style={[styles.primary, submitting && { opacity: 0.6 }]}
+                style={[styles.primary, (submitting || !venueReady) && { opacity: 0.5 }]}
                 onPress={startVenueCrew}
-                disabled={submitting}
+                disabled={submitting || !venueReady}
                 accessibilityRole="button"
+                accessibilityState={{ disabled: submitting || !venueReady }}
               >
                 {submitting ? (
                   <ActivityIndicator color={Palette.base} />
@@ -661,6 +807,15 @@ export default function MatchScreen() {
                 Anyone who picks this film for a watch party can join you, up to {MATCH_CREW_SIZE}.
               </Text>
             </ScrollView>
+            {Platform.OS === "ios" && (
+              <InputAccessoryView nativeID={COST_ACCESSORY_ID}>
+                <View style={styles.keyboardBar}>
+                  <TouchableOpacity activeOpacity={0.8} onPress={() => Keyboard.dismiss()} hitSlop={8}>
+                    <Text style={styles.pickerDoneText}>Done</Text>
+                  </TouchableOpacity>
+                </View>
+              </InputAccessoryView>
+            )}
           </>
         )}
       </View>
@@ -683,9 +838,8 @@ const styles = StyleSheet.create({
   kicker: { ...Display.section, color: Palette.accent, marginBottom: 4 },
   title: { ...Display.heading, color: Palette.text, marginBottom: 12 },
   subtitle: { ...Type.small, color: Palette.textMuted, marginBottom: 8 },
-  crumbs: { flexDirection: "row", alignItems: "center", gap: 6, marginBottom: 6 },
-  crumbText: { ...Type.small, fontFamily: Font.semibold, color: Palette.accent, flexShrink: 1 },
-  crumbDot: { ...Type.small, color: Palette.textFaint },
+  crumbs: { flexDirection: "row", alignItems: "center", gap: 6, marginBottom: 10 },
+  crumbText: { ...Type.small, fontFamily: Font.semibold, color: Palette.accent, flex: 1 },
   crumbChange: { ...Type.small, color: Palette.textMuted, textDecorationLine: "underline", marginLeft: 6 },
   kinds: { gap: 12, marginTop: 4 },
   kindCard: {
@@ -781,6 +935,29 @@ const styles = StyleSheet.create({
   // forms
   stepLabel: { ...Display.section, color: Palette.textMuted, marginTop: 12, marginBottom: 6 },
   field: { ...SpaceStyles.field, ...Type.body, color: Palette.text, padding: 12 },
+  placeBox: {
+    ...SpaceStyles.field,
+    flexDirection: "row",
+    alignItems: "center",
+    gap: 8,
+    paddingVertical: 12,
+    paddingHorizontal: 12,
+  },
+  placeInput: { flex: 1, ...Type.body, color: Palette.text, padding: 0 },
+  placeHint: { ...Type.caption, color: Palette.textFaint, marginTop: 6 },
+  placeList: {
+    ...SpaceStyles.glassCard,
+    marginTop: 6,
+    overflow: "hidden",
+  },
+  placeRow: {
+    paddingVertical: 10,
+    paddingHorizontal: 12,
+    borderBottomWidth: 1,
+    borderBottomColor: Palette.border,
+  },
+  placeName: { ...Type.small, fontFamily: Font.semibold, color: Palette.text },
+  placeAddress: { ...Type.caption, color: Palette.textMuted, marginTop: 1 },
   pickerField: {
     ...SpaceStyles.field,
     flexDirection: "row",
@@ -789,6 +966,17 @@ const styles = StyleSheet.create({
     padding: 12,
   },
   pickerFieldText: { ...Type.body, color: Palette.text },
+  pickerDone: { alignSelf: "flex-end", paddingVertical: 8, paddingHorizontal: 16, marginTop: 4 },
+  pickerDoneText: { ...Type.small, fontFamily: Font.bold, color: Palette.accent },
+  formHint: { ...Type.caption, color: Palette.textMuted, marginTop: 14 },
+  costPrefix: { ...Type.body, color: Palette.textMuted },
+  keyboardBar: {
+    backgroundColor: Palette.raised,
+    borderTopWidth: 1,
+    borderTopColor: Palette.border,
+    alignItems: "flex-end",
+    padding: 10,
+  },
   pickerPlaceholder: { color: Palette.textFaint },
   ticketToggle: {
     flexDirection: "row",

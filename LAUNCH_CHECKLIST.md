@@ -18,11 +18,11 @@ Legend: `[ ]` todo · `[x]` done · `[~]` in progress/needs verify
 
 ## PHASE 0 — Stabilize dev environment (do first, this week)
 Nothing downstream matters until you can build → run → test a flow without fighting the toolchain.
-- [ ] Get on a normal network (iPhone Personal Hotspot gives a `192.168.x` IP — avoids the CGNAT/ATS issue and the tunnel entirely)
+- [x] Dev loop is **tunnel on 8082**: `npm run dev` (= `expo start --clear --tunnel --port 8082`). Scan the QR from the dev client each session (new ngrok URL every time); first bundle over the tunnel is slow (1–3 min), then Fast Refresh is live. Nothing else should run on 8082. Claude will not start Metro while you are testing on the phone.
 - [ ] Confirm you can run the app on a real device or simulator and navigate all main screens
 - [ ] `npx expo start -c` habit when JS behaves stale (several past "bugs" were stale bundles)
 - [ ] If a new screen/card "doesn't appear", check `lsof -nP -iTCP:8081` — a days-old Metro holding the port serves the stale bundle and `expo start -c` silently fails to bind (bit us 2026-08-22)
-- [ ] `brew install watchman` — without it Metro's file watcher on this Mac silently misses edits (curl of a route bundle returned new code while the app kept loading the old graph); until then, restart `expo start -c` to see changes
+- [x] ~~watchman~~ — installed 2026-08-23 but **Expo SDK 56 does not use it** (its forked metro-file-map forces `useWatchman` off and uses the native fsevents watcher, which works). Changes "not showing" came from: a stale Metro already on 8081, the dev client still pointed at an old/tunnel URL, or running Metro with `CI=1` (no HMR). Fix: `lsof -nP -iTCP:8081`, kill strays, `npx expo start -c` on LAN, fully relaunch the app once.
 - [ ] Local `npx expo run:ios` needs `SENTRY_DISABLE_AUTO_UPLOAD=true` (now in `.env`); without it the Sentry Xcode phase fails the build with "An organization ID or slug is required"
 
 ## PHASE 1 — First real (cloud) build → TestFlight  ← biggest milestone

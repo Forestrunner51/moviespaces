@@ -581,6 +581,8 @@ namespace Backend.Controllers
             var when = ToUtc(req.ScreeningTime);
             if (when <= DateTime.UtcNow)
                 return BadRequest(new { error = "That showing has already started — pick a later one." });
+            if (req.TotalCostCents.HasValue && req.TotalCostCents.Value < 0)
+                return BadRequest(new { error = "Cost can't be negative." });
             // Compare and store the same (cleaned) string, or a venue that
             // trips the filter would never converge with itself.
             var cleanCinema = _profanityFilter.CleanOrFallback(cinema, isVenue ? "A private venue" : cinema);
@@ -625,6 +627,7 @@ namespace Backend.Controllers
                 ScreeningTime = when,
                 TheaterLatitude = req.TheaterLatitude,
                 TheaterLongitude = req.TheaterLongitude,
+                TotalCostCents = isVenue ? req.TotalCostCents : null,
             };
             crew.Members.Add(new GroupMember { GroupId = crew.Id, Name = cleanHost, UserId = userId, Confirmed = true, HasTicket = hasTicket });
             _db.Groups.Add(crew);
@@ -1792,7 +1795,10 @@ namespace Backend.Controllers
         string? ShowTime,
         double? TheaterLatitude,
         double? TheaterLongitude,
-        bool? HasTicket);
+        bool? HasTicket,
+        // Venue crews only: what the host is charging in total (split per
+        // person on the group page), like a regular watch party.
+        long? TotalCostCents);
 
     public record TicketRequest(bool HasTicket);
 

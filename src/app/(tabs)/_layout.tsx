@@ -3,8 +3,12 @@ import { View } from "react-native";
 import { Ionicons } from "@expo/vector-icons";
 import { SpaceTheme, Palette } from "@/frontend/constants/theme";
 import { CrewFab } from "@/frontend/components/crew-fab";
+import { useSpacesTabBadge } from "@/frontend/hooks/use-spaces-tab-badge";
 
 export default function TabsLayout() {
+  // Unread chats + pending friend requests, shown on the Spaces tab so a
+  // notification is visible from any tab, not only after opening Spaces.
+  const badge = useSpacesTabBadge();
   return (
     <View style={{ flex: 1 }}>
     <Tabs
@@ -55,8 +59,15 @@ export default function TabsLayout() {
       <Tabs.Screen
         name="spaces"
         options={{
-          title: "My Spaces",
+          title: "Spaces",
           headerShown: false,
+          tabBarBadge: badge > 0 ? (badge > 99 ? "99+" : badge) : undefined,
+          tabBarBadgeStyle: {
+            backgroundColor: Palette.accent,
+            color: Palette.base,
+            fontSize: 11,
+            fontFamily: "Karla_700Bold",
+          },
           tabBarIcon: ({ color, size }) => (
             <Ionicons name="rocket-outline" size={size} color={color} />
           ),

@@ -180,6 +180,7 @@ export default function AuthScreen() {
         keyboardShouldPersistTaps="handled"
       >
         <Text style={styles.header}>MovieSpaces</Text>
+        <Text style={styles.slogan}>We believe movies are a social event.</Text>
         <Text style={styles.subHeader}>
           {isSignUp ? "Create a new account" : "Sign in to your account"}
         </Text>
@@ -310,7 +311,16 @@ const styles = StyleSheet.create({
     ...Display.heading,
     color: Palette.text,
     textAlign: "center",
-    marginBottom: 8,
+    marginBottom: 6,
+  },
+  // The slogan. Italic body face, amber, centered under the wordmark — the
+  // one line of voice on a screen that's otherwise a form.
+  slogan: {
+    ...Type.body,
+    fontFamily: "Karla_400Regular_Italic",
+    color: Palette.accent,
+    textAlign: "center",
+    marginBottom: 18,
   },
   subHeader: {
     ...Type.body,
