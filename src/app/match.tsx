@@ -127,8 +127,9 @@ export default function MatchScreen() {
   const [hasTicket, setHasTicket] = useState(false);
   // Optional "up for after" picks — become the starter's per-member votes.
   const [afterPicks, setAfterPicks] = useState<string[]>([]);
+  // Single choice — tap to pick, tap again to clear.
   const toggleAfter = (key: string) =>
-    setAfterPicks((prev) => (prev.includes(key) ? prev.filter((k) => k !== key) : [...prev, key]));
+    setAfterPicks((prev) => (prev.includes(key) ? [] : [key]));
   const [submitting, setSubmitting] = useState(false);
 
   // --- crews already forming (both kinds) ---
@@ -515,7 +516,7 @@ export default function MatchScreen() {
                   );
                 })}
               </View>
-              <Text style={styles.placeHint}>Optional — the crew sees who&apos;s up for what.</Text>
+              <Text style={styles.placeHint}>Optional — pick one; the crew sees who&apos;s up for what.</Text>
 
               <TouchableOpacity
                 activeOpacity={0.85}
@@ -820,7 +821,7 @@ export default function MatchScreen() {
                   );
                 })}
               </View>
-              <Text style={styles.placeHint}>Optional — the crew sees who&apos;s up for what.</Text>
+              <Text style={styles.placeHint}>Optional — pick one; the crew sees who&apos;s up for what.</Text>
 
               {/* Inline validation instead of a toast — the toast lands on top
                   of this form's title and reads as a glitch. The button stays

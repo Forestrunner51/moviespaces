@@ -131,9 +131,8 @@ export default function CreateSpaceScreen() {
   const [hangoutNotes, setHangoutNotes] = useState("");
 
   const toggleActivity = (key: string) => {
-    setPostActivities((prev) =>
-      prev.includes(key) ? prev.filter((a) => a !== key) : [...prev, key],
-    );
+    // Single choice, matching the per-member votes this seeds.
+    setPostActivities((prev) => (prev.includes(key) ? [] : [key]));
   };
 
   const addCustomActivity = () => {
@@ -144,7 +143,7 @@ export default function CreateSpaceScreen() {
       return;
     }
     setCustomActivities((prev) => [...prev, label]);
-    setPostActivities((prev) => [...prev, label]);
+    setPostActivities(() => [label]);
     setCustomActivityInput("");
   };
 
