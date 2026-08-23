@@ -62,6 +62,7 @@ export function ShowtimePicker({ selection, onSelect, filterTitle }: Props) {
   // Collapsed once a time is chosen; re-expandable to change it.
   const [open, setOpen] = useState(true);
   const [showAllTheaters, setShowAllTheaters] = useState(false);
+  const [hasLocation, setHasLocation] = useState(false);
   const [theaterQuery, setTheaterQuery] = useState("");
 
   useEffect(() => {
@@ -74,18 +75,20 @@ export function ShowtimePicker({ selection, onSelect, filterTitle }: Props) {
         // cutoff a user outside coverage saw a "nearest" theater hundreds of
         // miles away instead of the honest "not near you yet" state. No
         // location permission → show the list (we can't know they're far).
+        // With a location: only theaters within 60 miles — the API returns
+        // every covered metro, and "Show all 800 theaters" is useless to
+        // someone in Dallas. Without one: keep the list but see canShowAll.
         let list = result.theaters;
-        if (loc && list.length > 0) {
-          const nearest = list[0];
-          if (
-            nearest.latitude != null &&
-            nearest.longitude != null &&
-            distanceMiles(loc.latitude, loc.longitude, nearest.latitude, nearest.longitude) > 60
-          ) {
-            list = [];
-          }
+        if (loc) {
+          list = list.filter(
+            (t) =>
+              t.latitude != null &&
+              t.longitude != null &&
+              distanceMiles(loc.latitude, loc.longitude, t.latitude, t.longitude) <= 60,
+          );
         }
         if (!cancelled) {
+          setHasLocation(!!loc);
           setTheaters(list);
           setStale(isStale(result.lastUpdatedUtc));
         }
@@ -223,12 +226,20 @@ export function ShowtimePicker({ selection, onSelect, filterTitle }: Props) {
           <Text style={styles.theaterRowCount}>{t.movieCount} films</Text>
         </TouchableOpacity>
       ))}
-      {!theaterQuery.trim() && theaters.length > 8 && (
+      {/* Without a location the list is every covered metro, nearest-first
+          is meaningless, and "show all" would be hundreds of rows — offer
+          search and a nudge instead. */}
+      {!theaterQuery.trim() && theaters.length > 8 && hasLocation && (
         <TouchableOpacity activeOpacity={0.8} onPress={() => setShowAllTheaters((p) => !p)}>
           <Text style={styles.showAllText}>
-            {showAllTheaters ? "Show fewer" : `Show all ${theaters.length} theaters`}
+            {showAllTheaters ? "Show fewer" : `Show all ${theaters.length} nearby theaters`}
           </Text>
         </TouchableOpacity>
+      )}
+      {!theaterQuery.trim() && !hasLocation && (
+        <Text style={styles.locationHint}>
+          Turn on location to see theaters near you, or search by name.
+        </Text>
       )}
 
       {/* Step 2 — date */}
@@ -338,6 +349,7 @@ const styles = StyleSheet.create({
     marginBottom: 6,
   },
   chipScroll: { gap: 8, paddingRight: 8 },
+  locationHint: { ...Type.caption, color: Palette.textFaint, marginTop: 6 },
   chip: {
     ...SpaceStyles.glassCard,
     paddingVertical: 8,
