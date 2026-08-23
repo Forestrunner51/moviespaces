@@ -51,7 +51,7 @@ export function NextUpCard({ space }: { space: NextUpSpace }) {
         />
         <View style={{ flex: 1 }}>
           <Text style={styles.nextKicker}>
-            {isCrew ? (space.spaceType === "private_rental" ? "Watch party group" : "Theater group") : "Next up"}
+            {isCrew ? (space.spaceType === "private_rental" ? "Your watch party crew" : "Your theater crew") : "Your next Space"}
           </Text>
           <Text style={styles.nextTitle} numberOfLines={2}>
             {space.filmName}
@@ -123,7 +123,14 @@ const styles = StyleSheet.create({
     marginBottom: 4,
   },
   nextTop: { flexDirection: "row", gap: 14, alignItems: "flex-start" },
-  nextKicker: { ...Type.small, color: Palette.textMuted, marginBottom: 4 },
+  nextKicker: {
+    ...Type.caption,
+    fontFamily: Font.semibold,
+    color: Palette.accent,
+    textTransform: "uppercase",
+    letterSpacing: 0.8,
+    marginBottom: 4,
+  },
   nextTitle: { fontFamily: Font.bold, fontSize: 22, lineHeight: 26, color: Palette.text, marginBottom: 6 },
   nextWhen: { flexDirection: "row", alignItems: "baseline", gap: 8, flexWrap: "wrap" },
   nextDate: { ...Display.date, color: Palette.text },
