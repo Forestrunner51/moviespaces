@@ -4,11 +4,14 @@ import { Ionicons } from "@expo/vector-icons";
 import { SpaceTheme, Palette } from "@/frontend/constants/theme";
 import { CrewFab } from "@/frontend/components/crew-fab";
 import { useSpacesTabBadge } from "@/frontend/hooks/use-spaces-tab-badge";
+import { useCineMindBadge } from "@/frontend/hooks/use-cinemind-badge";
 
 export default function TabsLayout() {
   // Unread chats + pending friend requests, shown on the Spaces tab so a
   // notification is visible from any tab, not only after opening Spaces.
   const badge = useSpacesTabBadge();
+  // Dot on CineMind while today's puzzle is unplayed.
+  const puzzleWaiting = useCineMindBadge();
   return (
     <View style={{ flex: 1 }}>
     <Tabs
@@ -83,6 +86,16 @@ export default function TabsLayout() {
         options={{
           title: "CineMind",
           headerShown: false,
+          // A dot, not a count — "there is a puzzle", not "N things owed".
+          tabBarBadge: puzzleWaiting ? "" : undefined,
+          tabBarBadgeStyle: {
+            backgroundColor: Palette.accent,
+            minWidth: 10,
+            maxWidth: 10,
+            height: 10,
+            borderRadius: 5,
+            marginTop: 2,
+          },
           tabBarIcon: ({ color, size }) => (
             <Ionicons name="bulb-outline" size={size} color={color} />
           ),

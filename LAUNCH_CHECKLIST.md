@@ -92,6 +92,12 @@ Run each end-to-end, signed-in as a real user:
 - [ ] Profile stat row (films seen · crews · upcoming · streak) shows numbers, not dashes
 - [ ] New **email** signup → genre onboarding; new **Google/Apple** signup → genre onboarding; returning sign-in → straight to Home
 - [ ] Karla renders on a physical device (bold titles actually bold; the two italic notes italic); set iOS Text Size to the largest accessibility step → nothing overflows its card
+- [ ] Venue crew: place typeahead suggests real places (location on), picking one fills name+address; cost field with Done bar; inline validation (no toast over the form)
+- [ ] "Hangout After" votes on a **hosted** Space: host's creation picks appear pre-selected as their vote; second account toggles chips → counts update
+- [ ] Ticket toggle on a **hosted** theater Space (not just crews); absent on watch parties
+- [ ] Spaces tab shows a badge when a chat is unread / a friend request is pending; clears after reading
+- [ ] Auth screen shows the slogan under the wordmark
+- [ ] Crew edit ("Set the showtime") opens the ShowtimePicker prefilled on the crew's theater/day; changing it pushes a notification to the other member naming the editor
 
 ## PHASE 5 — App Store Connect listing + assets
 - [ ] App name, subtitle, keywords, category (Social Networking / Entertainment)
@@ -116,6 +122,7 @@ Run each end-to-end, signed-in as a real user:
 ## PHASE 7 — Submit & review
 - [ ] Submit the build for review (aim mid-August)
 - [ ] Provide a **demo account** in App Review notes (reviewers need to log in — give them a test email/password)
+- [ ] Apply for the Fandango affiliate program on **CJ Affiliate** (parallel to review; see PROJECT_STATUS §4) — config-only once approved
 - [ ] Note in review: "third-party ticket links open externally; app does not process payments"
 - [ ] Note in review: **Movie Crew groups strangers for in-person meetups** — crews capped at 6, every member and chat message can be blocked/reported, ticket status is self-reported and never gates anything. Have the demo account already seated in a crew so the reviewer can see it.
 - [ ] Respond fast to any rejection — expect possibly 1 round; common hits: privacy labels mismatch, screenshots, demo login not working
