@@ -280,25 +280,25 @@ export default function HomeScreen() {
           clubs, and the daily CineMind puzzle all live in the tabs below.
         </CoachTip>
 
-        {/* Joining leads, and it's a full card rather than a muted text link.
-            Both hosting options below author an event from scratch — for a
-            new user with no friends and no Spaces yet, every prominent action
-            used to end in "you've created something nobody is in." */}
+        {/* The hero is the one thing on Home the tab bar can't reach: get
+            seated with strangers for a film. (It used to route to Explore,
+            which is the next tab over — a card that just opens a tab is a
+            tab drawn twice.) */}
         <TouchableOpacity
           activeOpacity={0.85}
           style={styles.heroCard}
-          onPress={() => router.push({ pathname: "/(tabs)/explore" })}
+          onPress={() => router.push("/match")}
           accessibilityRole="button"
-          accessibilityLabel="Find a Space to join"
+          accessibilityLabel="Get seated with a movie crew"
         >
           <View style={styles.heroIcon}>
-            <Ionicons name="telescope-outline" size={26} color={Palette.base} />
+            <Ionicons name="people" size={24} color={Palette.base} />
           </View>
           <View style={{ flex: 1 }}>
-            <Text style={styles.heroKicker}>Tonight, near you</Text>
-            <Text style={styles.heroTitle}>Find a Space to join</Text>
+            <Text style={styles.heroKicker}>Movie Crew</Text>
+            <Text style={styles.heroTitle}>Get seated with strangers</Text>
             <Text style={styles.heroSubtitle}>
-              Public screenings, watch parties and movie crews forming now
+              Pick a film and a showing — we put you in a crew of up to 6 who picked the same
             </Text>
           </View>
           <View style={styles.heroArrow}>
