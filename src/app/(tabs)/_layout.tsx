@@ -1,9 +1,12 @@
 import { Tabs } from "expo-router";
+import { View } from "react-native";
 import { Ionicons } from "@expo/vector-icons";
 import { SpaceTheme, Palette } from "@/frontend/constants/theme";
+import { CrewFab } from "@/frontend/components/crew-fab";
 
 export default function TabsLayout() {
   return (
+    <View style={{ flex: 1 }}>
     <Tabs
       screenOptions={{
         tabBarActiveTintColor: SpaceTheme.glowCyan,
@@ -78,5 +81,7 @@ export default function TabsLayout() {
       />
       {/* This configuration registers the route but completely hides it from the tab bar */}
     </Tabs>
+    <CrewFab />
+    </View>
   );
 }

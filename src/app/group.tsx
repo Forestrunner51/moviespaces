@@ -34,7 +34,7 @@ import { useFriends } from "@/frontend/hooks/use-friends";
 import { CineMindLeaderboard } from "@/frontend/components/cinemind-leaderboard";
 import { EVENT_CATEGORIES, eventCategoryOf } from "@/frontend/constants/event-categories";
 import { reportContent } from "@/frontend/services/moderation";
-import { Avatar } from "@/frontend/components/avatar";
+import { Avatar, AvatarStack } from "@/frontend/components/avatar";
 import { useProfiles } from "@/frontend/hooks/use-profiles";
 import { useForegroundPoll } from "@/frontend/hooks/use-foreground-poll";
 import { formatEventDate } from "@/frontend/utils/event-date";
@@ -114,6 +114,9 @@ export default function GroupScreen() {
     code?: string;
   }>();
   const [group, setGroup] = useState<Group | null>(null);
+  // The "you're in" moment (Strava's kudos, Kaya's "nice send"): shown once
+  // on arrival from a join, dismissible, gone on the next visit.
+  const [celebrate, setCelebrate] = useState(matched === "created" || matched === "joined");
   const [loading, setLoading] = useState(true);
   const [currentUserId, setCurrentUserId] = useState<string | null>(null);
 
@@ -499,6 +502,7 @@ export default function GroupScreen() {
         return;
       }
       await fetchGroup();
+      if (!myMember.hasTicket) showToast("Ticket in hand 🎟  The crew can see you're locked in.", "success");
     } catch {
       showToast("Network error — please try again.");
     } finally {
@@ -877,6 +881,58 @@ export default function GroupScreen() {
             </TouchableOpacity>
           )}
         </View>
+
+        {celebrate && (
+          <View style={styles.celebrate}>
+            <View style={styles.celebrateTop}>
+              <Text style={styles.celebrateEmoji}>{matched === "created" ? "🎬" : "🎉"}</Text>
+              <View style={{ flex: 1 }}>
+                <Text style={styles.celebrateTitle}>
+                  {matched === "created" ? "You started it." : "You're in."}
+                </Text>
+                <Text style={styles.celebrateBody}>
+                  {matched === "created"
+                    ? isCrew
+                      ? "Your crew is open — the next people who pick this showing land here."
+                      : "Your Space is live. Invite people and it fills up."
+                    : groupMembers.length > 1
+                      ? `Say hi to the other ${groupMembers.length - 1} — everyone's a little new here.`
+                      : "Say hi in chat when the next person lands."}
+                </Text>
+              </View>
+              <TouchableOpacity onPress={() => setCelebrate(false)} hitSlop={10} accessibilityRole="button" accessibilityLabel="Dismiss">
+                <Ionicons name="close" size={18} color={Palette.textMuted} />
+              </TouchableOpacity>
+            </View>
+            <View style={styles.celebrateRow}>
+              {groupMembers.length > 0 && (
+                <AvatarStack
+                  people={groupMembers.map((m) => ({
+                    userId: m.userId,
+                    name: m.name,
+                    avatarUrl: memberProfiles.get(m.userId)?.avatarUrl,
+                  }))}
+                  size={26}
+                  max={5}
+                />
+              )}
+              <TouchableOpacity
+                activeOpacity={0.85}
+                style={styles.celebrateChat}
+                onPress={() =>
+                  router.push({
+                    pathname: "/group-chat/[id]",
+                    params: { id: group.id, type: "group", title: group.filmName, showTime: group.showTime, showDate: group.showDate },
+                  })
+                }
+                accessibilityRole="button"
+              >
+                <Ionicons name="chatbubbles" size={15} color={Palette.base} />
+                <Text style={styles.celebrateChatText}>Say hi 👋</Text>
+              </TouchableOpacity>
+            </View>
+          </View>
+        )}
 
         {/* Movie Crew reveal — the Timeleft "your table" moment. Seats fill
             with faces as people pick this film; open seats stay dashed so a
@@ -1619,6 +1675,28 @@ const styles = StyleSheet.create({
   },
   // baseline, not center — the three sizes on this row need to sit on a
   // shared baseline or the smaller ones float mid-way up the big date.
+  celebrate: {
+    ...SpaceStyles.glassCard,
+    borderColor: Palette.positiveBorder,
+    backgroundColor: Palette.positiveDim,
+    padding: 14,
+    marginBottom: 16,
+  },
+  celebrateTop: { flexDirection: "row", alignItems: "flex-start", gap: 10 },
+  celebrateEmoji: { fontSize: 26, lineHeight: 32 },
+  celebrateTitle: { fontFamily: Font.bold, fontSize: 18, lineHeight: 22, color: Palette.text },
+  celebrateBody: { ...Type.small, color: Palette.textMuted, marginTop: 2 },
+  celebrateRow: { flexDirection: "row", alignItems: "center", justifyContent: "space-between", marginTop: 12 },
+  celebrateChat: {
+    flexDirection: "row",
+    alignItems: "center",
+    gap: 6,
+    paddingVertical: 8,
+    paddingHorizontal: 14,
+    borderRadius: Radius.pill,
+    backgroundColor: Palette.positive,
+  },
+  celebrateChatText: { ...Type.small, fontFamily: Font.bold, color: Palette.base },
   crewCard: {
     ...SpaceStyles.glassCard,
     borderColor: Palette.accentBorder,

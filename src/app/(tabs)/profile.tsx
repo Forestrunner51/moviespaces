@@ -18,7 +18,8 @@ import * as ImagePicker from "expo-image-picker";
 import { uploadImage } from "@/frontend/services/image-upload";
 import { Ionicons } from "@expo/vector-icons";
 import { Starfield } from "@/frontend/components/starfield";
-import { SpaceStyles, Palette, Type, Display } from "@/frontend/constants/theme";
+import { SpaceStyles, Palette, Type, Display, Font } from "@/frontend/constants/theme";
+import { fetchTodayPuzzle } from "@/frontend/services/cinemind";
 import { THEATER_MEMBERSHIPS, membershipLabel } from "@/frontend/constants/theater-memberships";
 import { checkUsernameAvailable, normalizeUsername } from "@/frontend/services/username";
 import { useFriends } from "@/frontend/hooks/use-friends";
@@ -62,6 +63,17 @@ export default function ProfileScreen() {
   );
   const [checkingUsername, setCheckingUsername] = useState(false);
   const [mySpaces, setMySpaces] = useState<MySpace[]>([]);
+  // CineMind streak for the stat row — best effort, blank on failure.
+  const [streak, setStreak] = useState<number | null>(null);
+  useEffect(() => {
+    let cancelled = false;
+    fetchTodayPuzzle()
+      .then((t) => !cancelled && setStreak(t.streakCount))
+      .catch(() => {});
+    return () => {
+      cancelled = true;
+    };
+  }, []);
   const { friends } = useFriends();
 
   const loadMySpaces = useCallback(async () => {
@@ -453,6 +465,23 @@ export default function ProfileScreen() {
           )}
         </View>
 
+        {/* Identity in numbers — what Strava's totals and Kaya's send count do
+            for a profile. Films seen = Spaces that have passed; crews = Movie
+            Crews joined; streak = CineMind. */}
+        <View style={styles.statRow}>
+          {[
+            { n: pastSpaces.filter((s) => s.status !== "cancelled").length, label: "films seen" },
+            { n: mySpaces.filter((s) => !!s.matchMovieKey).length, label: "crews" },
+            { n: upcomingSpaces.length, label: "upcoming" },
+            { n: streak, label: "day streak" },
+          ].map((st, idx) => (
+            <View key={st.label} style={[styles.stat, idx > 0 && styles.statDivider]}>
+              <Text style={styles.statNumber}>{st.n ?? "–"}</Text>
+              <Text style={styles.statLabel}>{st.label}</Text>
+            </View>
+          ))}
+        </View>
+
         <View style={styles.spacesSection}>
           <Text style={styles.spacesSectionTitle}>Upcoming Spaces</Text>
           {upcomingSpaces.length === 0 ? (
@@ -530,8 +559,18 @@ const styles = StyleSheet.create({
     ...SpaceStyles.glassCard,
     padding: 24,
     alignItems: "center",
+    marginBottom: 12,
+  },
+  statRow: {
+    ...SpaceStyles.glassCard,
+    flexDirection: "row",
+    paddingVertical: 14,
     marginBottom: 32,
   },
+  stat: { flex: 1, alignItems: "center" },
+  statDivider: { borderLeftWidth: 1, borderLeftColor: Palette.border },
+  statNumber: { ...Display.stat, fontSize: 24, lineHeight: 28, color: Palette.text },
+  statLabel: { ...Type.caption, fontFamily: Font.semibold, color: Palette.textMuted, marginTop: 2, textTransform: "uppercase", letterSpacing: 0.6, fontSize: 10, lineHeight: 13 },
   avatarWrapper: { marginBottom: 16 },
   avatar: {
     width: 84,

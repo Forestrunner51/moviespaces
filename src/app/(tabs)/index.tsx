@@ -13,12 +13,14 @@ import { Ionicons } from "@expo/vector-icons";
 import { Starfield } from "@/frontend/components/starfield";
 import { SpaceStyles, Palette, Type, Display, Font, Radius } from "@/frontend/constants/theme";
 import { MoviePoster } from "@/frontend/components/movie-poster";
-import { AvatarStack } from "@/frontend/components/avatar";
+import { Avatar, AvatarStack } from "@/frontend/components/avatar";
 import { CoachTip } from "@/frontend/components/coach-tip";
 import { useProfiles } from "@/frontend/hooks/use-profiles";
 import { formatEventDate } from "@/frontend/utils/event-date";
 import { EVENT_CATEGORIES, eventCategoryOf } from "@/frontend/constants/event-categories";
 import { authFetch } from "@/frontend/services/api";
+import { resolveDisplayName } from "@/frontend/services/display-name";
+import { useToast } from "@/frontend/components/toast";
 
 // Members carry userId so the cards can show attendee faces (see useProfiles)
 // — the API already returns them, these types just weren't asking.
@@ -32,6 +34,8 @@ interface SpaceMember {
 
 interface NearbySpace {
   id: string;
+  // Host's Supabase id — the feed card leads with their face.
+  userId: string;
   hostName: string;
   filmName: string;
   cinemaName: string;
@@ -50,56 +54,114 @@ interface MySpace {
   id: string;
 }
 
-// Full-width feed card for nearby gatherings — the same date-led layout as
-// the Explore list, so Home scrolls like a feed of real events rather than
-// a row of 160px chips.
+// Feed card — a person doing a thing, not a listing. Strava's feed is
+// "Sam ran 5k", Kaya's is "Ola sent V4"; ours is "Bob is seeing The Caine
+// Mutiny on Sunday". The host's face leads, the film is the subject, and
+// the card has a reaction: "I'm in" joins on the spot.
 function FeedCard({ space }: { space: NearbySpace }) {
+  const { showToast } = useToast();
   const members = space.members ?? [];
-  const profiles = useProfiles(members.map((m) => m.userId));
+  const profiles = useProfiles([space.userId, ...members.map((m) => m.userId)]);
+  const host = profiles.get(space.userId);
   const eventDate = formatEventDate(space.screeningTime, space.showDate, space.showTime);
+  const [joining, setJoining] = useState(false);
+  const isWatchParty = space.spaceType === "private_rental";
+  const others = members.filter((m) => m.userId !== space.userId);
+
+  const imIn = async () => {
+    if (joining) return;
+    setJoining(true);
+    try {
+      const name = await resolveDisplayName("");
+      const res = await authFetch(`${process.env.EXPO_PUBLIC_API_URL}/api/group/${space.id}/join`, {
+        method: "POST",
+        body: JSON.stringify({ name, spaceCode: null }),
+      });
+      if (!res.ok) {
+        const body = await res.json().catch(() => null);
+        showToast(body?.error || "Couldn't join right now — try again.");
+        return;
+      }
+      router.push({ pathname: "/group", params: { groupId: space.id, matched: "joined" } });
+    } catch {
+      showToast("Network error — please try again.");
+    } finally {
+      setJoining(false);
+    }
+  };
+
   return (
     <TouchableOpacity
-      activeOpacity={0.85}
+      activeOpacity={0.88}
       style={styles.feedCard}
       onPress={() => router.push({ pathname: "/group", params: { groupId: space.id } })}
       accessibilityRole="button"
-      accessibilityLabel={`${space.filmName} at ${space.cinemaName}`}
+      accessibilityLabel={`${space.hostName} is seeing ${space.filmName}`}
     >
-      <MoviePoster
-        uri={space.posterPath}
-        width={64}
-        fallbackIcon={EVENT_CATEGORIES[eventCategoryOf(space.spaceType, space.eventCategory)].icon}
-      />
-      <View style={{ flex: 1 }}>
-        <View style={styles.feedWhen}>
-          <Text style={styles.feedDate} numberOfLines={1}>
+      <View style={styles.feedHead}>
+        <Avatar uri={host?.avatarUrl} name={space.hostName} size={40} />
+        <View style={{ flex: 1 }}>
+          <Text style={styles.feedLead} numberOfLines={2}>
+            <Text style={styles.feedName}>{space.hostName}</Text>
+            {isWatchParty ? " is hosting " : " is seeing "}
+            <Text style={styles.feedName}>{space.filmName}</Text>
+          </Text>
+          <Text style={styles.feedWhenLine} numberOfLines={1}>
             {eventDate.date}
+            {eventDate.time ? ` · ${eventDate.time}` : ""}
+            {space.cinemaName ? ` · ${space.cinemaName}` : ""}
           </Text>
-          {!!eventDate.time && <Text style={styles.feedTime}>{eventDate.time}</Text>}
-          {!!eventDate.relative && <Text style={styles.feedRelative}>{eventDate.relative}</Text>}
         </View>
-        <Text style={styles.feedTitle} numberOfLines={1}>
-          {space.filmName}
-        </Text>
-        <Text style={styles.feedWhere} numberOfLines={1}>
-          {space.cinemaName}
-        </Text>
-        <View style={styles.feedFooter}>
-          {members.length > 0 && (
-            <AvatarStack
-              people={members.map((m) => ({
-                userId: m.userId,
-                name: m.name,
-                avatarUrl: profiles.get(m.userId)?.avatarUrl,
-              }))}
-              size={20}
-              max={3}
-            />
+        {!!eventDate.relative && (
+          <View style={styles.feedChip}>
+            <Text style={styles.feedChipText}>{eventDate.relative}</Text>
+          </View>
+        )}
+      </View>
+      <View style={styles.feedBody}>
+        <MoviePoster
+          uri={space.posterPath}
+          width={48}
+          fallbackIcon={EVENT_CATEGORIES[eventCategoryOf(space.spaceType, space.eventCategory)].icon}
+        />
+        <View style={styles.feedPeople}>
+          {others.length > 0 ? (
+            <>
+              <AvatarStack
+                people={others.map((m) => ({
+                  userId: m.userId,
+                  name: m.name,
+                  avatarUrl: profiles.get(m.userId)?.avatarUrl,
+                }))}
+                size={22}
+                max={4}
+              />
+              <Text style={styles.feedMeta}>
+                {others.length === 1 ? "1 other is in" : `${others.length} others are in`}
+              </Text>
+            </>
+          ) : (
+            <Text style={styles.feedMeta}>Be the first to join</Text>
           )}
-          <Text style={styles.feedMeta} numberOfLines={1}>
-            {members.length} going · {space.hostName}
-          </Text>
         </View>
+        <TouchableOpacity
+          activeOpacity={0.85}
+          style={[styles.imIn, joining && { opacity: 0.6 }]}
+          onPress={imIn}
+          disabled={joining}
+          hitSlop={6}
+          accessibilityRole="button"
+          accessibilityLabel={`I'm in for ${space.filmName}`}
+        >
+          {joining ? (
+            <ActivityIndicator color={Palette.base} size="small" />
+          ) : (
+            <>
+              <Ionicons name="hand-right" size={14} color={Palette.base} />
+              <Text style={styles.imInText}>I&apos;m in</Text>
+            </>
+          )}
+        </TouchableOpacity>
       </View>
     </TouchableOpacity>
   );
@@ -444,19 +506,37 @@ const styles = StyleSheet.create({
   feedSeeAll: { ...Type.small, fontFamily: Font.semibold, color: Palette.accent },
   feedCard: {
     ...SpaceStyles.glassCard,
-    flexDirection: "row",
-    gap: 12,
-    padding: 12,
+    padding: 14,
     marginBottom: 10,
   },
-  feedWhen: { flexDirection: "row", alignItems: "baseline", gap: 8, flexWrap: "wrap" },
-  feedDate: { ...Display.dateCard, color: Palette.text },
-  feedTime: { ...Type.small, color: Palette.textMuted },
-  feedRelative: { ...Type.caption, fontFamily: Font.bold, color: Palette.accent, textTransform: "uppercase" },
-  feedTitle: { ...Type.body, fontFamily: Font.semibold, color: Palette.text, marginTop: 2 },
-  feedWhere: { ...Type.small, color: Palette.textMuted },
-  feedFooter: { flexDirection: "row", alignItems: "center", gap: 8, marginTop: 8 },
+  feedHead: { flexDirection: "row", alignItems: "flex-start", gap: 10 },
+  feedLead: { ...Type.body, color: Palette.textMuted },
+  feedName: { fontFamily: Font.bold, color: Palette.text },
+  feedWhenLine: { ...Type.caption, color: Palette.textMuted, marginTop: 3 },
+  feedChip: {
+    paddingVertical: 3,
+    paddingHorizontal: 8,
+    borderRadius: Radius.pill,
+    backgroundColor: Palette.accentDim,
+    borderWidth: 1,
+    borderColor: Palette.accentBorder,
+  },
+  feedChipText: { ...Type.caption, fontFamily: Font.bold, color: Palette.accent, textTransform: "uppercase", fontSize: 11, lineHeight: 14 },
+  feedBody: { flexDirection: "row", alignItems: "center", gap: 10, marginTop: 12 },
+  feedPeople: { flex: 1, flexDirection: "row", alignItems: "center", gap: 8 },
   feedMeta: { ...Type.caption, color: Palette.textFaint, flexShrink: 1 },
+  imIn: {
+    flexDirection: "row",
+    alignItems: "center",
+    gap: 6,
+    paddingVertical: 8,
+    paddingHorizontal: 14,
+    borderRadius: Radius.pill,
+    backgroundColor: Palette.accent,
+    minWidth: 84,
+    justifyContent: "center",
+  },
+  imInText: { ...Type.small, fontFamily: Font.bold, color: Palette.base },
   sectionTitle: {
     ...Display.section,
     color: Palette.textMuted,
