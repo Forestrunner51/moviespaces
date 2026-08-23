@@ -1,15 +1,14 @@
 import { useRef, useState } from "react";
 import {
   View,
-  Text,
   FlatList,
   StyleSheet,
-  TextInput,
   TouchableOpacity,
   KeyboardAvoidingView,
   Platform,
   ActivityIndicator,
 } from "react-native";
+import { Text, TextInput } from "@/frontend/components/scaled-text";
 import { useLocalSearchParams, Stack } from "expo-router";
 import { Ionicons } from "@expo/vector-icons";
 import { useSafeAreaInsets } from "react-native-safe-area-context";

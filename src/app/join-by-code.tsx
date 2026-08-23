@@ -1,12 +1,6 @@
 import { useState } from "react";
-import {
-  View,
-  Text,
-  TextInput,
-  TouchableOpacity,
-  StyleSheet,
-  ActivityIndicator,
-} from "react-native";
+import { View, TouchableOpacity, StyleSheet, ActivityIndicator } from "react-native";
+import { Text, TextInput } from "@/frontend/components/scaled-text";
 import { router } from "expo-router";
 import { Ionicons } from "@expo/vector-icons";
 import { Starfield } from "@/frontend/components/starfield";

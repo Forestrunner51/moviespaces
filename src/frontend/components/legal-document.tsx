@@ -1,4 +1,5 @@
-import { ScrollView, Text, StyleSheet } from "react-native";
+import { ScrollView, StyleSheet } from "react-native";
+import { Text } from "@/frontend/components/scaled-text";
 import { Starfield } from "@/frontend/components/starfield";
 import { SpaceTheme, SpaceStyles } from "@/frontend/constants/theme";
 import { LegalSection, LEGAL_LAST_UPDATED } from "@/frontend/constants/legal";

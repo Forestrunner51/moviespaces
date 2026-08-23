@@ -1,14 +1,13 @@
 import { useRef, useState } from "react";
 import {
   View,
-  Text,
   FlatList,
   StyleSheet,
   TouchableOpacity,
-  TextInput,
   ActivityIndicator,
   Alert,
 } from "react-native";
+import { Text, TextInput } from "@/frontend/components/scaled-text";
 import { router } from "expo-router";
 import { Ionicons } from "@expo/vector-icons";
 import { Avatar } from "@/frontend/components/avatar";

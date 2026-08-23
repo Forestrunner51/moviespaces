@@ -1,4 +1,5 @@
-import { View, Text, Image, StyleSheet } from "react-native";
+import { View, Image, StyleSheet } from "react-native";
+import { Text } from "@/frontend/components/scaled-text";
 import { Palette, Radius } from "@/frontend/constants/theme";
 
 interface AvatarProps {

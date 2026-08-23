@@ -1,18 +1,17 @@
 import { useEffect, useState } from "react";
 import {
   View,
-  Text,
   StyleSheet,
   TouchableOpacity,
   Switch,
   Alert,
   ScrollView,
   Modal,
-  TextInput,
   KeyboardAvoidingView,
   Platform,
   ActivityIndicator,
 } from "react-native";
+import { Text, TextInput } from "@/frontend/components/scaled-text";
 import { router } from "expo-router";
 import Constants from "expo-constants";
 import { supabase } from "@/frontend/config/supabase";

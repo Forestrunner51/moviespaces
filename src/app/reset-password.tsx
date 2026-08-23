@@ -1,8 +1,6 @@
 import { useState } from "react";
 import {
   StyleSheet,
-  Text,
-  TextInput,
   TouchableOpacity,
   ActivityIndicator,
   Alert,
@@ -10,6 +8,7 @@ import {
   ScrollView,
   Platform,
 } from "react-native";
+import { Text, TextInput } from "@/frontend/components/scaled-text";
 import { useRouter, useLocalSearchParams } from "expo-router";
 import { supabase } from "@/frontend/config/supabase";
 import { Starfield } from "@/frontend/components/starfield";

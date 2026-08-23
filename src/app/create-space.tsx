@@ -1,8 +1,6 @@
 import { useEffect, useRef, useState } from "react";
 import {
   View,
-  Text,
-  TextInput,
   TouchableOpacity,
   StyleSheet,
   ActivityIndicator,
@@ -14,6 +12,7 @@ import {
   InputAccessoryView,
   Keyboard,
 } from "react-native";
+import { Text, TextInput } from "@/frontend/components/scaled-text";
 import { router, useLocalSearchParams } from "expo-router";
 import AsyncStorage from "@react-native-async-storage/async-storage";
 import DateTimePicker from "@react-native-community/datetimepicker";

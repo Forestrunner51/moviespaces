@@ -1,12 +1,12 @@
 import { useRef, useState } from "react";
 import {
   View,
-  Text,
   StyleSheet,
   ScrollView,
   TouchableOpacity,
   ActivityIndicator,
 } from "react-native";
+import { Text } from "@/frontend/components/scaled-text";
 import Animated, {
   useSharedValue,
   useAnimatedStyle,

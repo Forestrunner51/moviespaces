@@ -1,5 +1,6 @@
 import { useEffect, useState } from "react";
-import { View, Text, StyleSheet, ActivityIndicator, TouchableOpacity } from "react-native";
+import { View, StyleSheet, ActivityIndicator, TouchableOpacity } from "react-native";
+import { Text } from "@/frontend/components/scaled-text";
 import { router } from "expo-router";
 import { SpaceTheme, SpaceStyles, Palette, Type, Radius, Display } from "@/frontend/constants/theme";
 import {

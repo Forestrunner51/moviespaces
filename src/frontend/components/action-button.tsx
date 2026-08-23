@@ -1,12 +1,12 @@
 import {
   TouchableOpacity,
-  Text,
   ActivityIndicator,
   StyleSheet,
   type StyleProp,
   type ViewStyle,
   type TextStyle,
 } from "react-native";
+import { Text } from "@/frontend/components/scaled-text";
 import { Ionicons } from "@expo/vector-icons";
 
 interface ActionButtonProps {

@@ -1,5 +1,6 @@
 import { useEffect, useState } from "react";
-import { View, Text, StyleSheet, TouchableOpacity, Share } from "react-native";
+import { View, StyleSheet, TouchableOpacity, Share } from "react-native";
+import { Text } from "@/frontend/components/scaled-text";
 import { Ionicons } from "@expo/vector-icons";
 import { SpaceTheme, SpaceStyles, Palette } from "@/frontend/constants/theme";
 import { formatCountdown, formatDuration } from "@/frontend/services/cinemind";

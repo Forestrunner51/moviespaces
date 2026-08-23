@@ -1,8 +1,6 @@
 import { useCallback, useEffect, useState } from "react";
 import {
   View,
-  Text,
-  TextInput,
   FlatList,
   StyleSheet,
   ActivityIndicator,
@@ -10,6 +8,7 @@ import {
   Alert,
   RefreshControl,
 } from "react-native";
+import { Text, TextInput } from "@/frontend/components/scaled-text";
 import { router, useFocusEffect } from "expo-router";
 import { Ionicons } from "@expo/vector-icons";
 import { Starfield } from "@/frontend/components/starfield";

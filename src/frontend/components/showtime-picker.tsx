@@ -1,5 +1,12 @@
 import { useEffect, useState } from "react";
-import { View, Text, StyleSheet, TouchableOpacity, ActivityIndicator, ScrollView, TextInput } from "react-native";
+import {
+  View,
+  StyleSheet,
+  TouchableOpacity,
+  ActivityIndicator,
+  ScrollView,
+} from "react-native";
+import { Text, TextInput } from "@/frontend/components/scaled-text";
 import { Ionicons } from "@expo/vector-icons";
 import { SpaceStyles, Palette, Type, Radius } from "@/frontend/constants/theme";
 import {

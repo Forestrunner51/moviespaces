@@ -1,5 +1,6 @@
 import { createContext, useCallback, useContext, useEffect, useRef, useState } from "react";
-import { AccessibilityInfo, Platform, StyleSheet, Text, View } from "react-native";
+import { AccessibilityInfo, Platform, StyleSheet, View } from "react-native";
+import { Text } from "@/frontend/components/scaled-text";
 import Animated, {
   useAnimatedStyle,
   useSharedValue,

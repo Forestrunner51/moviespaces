@@ -1,8 +1,6 @@
 import {
   View,
-  Text,
   Image,
-  TextInput,
   TouchableOpacity,
   StyleSheet,
   ActivityIndicator,
@@ -10,6 +8,7 @@ import {
   KeyboardAvoidingView,
   Platform,
 } from "react-native";
+import { Text, TextInput } from "@/frontend/components/scaled-text";
 import { supabase } from "@/frontend/config/supabase";
 import { useCallback, useEffect, useState } from "react";
 import { useFocusEffect, router } from "expo-router";

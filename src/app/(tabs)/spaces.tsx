@@ -2,13 +2,13 @@ import { useState, useCallback, useRef } from "react";
 import { authFetch } from "@/frontend/services/api";
 import {
   View,
-  Text,
   FlatList,
   ScrollView,
   StyleSheet,
   ActivityIndicator,
   TouchableOpacity,
 } from "react-native";
+import { Text } from "@/frontend/components/scaled-text";
 import { router, useFocusEffect, useLocalSearchParams } from "expo-router";
 import { useSafeAreaInsets } from "react-native-safe-area-context";
 import { Ionicons } from "@expo/vector-icons";
