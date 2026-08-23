@@ -1,6 +1,6 @@
 # MovieSpaces — Technical Product Status & Launch Plan
 
-**Owner:** solo dev · **Status doc date:** 2026‑08‑08, refreshed 2026‑08‑18 · **Goal: ship to the App Store and be done.**
+**Owner:** solo dev · **Status doc date:** 2026‑08‑08, refreshed 2026‑08‑23 · **Goal: ship to the App Store and be done.**
 **Companion doc:** `LAUNCH_CHECKLIST.md` (tactical, tick-through). This doc is the architectural + PM view.
 
 > Written to be read cold by a new session. The previous version of this doc was dated 2026‑07‑24 and was badly stale — treat anything not in this file as unverified.
@@ -9,13 +9,15 @@
 
 ## 1. Executive read
 
-Feature-complete for v1 and hardened well past where it was two weeks ago. Typecheck clean, lint 0 errors, **42 backend tests passing**, backend deployed and verified live.
+Feature-complete for v1. Typecheck clean, lint 0 errors, **52 backend tests passing**. **But: `feature/pushingdata` is ~25 commits ahead of `main`, and Render runs `main`** — nothing from 2026‑08‑22/23 is in production until it's merged. Two EF migrations (`AddMatchMovieKeyToGroups`, `AddHasTicketToGroupMembers`) apply automatically on the next backend boot.
 
-**The remaining work is almost entirely non-engineering:** a fresh EAS build, a real-device QA pass, App Store Connect metadata, and surviving App Review. The one code-adjacent thing left is fixing whatever that QA pass surfaces.
+**The app's story is meeting new people over movies** — not coordinating with friends you already have. That framing (corrected by the owner 2026‑08‑22) is why the 08‑22/23 work happened: **Movie Crew** (pick a showing, get grouped with up to 5 strangers going to it), user-created clubs, a Home that leads with a feed of people going to things, and a "you've got plans" card. See §3.
 
-**Scope is frozen.** Decision made 2026‑08‑07 after considering (and rejecting) two pivots — a persona-generator app and a quest/XP app, both of which now live in separate repos (`../LARP`, `../LarpQuest`). MovieSpaces ships as-is: Spaces, chat, friends, DMs, CineMind, Roulette. No new features.
+**The remaining work is non-engineering:** merge + deploy, a real-device QA pass over the new flows, a fresh EAS build, App Store Connect metadata, and surviving App Review. Full list in §4 and `LAUNCH_CHECKLIST.md`.
 
-**Honest read on prospects:** the cold-start problem (a coordination app needs your friends on it) and CineMind competing with free browser trivia games are real. The user knows this and chose to finish and ship anyway rather than leave it unfinished. Don't relitigate it.
+**Scope is frozen again as of 2026‑08‑23.** The 08‑22/23 additions were a deliberate exception to the 08‑07 freeze (the owner judged the stranger-matching layer core to the pitch, not a tangent). From here: bugs and launch blockers only. Two pivots (persona-generator, quest/XP) were rejected 08‑07 and live in `../LARP`, `../LarpQuest`.
+
+**Honest read on prospects:** Movie Crew needs user density to feel alive (a crew of one is the empty-room problem); the flow is built so a solo crew is still a real, joinable plan with a showing. CineMind competes with free browser trivia. The owner knows and chose to ship. Don't relitigate it.
 
 ---
 
@@ -69,7 +71,26 @@ Everything here is committed on `main` and deployed unless noted.
 
 ---
 
+## 3b. What changed 2026‑08‑22 → 08‑23 (all on `feature/pushingdata`, NOT yet deployed)
+
+**Movie Crew (match mode)** — `POST /api/group/match`, `GET /api/group/match/open`, `POST /{id}/ticket`. Flow: kind (theater / venue) → film → crews already forming for it (join one) → or pick a real showing (`ShowtimePicker` filtered to the film; venue crews name a place + date/time) → crew is created *with* a plan. Crews cap at 6, are keyed `theater:imdb:tt…` / `venue:…`, converge on identical theater showings (never on venue name — "Home, 8 PM" in two cities is two plans), close once their showtime passes, and any seated member can set the where/when (`EditGroup`; film/capacity are locked for crews). Self-reported "ticket in hand" flag + theater-membership badges (AMC A-List etc., already on profiles) per member. Ship decision: **don't gate on ticket ownership** — commitment is visible, not required.
+
+**UI** — Karla body face app-wide (Bebas stays for dates/labels). Home: rotating headline → Movie Crew hero → host cards → "Happening near you" as a person-led feed ("Bob is seeing Mutiny · Tonight", "I'm in" joins on the spot). My Spaces: "You've got plans." next-up card above the list. Group page: joined/created celebration card, crew seats with faces + ticket checks. Profile: stat row (films seen · crews · upcoming · CineMind streak). Persistent "Find a crew" FAB on Explore / My Spaces / Profile. A full "de-AI" pass (no emoji/discs/kickers) was tried and **reverted** at the owner's request — it read flat; keep the accents.
+
+**Bugs fixed (found by two code-review passes + live testing):** join path 500'd (EF tracked-entity/Modified); members of a full crew re-seated into a twin; stale crews absorbing matchers; crew members could retitle/resize a crew; push attribution wrong for member edits; `ShowDate/ShowTime` unchecked → varchar 500; search with no debounce; renamed users seated under signup names; SSO signups skipping onboarding; **font-scaling cap was a no-op under React 19** (`Text.defaultProps` does nothing — now a wrapper `components/scaled-text.tsx` every screen imports; verified at max accessibility size).
+
+**Infra gotchas learned:** a stale Metro holding 8081 serves an old bundle and `expo start -c` silently fails to bind; without `watchman` Metro's watcher misses edits — restart `expo start -c` to see changes; `npm audit fix --force` downgraded Expo 56 → 46 once (restored from the lockfile; never run it).
+
 ## 4. What's still owed
+
+**First (20 minutes):**
+- [ ] **Merge `feature/pushingdata` → `main`** and confirm the Render deploy restarted (migrations apply on boot; check logs for `AddHasTicketToGroupMembers`).
+- [ ] Delete the three `matchtest-{a,b,c}-0822@moviespaces.org` test accounts from Supabase Auth.
+- [ ] `brew install watchman`.
+
+**Decisions:**
+- [ ] Home + Explore merge into 4 tabs (Home absorbs Explore's search/filters; My Spaces → "My Plans" with a badge), or keep 5. Judge from the device.
+- [ ] Fandango affiliate (Impact): apply now; it's a config value, not code.
 
 **Blocking the build:**
 - [x] **Rotate the Supabase `JwtSecret`** — DONE 2026‑08‑17. Migrated to asymmetric JWT signing keys + new API keys (`sb_publishable_`/`sb_secret_`); legacy anon/service_role keys disabled and the legacy secret revoked. Verified externally: a forged `service_role` token signed with the leaked secret (`15a1a5d5-…`, recovered from git history) is now rejected 401 by REST, the legacy key is out of JWKS, and the new keys work end‑to‑end (login, backend JWT validation, account deletion via Render). The value remains in git history but is now inert.
@@ -86,7 +107,7 @@ Everything here is committed on `main` and deployed unless noted.
 
 **The actual gate:**
 - [ ] **Fresh `eas build --platform ios --profile production`** → TestFlight. SSO is now proven on a dev build, so this is safe to spend. Note: Expo Go **cannot** test SSO — custom URL scheme + native module both require a real build (`expo run:ios` dev build or the production build).
-- [ ] **Real-device QA pass, two accounts.** Full checklist in `LAUNCH_CHECKLIST.md` Phase 4. Pay specific attention to things never run once: the "Exact Ticket Link" flow, the toast rendering on screens with and without a native header, Roulette genre purity, CineMind repeat-avoidance.
+- [ ] **Real-device QA pass, two accounts.** Full checklist in `LAUNCH_CHECKLIST.md` Phase 4 (new 4b section for the 08‑22/23 flows). None of Movie Crew, the feed "I'm in", the celebration, ticket toggle or the stat row has been used end-to-end by a human on a phone yet.
 
 **App Store Connect:**
 - [ ] Screenshots (6.7" required), description, subtitle, keywords, category
@@ -94,6 +115,7 @@ Everything here is committed on `main` and deployed unless noted.
 - [ ] Support URL + publicly hosted Privacy Policy URL
 - [ ] Age rating (UGC + messaging → likely 12+/17+)
 - [ ] **Demo account with real content** in review notes — most common rejection cause for login-gated apps
+- [ ] Review notes must now describe **Movie Crew** (the app groups strangers for in-person meetups): crew size capped at 6, block/report on every member and chat, self-reported ticket flag only. Apple will ask.
 
 **Non-blocking:**
 - [x] Render cold-start decision — web service upgraded to Starter ($7/mo, always-on) 2026‑08‑16; also makes the nightly showtimes scrape reliable
@@ -114,7 +136,7 @@ Everything here is committed on `main` and deployed unless noted.
 ---
 
 ## 6. Explicitly OUT of scope
-Community Activity Feed · genre chips · theme redesign · Android launch · in-app payments · removing the social layer · **any new feature**. If it's not a bug or a launch blocker, it waits.
+Android launch (Karla `fontWeight` would need the explicit-family pass) · in-app payments / any monetization (decided 2026‑08‑22: ship without; affiliate tag is config only) · seat-race hardening under concurrent taps (same class as existing `JoinGroup`; post-launch) · ticket-holder gating · **any new feature**. If it's not a bug or a launch blocker, it waits.
 
 ---
 

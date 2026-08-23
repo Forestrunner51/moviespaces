@@ -52,6 +52,9 @@ Everything native only becomes real here: SSO, the "MovieSpaces" name, Bebas Neu
 - [x] **`Sentry__Dsn` set on Render** (backend crash reporting live). Still confirm the rest are set: `Omdb__ApiKey`, `GooglePlaces__ApiKey`, `Supabase__ServiceRoleKey`, `Supabase__Url`, `PostgresConnection`, `CineMind__PuzzleSalt`, `CineMind__AdminSecret`. (`CineMind__AdminSecret` confirmed present — a wrong-secret request returns 401, not the 500 a blank one would.)
 - [x] **Delete the inert `Sentry__AuthToken` env var from Render** if still there — the backend never reads it; the auth token belongs in EAS secrets, not Render.
 - [x] **Catalog re-seeded** — `surprise_me` flags populated, ~45 films added for Roulette genre coverage.
+- [ ] **Merge `feature/pushingdata` → `main`** (≈25 commits from 08‑22/23: Movie Crew, Home/My Spaces redesign, Karla, font-scale fix). Render runs `main`; nothing is live until this lands.
+- [ ] Confirm the deploy restarted and the two new EF migrations ran: `AddMatchMovieKeyToGroups`, `AddHasTicketToGroupMembers` (look for them in the Render boot log).
+- [ ] Delete the three `matchtest-{a,b,c}-0822@moviespaces.org` test users from Supabase Auth.
 - [ ] All Supabase migrations applied to the production DB (friends-only DM policy, reports/blocks, etc.). EF migrations auto-apply on backend boot — confirm the Render deploy actually restarted.
 - [ ] Confirm the `AddGroupPosterPath` EF migration ran (poster feature) — the backend auto-migrates on boot
 - [x] Render cold-start: **resolved 2026‑08‑16 — web service upgraded to Starter ($7/mo, always-on).** No more sleep/cold-start, and the nightly showtimes scrape can actually fire at its 9:00 UTC window (a sleeping free instance had no poll loop running). Can drop back to Free post-launch if desired.
@@ -78,6 +81,18 @@ Run each end-to-end, signed-in as a real user:
 - [ ] Account deletion → account + data actually gone
 - [ ] Report/Block a user → content hidden
 
+### 4b — Flows added 2026‑08‑22/23 (never run by a human on a device)
+- [ ] Movie Crew, theater kind: Home hero (or "Find a crew" FAB) → At a theater → search a film → does `ShowtimePicker` list theaters near *you*? → pick a showing → "Start the group" → celebration card → chat
+- [ ] Same film + same showing from the **second account** → lands in the same crew ("Crews already forming" → Join); a different showing → a new crew
+- [ ] Movie Crew, venue kind: name a place + date/time → crew created as a watch party
+- [ ] Crew page: "I have a ticket" toggle → green check on your seat, "N/M ticketed", toast; theater-membership badges show for a member who set one in Profile
+- [ ] Non-host crew member taps the pencil → edit sheet has venue/date/time only (no title/capacity) → save → other members get a push naming *that* member
+- [ ] My Spaces: "You've got plans." shows the soonest plan; "Set the showtime" on an unscheduled crew opens the edit sheet
+- [ ] Home feed: "Bob is seeing X" cards → "I'm in" joins and opens the group with the "You're in" card
+- [ ] Profile stat row (films seen · crews · upcoming · streak) shows numbers, not dashes
+- [ ] New **email** signup → genre onboarding; new **Google/Apple** signup → genre onboarding; returning sign-in → straight to Home
+- [ ] Karla renders on a physical device (bold titles actually bold; the two italic notes italic); set iOS Text Size to the largest accessibility step → nothing overflows its card
+
 ## PHASE 5 — App Store Connect listing + assets
 - [ ] App name, subtitle, keywords, category (Social Networking / Entertainment)
 - [ ] Description + "What's New"
@@ -102,6 +117,7 @@ Run each end-to-end, signed-in as a real user:
 - [ ] Submit the build for review (aim mid-August)
 - [ ] Provide a **demo account** in App Review notes (reviewers need to log in — give them a test email/password)
 - [ ] Note in review: "third-party ticket links open externally; app does not process payments"
+- [ ] Note in review: **Movie Crew groups strangers for in-person meetups** — crews capped at 6, every member and chat message can be blocked/reported, ticket status is self-reported and never gates anything. Have the demo account already seated in a crew so the reviewer can see it.
 - [ ] Respond fast to any rejection — expect possibly 1 round; common hits: privacy labels mismatch, screenshots, demo login not working
 
 ## PHASE 8 — Launch & post-launch
@@ -113,7 +129,7 @@ Run each end-to-end, signed-in as a real user:
 ---
 
 ## SCOPE FREEZE
-From now until launch: **bugs and launch-blockers only.** No new features, no redesigns. Every new thing added is runway spent. Park ideas in a "v1.1" list.
+Re-frozen **2026‑08‑23** after the Movie Crew / Home redesign exception. From here: **bugs and launch-blockers only.** No new features, no redesigns. Ideas go in `POST_LAUNCH.md`. One open layout decision is allowed: Home + Explore merge (judge from the device; don't build it blind).
 
 ## Known open code items (decide before launch)
 - [ ] Email-confirmation handling (see Phase 2) — code change if you turn confirmation ON
