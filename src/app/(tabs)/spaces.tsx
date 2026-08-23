@@ -15,13 +15,14 @@ import { Ionicons } from "@expo/vector-icons";
 import { FriendsPanel } from "@/frontend/components/friends-panel";
 import { Starfield } from "@/frontend/components/starfield";
 import { MoviePoster } from "@/frontend/components/movie-poster";
-import { SpaceTheme, SpaceStyles, Palette, Type, Radius, Display } from "@/frontend/constants/theme";
+import { SpaceTheme, SpaceStyles, Palette, Type, Radius, Display, Font } from "@/frontend/constants/theme";
 import { useUnreadCounts } from "@/frontend/hooks/use-unread-counts";
 import { useFriends } from "@/frontend/hooks/use-friends";
 import { CoachTip } from "@/frontend/components/coach-tip";
 import { useProfiles } from "@/frontend/hooks/use-profiles";
 import { AvatarStack } from "@/frontend/components/avatar";
 import { formatEventDate } from "@/frontend/utils/event-date";
+import { NextUpCard } from "@/frontend/components/next-up-card";
 import {
   EVENT_CATEGORIES,
   eventCategoryOf,
@@ -38,13 +39,14 @@ interface Space {
   createdAt: string;
   isPublic: boolean;
   isPrivate: boolean;
+  matchMovieKey?: string | null;
   status: string;
   spaceType: string;
   posterPath: string | null;
   eventCategory: string | null;
   // userId is needed to look up each attendee's avatar (see useProfiles) —
   // the backend already returns it, this type just wasn't asking for it.
-  members: { id: string; name: string; confirmed: boolean; userId: string }[];
+  members: { id: string; name: string; confirmed: boolean; userId: string; hasTicket?: boolean }[];
 }
 
 type Tab = "spaces" | "rent" | "friends";
@@ -218,9 +220,21 @@ export default function MySpacesScreen() {
   const isPast = (space: Space) =>
     // Public Community Spaces are evergreen — see the matching exemption in
     // group.tsx's hasPassed for why a null ScreeningTime doesn't mean "past" here.
-    !space.isPublic &&
+    // A crew (IsPublic but a real plan) passes once its own showtime does.
+    (space.matchMovieKey ? !!space.screeningTime : !space.isPublic) &&
     // eslint-disable-next-line react-hooks/purity -- see comment above
     new Date(space.screeningTime ?? space.createdAt).getTime() < Date.now();
+
+  // "You've got plans." — the soonest upcoming thing you're in, any type,
+  // pinned above the list (Timeleft's one-big-card). Clubs aren't plans.
+  const nextUp = (() => {
+    const eligible = spaces.filter(
+      (s) => s.status !== "cancelled" && (!s.isPublic || !!s.matchMovieKey) && !isPast(s),
+    );
+    const t = (s: Space) =>
+      s.screeningTime ? new Date(s.screeningTime).getTime() : Number.POSITIVE_INFINITY;
+    return [...eligible].sort((a, b) => t(a) - t(b))[0] ?? null;
+  })();
 
   return (
     <Starfield>
@@ -356,10 +370,22 @@ export default function MySpacesScreen() {
           <ActivityIndicator size="large" color={SpaceTheme.glowCyan} style={{ flex: 1 }} />
         ) : (
           <>
-            <Text style={styles.subtitle}>Your movie groups and memberships</Text>
             <FlatList
-              data={gatheringSpaces}
+              data={gatheringSpaces.filter((s) => s.id !== nextUp?.id)}
               keyExtractor={(item) => item.id}
+              ListHeaderComponent={
+                <>
+                  {nextUp && (
+                    <>
+                      <Text style={styles.plansHeadline}>You&apos;ve got plans.</Text>
+                      <NextUpCard space={nextUp} />
+                    </>
+                  )}
+                  <Text style={[styles.subtitle, nextUp && { marginTop: 18 }]}>
+                    {nextUp ? "Everything else you're in" : "Your movie groups and memberships"}
+                  </Text>
+                </>
+              }
               renderItem={({ item }) => (
                 <SpaceCard
                   item={item}
@@ -407,6 +433,14 @@ const styles = StyleSheet.create({
   // Display.heading, like every sibling tab's title — this was the one
   // screen heading at 28/system-bold, and Bebas needs the paired lineHeight
   // to keep its ascenders from clipping.
+  plansHeadline: {
+    fontFamily: Font.bold,
+    fontSize: 26,
+    lineHeight: 31,
+    letterSpacing: -0.3,
+    color: Palette.text,
+    marginBottom: 12,
+  },
   title: {
     ...Display.heading,
     color: SpaceTheme.starWhite,

@@ -44,199 +44,10 @@ interface NearbySpace {
   members: SpaceMember[];
 }
 
-// Shape returned by GET /api/group/mine — a superset of NearbySpace, but
-// kept as its own type since "my" cards need isPublic/screeningTime to sort
-// and filter, which the public teaser feed above never needs.
+// Shape returned by GET /api/group/mine — Home only needs ids (to keep the
+// user's own Spaces out of the nearby feed); My Spaces owns the full view.
 interface MySpace {
   id: string;
-  filmName: string;
-  cinemaName: string;
-  posterPath: string | null;
-  showDate: string;
-  showTime: string;
-  screeningTime: string | null;
-  isPublic: boolean;
-  // Non-null for a Movie Crew: IsPublic like a club, but it's a real
-  // gathering the user is attending, so it belongs with their Spaces.
-  matchMovieKey: string | null;
-  status: string;
-  spaceType: string;
-  eventCategory: string | null;
-  members: SpaceMember[];
-}
-
-// One carousel card, shared by "My Upcoming Spaces" and "Nearby Public
-// Gatherings" — they previously had two identical inline renderItems, both
-// showing poster + title + venue + a 12px date line. Now the date leads in
-// the display face and attendees appear as faces, matching the Spaces and
-// Explore lists. Its own component because the avatars need a hook, and a
-// FlatList renderItem can't hold one.
-function CarouselCard({
-  id,
-  filmName,
-  cinemaName,
-  posterPath,
-  showDate,
-  showTime,
-  screeningTime,
-  spaceType,
-  eventCategory,
-  members,
-  hostName,
-}: {
-  id: string;
-  filmName: string;
-  cinemaName: string;
-  posterPath: string | null;
-  showDate: string;
-  showTime: string;
-  screeningTime: string | null;
-  spaceType: string;
-  eventCategory: string | null;
-  members: SpaceMember[];
-  hostName?: string;
-}) {
-  const profiles = useProfiles(members.map((m) => m.userId));
-  // Relative labels ("Tonight", "In 3 days") read the real current time.
-  const eventDate = formatEventDate(screeningTime, showDate, showTime);
-
-  return (
-    <TouchableOpacity
-      activeOpacity={0.85}
-      style={styles.spaceCard}
-      onPress={() => router.push({ pathname: "/group", params: { groupId: id } })}
-    >
-      <MoviePoster
-        uri={posterPath}
-        width={56}
-        fallbackIcon={EVENT_CATEGORIES[eventCategoryOf(spaceType, eventCategory)].icon}
-      />
-      <View style={{ flex: 1 }}>
-        <Text style={styles.spaceCardDate} numberOfLines={1}>
-          {eventDate.date}
-        </Text>
-        <View style={styles.spaceCardMetaRow}>
-          {!!eventDate.time && <Text style={styles.spaceCardTime}>{eventDate.time}</Text>}
-          {!!eventDate.relative && (
-            <Text style={styles.spaceCardRelative} numberOfLines={1}>
-              {eventDate.relative}
-            </Text>
-          )}
-        </View>
-        <Text style={styles.spaceCardTitle} numberOfLines={1}>
-          {filmName}
-        </Text>
-        <Text style={styles.spaceCardSubtitle} numberOfLines={1}>
-          {hostName ? `${cinemaName} · ${hostName}` : cinemaName || "No showtime yet"}
-        </Text>
-        {members.length > 0 && (
-          <View style={styles.spaceCardFooter}>
-            <AvatarStack
-              people={members.map((m) => ({
-                userId: m.userId,
-                name: m.name,
-                avatarUrl: profiles.get(m.userId)?.avatarUrl,
-              }))}
-              size={18}
-              max={3}
-            />
-            <Text style={styles.spaceCardGoing}>{members.length} going</Text>
-          </View>
-        )}
-      </View>
-    </TouchableOpacity>
-  );
-}
-
-// "Your next thing" — the Timeleft card. One big object about the soonest
-// Space/crew you're in: poster, when (with the countdown), where, and the
-// faces of who's coming. A social app's home leads with the user's life,
-// not the app's menu; this is what that looks like here.
-function NextUpCard({ space }: { space: MySpace }) {
-  const members = space.members ?? [];
-  const profiles = useProfiles(members.map((m) => m.userId));
-  const eventDate = formatEventDate(space.screeningTime, space.showDate, space.showTime);
-  const isCrew = !!space.matchMovieKey;
-  const ticketed = members.filter((m) => m.hasTicket).length;
-  const hasPlan = !!space.screeningTime || !!space.cinemaName;
-
-  return (
-    <TouchableOpacity
-      activeOpacity={0.88}
-      style={styles.nextCard}
-      onPress={() => router.push({ pathname: "/group", params: { groupId: space.id } })}
-      accessibilityRole="button"
-      accessibilityLabel={`Your next: ${space.filmName}`}
-    >
-      <View style={styles.nextTop}>
-        <MoviePoster
-          uri={space.posterPath}
-          width={84}
-          fallbackIcon={EVENT_CATEGORIES[eventCategoryOf(space.spaceType, space.eventCategory)].icon}
-        />
-        <View style={{ flex: 1 }}>
-          <Text style={styles.nextKicker}>
-            {isCrew ? (space.spaceType === "private_rental" ? "Your watch party crew" : "Your theater crew") : "Your next Space"}
-          </Text>
-          <Text style={styles.nextTitle} numberOfLines={2}>
-            {space.filmName}
-          </Text>
-          {hasPlan ? (
-            <>
-              <View style={styles.nextWhen}>
-                <Text style={styles.nextDate}>{eventDate.date}</Text>
-                {!!eventDate.time && <Text style={styles.nextTime}>{eventDate.time}</Text>}
-              </View>
-              <Text style={styles.nextWhere} numberOfLines={1}>
-                {space.cinemaName}
-              </Text>
-            </>
-          ) : (
-            <>
-              <Text style={styles.nextWhere}>No showtime yet</Text>
-              <TouchableOpacity
-                activeOpacity={0.8}
-                style={styles.nextSetLink}
-                onPress={() =>
-                  router.push({ pathname: "/group", params: { groupId: space.id, openEdit: "1" } })
-                }
-                hitSlop={6}
-                accessibilityRole="button"
-              >
-                <Ionicons name="calendar-outline" size={13} color={Palette.accent} />
-                <Text style={styles.nextSetLinkText}>Set the showtime</Text>
-              </TouchableOpacity>
-            </>
-          )}
-        </View>
-      </View>
-      <View style={styles.nextBottom}>
-        {members.length > 0 ? (
-          <View style={styles.nextPeople}>
-            <AvatarStack
-              people={members.map((m) => ({
-                userId: m.userId,
-                name: m.name,
-                avatarUrl: profiles.get(m.userId)?.avatarUrl,
-              }))}
-              size={26}
-              max={5}
-            />
-            <Text style={styles.nextPeopleText}>
-              {members.length} going{isCrew && ticketed > 0 ? ` · ${ticketed} ticketed` : ""}
-            </Text>
-          </View>
-        ) : (
-          <View />
-        )}
-        {!!eventDate.relative && (
-          <View style={styles.nextCountdown}>
-            <Text style={styles.nextCountdownText}>{eventDate.relative}</Text>
-          </View>
-        )}
-      </View>
-    </TouchableOpacity>
-  );
 }
 
 // Full-width feed card for nearby gatherings — the same date-led layout as
@@ -311,8 +122,6 @@ export default function HomeScreen() {
   // an earlier pick.
   const [openSpacesRaw, setOpenSpacesRaw] = useState<NearbySpace[]>([]);
   const [spacesLoading, setSpacesLoading] = useState(true);
-  const [mySpaces, setMySpaces] = useState<MySpace[]>([]);
-  const [mySpacesLoading, setMySpacesLoading] = useState(true);
   const [myClubs, setMyClubs] = useState<MyClub[]>([]);
   // Every Space the user belongs to at all (host or member, any type/status)
   // — deliberately broader than mySpaces' "upcoming, non-public" filter,
@@ -359,24 +168,8 @@ export default function HomeScreen() {
         .then((data: MySpace[]) => {
           if (cancelled) return;
           setMyGroupIds(new Set((data || []).map((s) => s.id)));
-          const now = Date.now();
-          const upcoming = (data || [])
-            // Community Spaces have their own row below — this section is
-            // for real one-off gatherings/rentals the user is actually
-            // attending. Same past/evergreen logic as group.tsx's hasPassed.
-            .filter((s) => (!s.isPublic || !!s.matchMovieKey) && s.status !== "cancelled")
-            .filter((s) => !s.screeningTime || new Date(s.screeningTime).getTime() >= now)
-            .sort((a, b) => {
-              if (!a.screeningTime) return 1;
-              if (!b.screeningTime) return -1;
-              return new Date(a.screeningTime).getTime() - new Date(b.screeningTime).getTime();
-            });
-          setMySpaces(upcoming.slice(0, 5));
         })
-        .catch((err) => console.warn("Failed to load my spaces for home screen:", err))
-        .finally(() => {
-          if (!cancelled) setMySpacesLoading(false);
-        });
+        .catch((err) => console.warn("Failed to load my spaces for home screen:", err));
 
       authFetch(`${process.env.EXPO_PUBLIC_API_URL}/api/group/community-spaces/discover`)
         .then((res) => (res.ok ? res.json() : { spaces: [] }))
@@ -391,9 +184,6 @@ export default function HomeScreen() {
       };
     }, []),
   );
-
-  const nextUp = mySpaces[0] ?? null;
-  const restUpcoming = mySpaces.slice(1);
 
   // Read off the real clock, same as every relative label on this screen.
   const todayLabel = new Date().toLocaleDateString("en-US", {
@@ -414,7 +204,7 @@ export default function HomeScreen() {
         <View style={styles.header}>
           <Text style={[SpaceStyles.wordmark, styles.wordmark]}>MovieSpaces</Text>
           <Text style={styles.dateLine}>{todayLabel}</Text>
-          <Text style={styles.headline}>{nextUp ? "You've got plans." : "Who are you\nwatching with?"}</Text>
+          <Text style={styles.headline}>Who are you{"\n"}watching with?</Text>
         </View>
 
         <CoachTip id="home-welcome" icon="hand-left-outline">
@@ -422,47 +212,33 @@ export default function HomeScreen() {
           clubs, and the daily CineMind puzzle all live in the tabs below.
         </CoachTip>
 
-        {/* Lead with the user's life, not the app's menu. If they're in a
-            Space or crew, that's the hero; the Movie Crew CTA only takes the
-            top slot when there's nothing upcoming. */}
-        {mySpacesLoading ? (
-          <ActivityIndicator color={Palette.accent} style={styles.sectionLoading} />
-        ) : nextUp ? (
-          <NextUpCard space={nextUp} />
-        ) : (
-          <TouchableOpacity
-            activeOpacity={0.85}
-            style={styles.heroCard}
-            onPress={() => router.push("/match")}
-            accessibilityRole="button"
-            accessibilityLabel="Get seated with a movie crew"
-          >
-            <View style={styles.heroIcon}>
-              <Ionicons name="people" size={24} color={Palette.base} />
-            </View>
-            <View style={{ flex: 1 }}>
-              <Text style={styles.heroKicker}>Movie Crew</Text>
-              <Text style={styles.heroTitle}>Get seated with strangers</Text>
-              <Text style={styles.heroSubtitle}>
-                Pick a film and a showing — we put you in a crew of up to 6 who picked the same
-              </Text>
-            </View>
-            <View style={styles.heroArrow}>
-              <Ionicons name="arrow-forward" size={18} color={Palette.accent} />
-            </View>
-          </TouchableOpacity>
-        )}
+        {/* The hero is the one thing on Home the tab bar can't reach: get
+            seated with strangers for a film. Your own plans live in My
+            Spaces — Home is for finding the next one. */}
+        <TouchableOpacity
+          activeOpacity={0.85}
+          style={styles.heroCard}
+          onPress={() => router.push("/match")}
+          accessibilityRole="button"
+          accessibilityLabel="Get seated with a movie crew"
+        >
+          <View style={styles.heroIcon}>
+            <Ionicons name="people" size={24} color={Palette.base} />
+          </View>
+          <View style={{ flex: 1 }}>
+            <Text style={styles.heroKicker}>Movie Crew</Text>
+            <Text style={styles.heroTitle}>Get seated with strangers</Text>
+            <Text style={styles.heroSubtitle}>
+              Pick a film and a showing — we put you in a crew of up to 6 who picked the same
+            </Text>
+          </View>
+          <View style={styles.heroArrow}>
+            <Ionicons name="arrow-forward" size={18} color={Palette.accent} />
+          </View>
+        </TouchableOpacity>
 
-        {/* Quiet action row. Hosting used to be two full cards; it's two taps
-            away on the tabs anyway, so here it's a link, and the crew entry
-            stays reachable when the hero slot is taken by "next up". */}
+        {/* Quiet action row: hosting is two taps away on the tabs anyway. */}
         <View style={styles.actionRow}>
-          {nextUp && (
-            <TouchableOpacity activeOpacity={0.7} style={styles.actionLink} onPress={() => router.push("/match")}>
-              <Ionicons name="people-outline" size={15} color={Palette.accent} />
-              <Text style={styles.actionLinkText}>Find a crew</Text>
-            </TouchableOpacity>
-          )}
           <TouchableOpacity
             activeOpacity={0.7}
             style={styles.actionLink}
@@ -480,34 +256,6 @@ export default function HomeScreen() {
             <Text style={[styles.actionLinkText, { color: Palette.textMuted }]}>Have a code?</Text>
           </TouchableOpacity>
         </View>
-
-        {/* Everything else you're in, after the one that's next. */}
-        {restUpcoming.length > 0 && (
-          <>
-            <Text style={styles.sectionTitle}>Also coming up</Text>
-            <FlatList
-              horizontal
-              showsHorizontalScrollIndicator={false}
-              data={restUpcoming}
-              keyExtractor={(item) => item.id}
-              contentContainerStyle={styles.carouselContent}
-              renderItem={({ item }) => (
-                <CarouselCard
-                  id={item.id}
-                  filmName={item.filmName}
-                  cinemaName={item.cinemaName}
-                  posterPath={item.posterPath}
-                  showDate={item.showDate}
-                  showTime={item.showTime}
-                  screeningTime={item.screeningTime}
-                  spaceType={item.spaceType}
-                  eventCategory={item.eventCategory}
-                  members={item.members ?? []}
-                />
-              )}
-            />
-          </>
-        )}
 
         {myClubs.length > 0 && (
           <>
@@ -638,47 +386,6 @@ const styles = StyleSheet.create({
     backgroundColor: Palette.fill,
   },
   actionLinkText: { ...Type.small, fontFamily: Font.semibold, color: Palette.accent },
-  // Next up
-  nextCard: {
-    ...SpaceStyles.glassCard,
-    borderColor: Palette.accentBorder,
-    padding: 16,
-    marginBottom: 4,
-  },
-  nextTop: { flexDirection: "row", gap: 14, alignItems: "flex-start" },
-  nextKicker: {
-    ...Type.caption,
-    fontFamily: Font.semibold,
-    color: Palette.accent,
-    textTransform: "uppercase",
-    letterSpacing: 0.8,
-    marginBottom: 4,
-  },
-  nextTitle: { fontFamily: Font.bold, fontSize: 22, lineHeight: 26, color: Palette.text, marginBottom: 6 },
-  nextWhen: { flexDirection: "row", alignItems: "baseline", gap: 8, flexWrap: "wrap" },
-  nextDate: { ...Display.date, color: Palette.text },
-  nextTime: { ...Display.stat, color: Palette.textMuted },
-  nextWhere: { ...Type.small, color: Palette.textMuted, marginTop: 2 },
-  nextSetLink: { flexDirection: "row", alignItems: "center", gap: 5, marginTop: 6, alignSelf: "flex-start" },
-  nextSetLinkText: { ...Type.small, fontFamily: Font.semibold, color: Palette.accent },
-  nextBottom: {
-    flexDirection: "row",
-    alignItems: "center",
-    justifyContent: "space-between",
-    marginTop: 14,
-    paddingTop: 12,
-    borderTopWidth: 1,
-    borderTopColor: Palette.border,
-  },
-  nextPeople: { flexDirection: "row", alignItems: "center", gap: 8 },
-  nextPeopleText: { ...Type.caption, color: Palette.textMuted },
-  nextCountdown: {
-    paddingVertical: 5,
-    paddingHorizontal: 10,
-    borderRadius: Radius.pill,
-    backgroundColor: Palette.accent,
-  },
-  nextCountdownText: { ...Type.caption, fontFamily: Font.bold, color: Palette.base, textTransform: "uppercase", letterSpacing: 0.5 },
   // Feed
   feedHeader: { flexDirection: "row", alignItems: "center", justifyContent: "space-between", marginTop: 16, marginBottom: 12 },
   feedSeeAll: { ...Type.small, fontFamily: Font.semibold, color: Palette.accent },
@@ -721,36 +428,6 @@ const styles = StyleSheet.create({
     gap: 12,
     paddingBottom: 20,
   },
-  // Compact row card: the carousel sits under the hero, so it must read as
-  // subordinate — a tall 132px poster made it the biggest thing on screen.
-  spaceCard: {
-    ...SpaceStyles.glassCard,
-    width: 250,
-    padding: 12,
-    flexDirection: "row",
-    gap: 10,
-    alignItems: "flex-start",
-  },
-  spaceCardDate: { ...Display.dateCard, color: Palette.text },
-  spaceCardMetaRow: {
-    flexDirection: "row",
-    alignItems: "baseline",
-    gap: 6,
-    marginBottom: 4,
-  },
-  spaceCardTime: { ...Type.caption, color: Palette.textMuted },
-  spaceCardRelative: {
-    ...Type.caption,
-    color: Palette.accent,
-    fontFamily: Font.bold,
-    textTransform: "uppercase",
-    letterSpacing: 0.4,
-    flexShrink: 1,
-  },
-  spaceCardTitle: { ...Type.small, fontFamily: Font.semibold, color: Palette.text },
-  spaceCardSubtitle: { ...Type.caption, color: Palette.textMuted },
-  spaceCardFooter: { flexDirection: "row", alignItems: "center", gap: 6, marginTop: 6 },
-  spaceCardGoing: { ...Type.caption, color: Palette.textFaint },
   clubChip: {
     ...SpaceStyles.glassCard,
     width: 160,
