@@ -55,7 +55,7 @@ export default function TabsLayout() {
       <Tabs.Screen
         name="spaces"
         options={{
-          title: "My Spaces",
+          title: "Spaces",
           headerShown: false,
           tabBarIcon: ({ color, size }) => (
             <Ionicons name="rocket-outline" size={size} color={color} />
