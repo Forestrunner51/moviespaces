@@ -37,9 +37,15 @@ export interface ShowtimeSelection {
 interface Props {
   selection: ShowtimeSelection | null;
   onSelect: (selection: ShowtimeSelection) => void;
+  // When the film is already decided (Movie Crew), only list that film's
+  // showings at each theater instead of the whole marquee.
+  filterTitle?: string;
 }
 
-export function ShowtimePicker({ selection, onSelect }: Props) {
+const normalizeTitle = (t: string) =>
+  t.toLowerCase().replace(/[^a-z0-9]+/g, " ").trim();
+
+export function ShowtimePicker({ selection, onSelect, filterTitle }: Props) {
   const [theaters, setTheaters] = useState<ShowtimeTheater[] | null>(null);
   const [stale, setStale] = useState(false);
   const [loadError, setLoadError] = useState(false);
@@ -107,6 +113,20 @@ export function ShowtimePicker({ selection, onSelect }: Props) {
       setDayLoading(false);
     }
   };
+
+  // Film filter: exact normalized match first; if the scraped title differs
+  // slightly ("Weapons (2025)"), fall back to a contains match either way.
+  const visibleMovies = (() => {
+    if (!day) return [];
+    if (!filterTitle) return day.movies;
+    const want = normalizeTitle(filterTitle);
+    const exact = day.movies.filter((m) => normalizeTitle(m.title) === want);
+    if (exact.length > 0) return exact;
+    return day.movies.filter((m) => {
+      const have = normalizeTitle(m.title);
+      return have.includes(want) || want.includes(have);
+    });
+  })();
 
   if (theaters === null) {
     return <ActivityIndicator color={Palette.accent} style={styles.loading} />;
@@ -239,11 +259,15 @@ export function ShowtimePicker({ selection, onSelect }: Props) {
       {/* Step 3 — film & time */}
       {theater && day && !dayLoading && (
         <>
-          <Text style={styles.stepLabel}>FILM & TIME</Text>
-          {day.movies.length === 0 && (
-            <Text style={styles.emptyText}>No showings listed for this day.</Text>
+          <Text style={styles.stepLabel}>{filterTitle ? "TIME" : "FILM & TIME"}</Text>
+          {visibleMovies.length === 0 && (
+            <Text style={styles.emptyText}>
+              {filterTitle
+                ? `No showings of ${filterTitle} listed here this day — try another date or theater.`
+                : "No showings listed for this day."}
+            </Text>
           )}
-          {day.movies.map((m) => (
+          {visibleMovies.map((m) => (
             <View key={m.slug || m.title} style={styles.movieRow}>
               <Text style={styles.movieTitle} numberOfLines={2}>
                 {m.title}

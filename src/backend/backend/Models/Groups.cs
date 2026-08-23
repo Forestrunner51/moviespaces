@@ -261,6 +261,10 @@ namespace Backend.Models
         public string? GuestToken { get; set; }
 
         public bool Confirmed { get; set; } = false;
+        // Movie Crew commitment signal: self-reported "I've bought my ticket".
+        // Not verified — its value is social (the crew can see who's locked
+        // in before buying), not a gate.
+        public bool HasTicket { get; set; } = false;
         public DateTime JoinedAt { get; set; } = DateTime.UtcNow;
     }
 }

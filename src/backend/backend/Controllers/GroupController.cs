@@ -444,6 +444,81 @@ namespace Backend.Controllers
         // is what makes it usable before there's user density.
         public const int MatchCrewSize = 6;
 
+        // Two kinds of crew: meet at a theater showing (public_gathering) or a
+        // hosted watch party at someone's venue (private_rental). They're
+        // different plans, so they're different crews even for the same film
+        // — the kind is part of the key. Namespaced so an imdb id and a
+        // freeform title can never collide in the same column.
+        private static (string key, bool isVenue) BuildMatchKey(string? kind, string? imdbId, string title)
+        {
+            var isVenue = string.Equals(kind, "venue", StringComparison.OrdinalIgnoreCase);
+            var kindTag = isVenue ? "venue" : "theater";
+            var key = kindTag + ":" + (!string.IsNullOrWhiteSpace(imdbId)
+                ? "imdb:" + imdbId!.Trim().ToLowerInvariant()
+                : "title:" + title.ToLowerInvariant());
+            return (key, isVenue);
+        }
+
+        // Every live crew for a film + kind (not cancelled, showtime not yet
+        // passed). Includes full ones — callers that need room filter on
+        // Members.Count; the already-seated check must see full crews too.
+        private async Task<List<Group>> LiveCrewsAsync(string key)
+        {
+            var now = DateTime.UtcNow;
+            return await _db.Groups
+                .Include(g => g.Members)
+                .Where(g => g.MatchMovieKey == key
+                    && g.Status != "cancelled"
+                    && (g.ScreeningTime == null || g.ScreeningTime > now))
+                .ToListAsync();
+        }
+
+        // GET /api/group/match/open?kind=theater&imdbId=tt123&title=...
+        // Crews already forming for a film, so the match screen can offer
+        // "join this one" before asking someone to pick their own showing.
+        [HttpGet("match/open")]
+        public async Task<IActionResult> OpenMatchCrews([FromQuery] string? kind, [FromQuery] string? imdbId, [FromQuery] string? title)
+        {
+            var userId = GetUserId();
+            if (string.IsNullOrEmpty(userId)) return Unauthorized(new { error = "Unauthorized" });
+            var t = (title ?? "").Trim();
+            if (t.Length == 0 && string.IsNullOrWhiteSpace(imdbId)) return BadRequest(new { error = "Pick a movie." });
+            var (key, _) = BuildMatchKey(kind, imdbId, t);
+            var crews = await LiveCrewsAsync(key);
+            return Ok(crews
+                .Where(g => g.Members.Count < g.MaxCapacity || g.Members.Any(m => m.UserId == userId))
+                .OrderBy(g => g.ScreeningTime ?? DateTime.MaxValue)
+                .Select(g => new
+                {
+                    id = g.Id,
+                    cinemaName = g.CinemaName,
+                    showDate = g.ShowDate,
+                    showTime = g.ShowTime,
+                    screeningTime = g.ScreeningTime,
+                    theaterLatitude = g.TheaterLatitude,
+                    theaterLongitude = g.TheaterLongitude,
+                    hostName = g.HostName,
+                    memberCount = g.Members.Count,
+                    ticketCount = g.Members.Count(m => m.HasTicket),
+                    maxCapacity = g.MaxCapacity,
+                    alreadyIn = g.Members.Any(m => m.UserId == userId),
+                }));
+        }
+
+        // POST /api/group/{id}/ticket — the caller's own "ticket in hand"
+        // flag on a crew they're seated in. Self-reported; social, not a gate.
+        [HttpPost("{id}/ticket")]
+        public async Task<IActionResult> SetTicket(Guid id, [FromBody] TicketRequest req)
+        {
+            var userId = GetUserId();
+            if (string.IsNullOrEmpty(userId)) return Unauthorized(new { error = "Unauthorized" });
+            var member = await _db.GroupMembers.FirstOrDefaultAsync(m => m.GroupId == id && m.UserId == userId);
+            if (member == null) return Forbid();
+            member.HasTicket = req.HasTicket;
+            await _db.SaveChangesAsync();
+            return Ok(new { hasTicket = member.HasTicket });
+        }
+
         [HttpPost("match")]
         [EnableRateLimiting("write-heavy")]
         public async Task<IActionResult> MatchForMovie([FromBody] MatchRequest req)
@@ -456,32 +531,75 @@ namespace Backend.Controllers
             var lenError = CheckLength(title, GroupFieldLimits.Title, "The movie title");
             if (lenError != null) return BadRequest(new { error = lenError });
 
-            // The key that unifies everyone who wants the same film: the imdb id
-            // when we have it (exact), else the normalized title.
-            // Two kinds of crew: meet at a theater showing (public_gathering)
-            // or a hosted watch party at someone's venue (private_rental).
-            // They're different plans, so they're different crews even for
-            // the same film — the kind is part of the key.
-            var isVenue = string.Equals(req.Kind, "venue", StringComparison.OrdinalIgnoreCase);
-            var kindTag = isVenue ? "venue" : "theater";
-            // Namespaced so an imdb id and a freeform title can never collide
-            // in the same column. Title is already capped by CheckLength above.
-            var key = kindTag + ":" + (!string.IsNullOrWhiteSpace(req.ImdbId)
-                ? "imdb:" + req.ImdbId!.Trim().ToLowerInvariant()
-                : "title:" + title.ToLowerInvariant());
-
+            var (key, isVenue) = BuildMatchKey(req.Kind, req.ImdbId, title);
             var cleanHost = _profanityFilter.CleanOrFallback(req.HostName ?? "", "A Movie Fan");
+            var candidates = await LiveCrewsAsync(key);
 
-            // Find an open (non-full, non-cancelled) match group for this movie.
-            // A crew whose showtime has already passed is done — it shouldn't
-            // keep absorbing new matchers for a screening nobody can attend.
-            var now = DateTime.UtcNow;
-            var candidates = await _db.Groups
-                .Include(g => g.Members)
-                .Where(g => g.MatchMovieKey == key
-                    && g.Status != "cancelled"
-                    && (g.ScreeningTime == null || g.ScreeningTime > now))
-                .ToListAsync();
+            // Explicit join of a crew picked from the "already forming" list.
+            if (req.JoinGroupId.HasValue)
+            {
+                var target = candidates.FirstOrDefault(g => g.Id == req.JoinGroupId.Value);
+                if (target == null)
+                    return BadRequest(new { error = "That crew is no longer open — pick another or start your own." });
+                if (target.Members.Any(m => m.UserId == userId))
+                    return Ok(new { groupId = target.Id, alreadyIn = true, memberCount = target.Members.Count });
+                if (target.Members.Count >= target.MaxCapacity)
+                    return BadRequest(new { error = "That crew just filled up — pick another or start your own." });
+                _db.GroupMembers.Add(new GroupMember { GroupId = target.Id, Name = cleanHost, UserId = userId, Confirmed = true, HasTicket = req.HasTicket == true });
+                await _db.SaveChangesAsync();
+                return Ok(new { groupId = target.Id, joined = true, memberCount = target.Members.Count });
+            }
+
+            // Starting a crew with a concrete showing (theater + time, or venue
+            // + time). If an open crew already has exactly this showing,
+            // converge into it instead of spawning a twin.
+            var cinema = (req.CinemaName ?? "").Trim();
+            if (cinema.Length > 0 || req.ScreeningTime.HasValue)
+            {
+                var cinemaErr = CheckLength(cinema, GroupFieldLimits.VenueName, "The venue name");
+                if (cinemaErr != null) return BadRequest(new { error = cinemaErr });
+                var when = req.ScreeningTime.HasValue ? ToUtc(req.ScreeningTime) : (DateTime?)null;
+                var twin = candidates.FirstOrDefault(g =>
+                    g.Members.Count < g.MaxCapacity
+                    && string.Equals(g.CinemaName, cinema, StringComparison.OrdinalIgnoreCase)
+                    && g.ScreeningTime == when);
+                if (twin != null)
+                {
+                    if (twin.Members.Any(m => m.UserId == userId))
+                        return Ok(new { groupId = twin.Id, alreadyIn = true, memberCount = twin.Members.Count });
+                    _db.GroupMembers.Add(new GroupMember { GroupId = twin.Id, Name = cleanHost, UserId = userId, Confirmed = true, HasTicket = req.HasTicket == true });
+                    await _db.SaveChangesAsync();
+                    return Ok(new { groupId = twin.Id, joined = true, memberCount = twin.Members.Count });
+                }
+
+                var crew = new Group
+                {
+                    Slug = GenerateSlug(title),
+                    SpaceCode = await GenerateUniqueSpaceCodeAsync(),
+                    HostName = cleanHost,
+                    UserId = userId,
+                    FilmName = title,
+                    PosterPath = req.PosterPath,
+                    MatchMovieKey = key,
+                    IsPublic = true,
+                    SpaceType = isVenue ? "private_rental" : "public_gathering",
+                    EventCategory = "movie",
+                    MaxCapacity = MatchCrewSize,
+                    CinemaName = _profanityFilter.CleanOrFallback(cinema, ""),
+                    ShowDate = (req.ShowDate ?? "").Trim(),
+                    ShowTime = (req.ShowTime ?? "").Trim(),
+                    ScreeningTime = when,
+                    TheaterLatitude = req.TheaterLatitude,
+                    TheaterLongitude = req.TheaterLongitude,
+                };
+                crew.Members.Add(new GroupMember { GroupId = crew.Id, Name = cleanHost, UserId = userId, Confirmed = true, HasTicket = req.HasTicket == true });
+                _db.Groups.Add(crew);
+                await _db.SaveChangesAsync();
+                return Ok(new { groupId = crew.Id, created = true, memberCount = 1 });
+            }
+
+            // Legacy / no showing given: auto-seat in the first open crew,
+            // else start one with no plan yet.
             // Already in a crew for this movie — including one that has since
             // filled up — go back to it. Checking only the open group here put
             // members of a full crew into a second crew for the same film on
@@ -1669,8 +1787,26 @@ namespace Backend.Controllers
 
     // Match mode: the movie you want to see. ImdbId when picked from search
     // (exact match key), PosterPath for the group card, HostName for membership.
-    // Kind: "theater" (default) or "venue" — see MatchForMovie.
-    public record MatchRequest(string MovieTitle, string? ImdbId, string? PosterPath, string? HostName, string? Kind);
+    // Kind: "theater" (default) or "venue" — see MatchForMovie. Either
+    // JoinGroupId (join a listed crew) or a showing (CinemaName/ScreeningTime/
+    // ShowDate/ShowTime [+ coordinates]) to start one; with neither, falls
+    // back to auto-seating in the first open crew.
+    public record MatchRequest(
+        string MovieTitle,
+        string? ImdbId,
+        string? PosterPath,
+        string? HostName,
+        string? Kind,
+        Guid? JoinGroupId,
+        string? CinemaName,
+        DateTime? ScreeningTime,
+        string? ShowDate,
+        string? ShowTime,
+        double? TheaterLatitude,
+        double? TheaterLongitude,
+        bool? HasTicket);
+
+    public record TicketRequest(bool HasTicket);
 
     // SpaceCode is only checked when joining a private Space (see JoinGroup)
     // — optional so the request shape stays the same for every public join.

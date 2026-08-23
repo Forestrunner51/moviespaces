@@ -4,6 +4,9 @@ import { supabase } from "@/frontend/config/supabase";
 export interface PublicProfile {
   displayName: string | null;
   avatarUrl: string | null;
+  // Keys from THEATER_MEMBERSHIPS (e.g. "amc_alist"), for the badges a crew
+  // sees next to each seat — "Sam has A-List" is a real plan-making fact.
+  theaterMemberships: string[];
 }
 
 // Profiles live in Supabase, but Space members come from the .NET backend,
@@ -32,7 +35,7 @@ export function useProfiles(userIds: (string | null | undefined)[]): Map<string,
     let cancelled = false;
     supabase
       .from("profiles")
-      .select("id, display_name, avatar_url")
+      .select("id, display_name, avatar_url, theater_memberships")
       .in("id", missing)
       .then(({ data, error }) => {
         if (cancelled) return;
@@ -44,12 +47,15 @@ export function useProfiles(userIds: (string | null | undefined)[]): Map<string,
           cache.set(row.id, {
             displayName: row.display_name ?? null,
             avatarUrl: row.avatar_url ?? null,
+            theaterMemberships: row.theater_memberships
+              ? String(row.theater_memberships).split(",").filter(Boolean)
+              : [],
           });
         });
         // Negative-cache the ones that came back with no row, so a member
         // whose profile was deleted doesn't get re-queried on every render.
         missing.forEach((id) => {
-          if (!cache.has(id)) cache.set(id, { displayName: null, avatarUrl: null });
+          if (!cache.has(id)) cache.set(id, { displayName: null, avatarUrl: null, theaterMemberships: [] });
         });
         setVersion((v) => v + 1);
       });

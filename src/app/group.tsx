@@ -27,7 +27,7 @@ import { Starfield } from "@/frontend/components/starfield";
 import { ActionButton } from "@/frontend/components/action-button";
 import { QuickAction } from "@/frontend/components/quick-action";
 import { MoviePoster } from "@/frontend/components/movie-poster";
-import { SpaceTheme, SpaceStyles, Palette, Type, Radius, Display } from "@/frontend/constants/theme";
+import { SpaceTheme, SpaceStyles, Palette, Type, Radius, Display, Font } from "@/frontend/constants/theme";
 import { buildTicketUrl } from "@/frontend/services/ticket-links";
 import { activityLabel, activityEmoji } from "@/frontend/constants/activities";
 import { useFriends } from "@/frontend/hooks/use-friends";
@@ -38,6 +38,7 @@ import { Avatar } from "@/frontend/components/avatar";
 import { useProfiles } from "@/frontend/hooks/use-profiles";
 import { useForegroundPoll } from "@/frontend/hooks/use-foreground-poll";
 import { formatEventDate } from "@/frontend/utils/event-date";
+import { membershipLabel } from "@/frontend/constants/theater-memberships";
 import { useToast } from "@/frontend/components/toast";
 
 // Display strings written alongside screeningTime on edit, so the free-text
@@ -53,6 +54,8 @@ interface Member {
   id: string;
   name: string;
   confirmed: boolean;
+  // Movie Crew: self-reported "ticket in hand". Social signal, not a gate.
+  hasTicket?: boolean;
   userId: string;
 }
 interface Group {
@@ -478,6 +481,28 @@ export default function GroupScreen() {
   const [editDatePickerVisible, setEditDatePickerVisible] = useState(false);
   const [editTimePickerVisible, setEditTimePickerVisible] = useState(false);
 
+  // Crew "ticket in hand" toggle — own row only, optimistic, refetch after.
+  const [ticketSaving, setTicketSaving] = useState(false);
+  const handleToggleTicket = async () => {
+    if (!group || !myMember || ticketSaving) return;
+    setTicketSaving(true);
+    try {
+      const res = await authFetch(`${process.env.EXPO_PUBLIC_API_URL}/api/group/${group.id}/ticket`, {
+        method: "POST",
+        body: JSON.stringify({ hasTicket: !myMember.hasTicket }),
+      });
+      if (!res.ok) {
+        showToast("Couldn't update that — try again.");
+        return;
+      }
+      await fetchGroup();
+    } catch {
+      showToast("Network error — please try again.");
+    } finally {
+      setTicketSaving(false);
+    }
+  };
+
   const openEditModal = () => {
     if (!group) return;
     setEditFilmName(group.filmName);
@@ -845,6 +870,11 @@ export default function GroupScreen() {
                 return m ? (
                   <View key={m.id} style={styles.crewSeatFilled}>
                     <Avatar uri={memberProfiles.get(m.userId)?.avatarUrl} name={m.name} size={36} />
+                    {m.hasTicket && (
+                      <View style={styles.crewSeatTicket}>
+                        <Ionicons name="checkmark" size={10} color={Palette.base} />
+                      </View>
+                    )}
                   </View>
                 ) : (
                   <View key={`open-${i}`} style={styles.crewSeatOpen}>
@@ -873,6 +903,29 @@ export default function GroupScreen() {
                       : "Say hi in chat and agree on a theater and showtime together."
                   : `A small crew of up to ${group.maxCapacity} who want to see ${group.filmName}.`}
             </Text>
+            {isMember && group.spaceType !== "private_rental" && (
+              <TouchableOpacity
+                activeOpacity={0.8}
+                style={[styles.ticketToggle, myMember?.hasTicket && styles.ticketToggleOn]}
+                onPress={handleToggleTicket}
+                disabled={ticketSaving}
+                accessibilityRole="switch"
+                accessibilityState={{ checked: !!myMember?.hasTicket }}
+                accessibilityLabel="I have my ticket"
+              >
+                <Ionicons
+                  name={myMember?.hasTicket ? "checkmark-circle" : "ticket-outline"}
+                  size={16}
+                  color={myMember?.hasTicket ? Palette.positive : Palette.textMuted}
+                />
+                <Text style={[styles.ticketToggleText, myMember?.hasTicket && styles.ticketToggleTextOn]}>
+                  {myMember?.hasTicket ? "Ticket in hand" : "I've got my ticket"}
+                </Text>
+                <Text style={styles.ticketCount}>
+                  {groupMembers.filter((m) => m.hasTicket).length}/{groupMembers.length} ticketed
+                </Text>
+              </TouchableOpacity>
+            )}
             {isMember && !crewHasPlan && (
               <View style={styles.crewActions}>
                 <TouchableOpacity
@@ -1104,6 +1157,21 @@ export default function GroupScreen() {
                   <View style={styles.memberNameBlock}>
                     <Text style={styles.memberName}>{item.name}</Text>
                     {isWebGuest && <Text style={styles.guestTag}>Joined from the web</Text>}
+                    {(item.hasTicket || (profile?.theaterMemberships.length ?? 0) > 0) && (
+                      <View style={styles.badgeRowSmall}>
+                        {item.hasTicket && (
+                          <View style={[styles.memberBadge, styles.memberBadgeTicket]}>
+                            <Ionicons name="ticket" size={10} color={Palette.positive} />
+                            <Text style={[styles.memberBadgeText, { color: Palette.positive }]}>Ticket</Text>
+                          </View>
+                        )}
+                        {(profile?.theaterMemberships ?? []).map((key) => (
+                          <View key={key} style={styles.memberBadge}>
+                            <Text style={styles.memberBadgeText}>{membershipLabel(key)}</Text>
+                          </View>
+                        ))}
+                      </View>
+                    )}
                   </View>
                   <View style={styles.memberRowRight}>
                     {canAddFriend &&
@@ -1545,6 +1613,49 @@ const styles = StyleSheet.create({
     borderWidth: 2,
     borderColor: Palette.accentBorder,
   },
+  crewSeatTicket: {
+    position: "absolute",
+    right: -3,
+    bottom: -3,
+    width: 16,
+    height: 16,
+    borderRadius: Radius.pill,
+    backgroundColor: Palette.positive,
+    borderWidth: 2,
+    borderColor: Palette.surface,
+    alignItems: "center",
+    justifyContent: "center",
+  },
+  ticketToggle: {
+    flexDirection: "row",
+    alignItems: "center",
+    gap: 8,
+    marginTop: 10,
+    paddingVertical: 9,
+    paddingHorizontal: 12,
+    borderRadius: Radius.small,
+    borderWidth: 1,
+    borderColor: Palette.border,
+    backgroundColor: Palette.raised,
+  },
+  ticketToggleOn: { borderColor: Palette.positiveBorder, backgroundColor: Palette.positiveDim },
+  ticketToggleText: { ...Type.small, fontFamily: Font.semibold, color: Palette.textMuted, flex: 1 },
+  ticketToggleTextOn: { color: Palette.positive },
+  ticketCount: { ...Type.caption, color: Palette.textFaint },
+  badgeRowSmall: { flexDirection: "row", flexWrap: "wrap", gap: 4, marginTop: 3 },
+  memberBadge: {
+    paddingVertical: 2,
+    paddingHorizontal: 7,
+    borderRadius: Radius.pill,
+    borderWidth: 1,
+    borderColor: Palette.accentBorder,
+    backgroundColor: Palette.accentDim,
+    flexDirection: "row",
+    alignItems: "center",
+    gap: 3,
+  },
+  memberBadgeTicket: { borderColor: Palette.positiveBorder, backgroundColor: Palette.positiveDim },
+  memberBadgeText: { ...Type.caption, fontFamily: Font.semibold, color: Palette.accent, fontSize: 11, lineHeight: 14 },
   crewSeatOpen: {
     width: 40,
     height: 40,
