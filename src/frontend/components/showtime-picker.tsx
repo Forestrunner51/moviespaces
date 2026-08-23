@@ -114,18 +114,17 @@ export function ShowtimePicker({ selection, onSelect, filterTitle }: Props) {
     }
   };
 
-  // Film filter: exact normalized match first; if the scraped title differs
-  // slightly ("Weapons (2025)"), fall back to a contains match either way.
+  // Film filter: exact normalized match first; otherwise accept a scraped
+  // title that is the wanted title followed by a qualifier ("weapons 2025",
+  // "dune part two imax"). Not a contains match — "alien" must not pick up
+  // "aliens" or "alien romulus", which would seat a crew for the wrong film.
   const visibleMovies = (() => {
     if (!day) return [];
     if (!filterTitle) return day.movies;
     const want = normalizeTitle(filterTitle);
     const exact = day.movies.filter((m) => normalizeTitle(m.title) === want);
     if (exact.length > 0) return exact;
-    return day.movies.filter((m) => {
-      const have = normalizeTitle(m.title);
-      return have.includes(want) || want.includes(have);
-    });
+    return day.movies.filter((m) => normalizeTitle(m.title).startsWith(want + " "));
   })();
 
   if (theaters === null) {

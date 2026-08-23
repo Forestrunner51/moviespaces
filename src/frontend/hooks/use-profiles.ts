@@ -18,6 +18,10 @@ export interface PublicProfile {
 // across the Space screen, the Spaces list and Explore, and each mount would
 // otherwise re-query for faces it has already fetched.
 const cache = new Map<string, PublicProfile>();
+// Ids with a query already in flight. Home mounts a dozen cards at once that
+// share most of their people; without this each card re-requested them.
+const pending = new Set<string>();
+const waiters = new Set<() => void>();
 
 export function useProfiles(userIds: (string | null | undefined)[]): Map<string, PublicProfile> {
   const ids = Array.from(
@@ -29,16 +33,28 @@ export function useProfiles(userIds: (string | null | undefined)[]): Map<string,
   const [, setVersion] = useState(0);
 
   useEffect(() => {
-    const missing = ids.filter((id) => !cache.has(id));
-    if (missing.length === 0) return;
-
     let cancelled = false;
+    // Re-render when any other instance's fetch lands, so ids we skipped
+    // because they were already in flight show up here too.
+    const wake = () => {
+      if (!cancelled) setVersion((v) => v + 1);
+    };
+    waiters.add(wake);
+
+    const missing = ids.filter((id) => !cache.has(id) && !pending.has(id));
+    if (missing.length === 0) {
+      return () => {
+        cancelled = true;
+        waiters.delete(wake);
+      };
+    }
+    missing.forEach((id) => pending.add(id));
     supabase
       .from("profiles")
       .select("id, display_name, avatar_url, theater_memberships")
       .in("id", missing)
       .then(({ data, error }) => {
-        if (cancelled) return;
+        missing.forEach((id) => pending.delete(id));
         if (error) {
           console.warn("Failed to load profiles:", error);
           return;
@@ -57,11 +73,12 @@ export function useProfiles(userIds: (string | null | undefined)[]): Map<string,
         missing.forEach((id) => {
           if (!cache.has(id)) cache.set(id, { displayName: null, avatarUrl: null, theaterMemberships: [] });
         });
-        setVersion((v) => v + 1);
+        waiters.forEach((w) => w());
       });
 
     return () => {
       cancelled = true;
+      waiters.delete(wake);
     };
   }, [idsKey]);
 

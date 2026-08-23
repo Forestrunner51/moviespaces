@@ -512,6 +512,8 @@ namespace Backend.Controllers
         {
             var userId = GetUserId();
             if (string.IsNullOrEmpty(userId)) return Unauthorized(new { error = "Unauthorized" });
+            var isTheaterCrew = await _db.Groups.AnyAsync(g => g.Id == id && g.MatchMovieKey != null && g.SpaceType == "public_gathering");
+            if (!isTheaterCrew) return BadRequest(new { error = "Tickets are tracked for theater crews only." });
             var member = await _db.GroupMembers.FirstOrDefaultAsync(m => m.GroupId == id && m.UserId == userId);
             if (member == null) return Forbid();
             member.HasTicket = req.HasTicket;
@@ -533,7 +535,17 @@ namespace Backend.Controllers
 
             var (key, isVenue) = BuildMatchKey(req.Kind, req.ImdbId, title);
             var cleanHost = _profanityFilter.CleanOrFallback(req.HostName ?? "", "A Movie Fan");
+            // Ticket-in-hand only means something for a theater showing.
+            var hasTicket = !isVenue && req.HasTicket == true;
             var candidates = await LiveCrewsAsync(key);
+
+            // One crew per film+kind per person. Already seated somewhere —
+            // including a crew that has since filled — go back there. This
+            // runs before either branch below so "join B" or "start a twin"
+            // can't seat someone twice for the same film.
+            var mine = candidates.FirstOrDefault(g => g.Members.Any(m => m.UserId == userId));
+            if (mine != null)
+                return Ok(new { groupId = mine.Id, alreadyIn = true, memberCount = mine.Members.Count });
 
             // Explicit join of a crew picked from the "already forming" list.
             if (req.JoinGroupId.HasValue)
@@ -541,89 +553,57 @@ namespace Backend.Controllers
                 var target = candidates.FirstOrDefault(g => g.Id == req.JoinGroupId.Value);
                 if (target == null)
                     return BadRequest(new { error = "That crew is no longer open — pick another or start your own." });
-                if (target.Members.Any(m => m.UserId == userId))
-                    return Ok(new { groupId = target.Id, alreadyIn = true, memberCount = target.Members.Count });
                 if (target.Members.Count >= target.MaxCapacity)
                     return BadRequest(new { error = "That crew just filled up — pick another or start your own." });
-                _db.GroupMembers.Add(new GroupMember { GroupId = target.Id, Name = cleanHost, UserId = userId, Confirmed = true, HasTicket = req.HasTicket == true });
+                // _db.GroupMembers.Add, not target.Members.Add: target is tracked
+                // and GroupMember.Id is client-generated, so the navigation route
+                // marks the row Modified (UPDATE → 0 rows → 500). EF fixup still
+                // appends it to target.Members, so the count below is post-add.
+                _db.GroupMembers.Add(new GroupMember { GroupId = target.Id, Name = cleanHost, UserId = userId, Confirmed = true, HasTicket = hasTicket });
                 await _db.SaveChangesAsync();
                 return Ok(new { groupId = target.Id, joined = true, memberCount = target.Members.Count });
             }
 
-            // Starting a crew with a concrete showing (theater + time, or venue
-            // + time). If an open crew already has exactly this showing,
-            // converge into it instead of spawning a twin.
+            // Starting a crew with a concrete showing. A crew is always born
+            // with a plan — the client never sends a showing-less request, and
+            // a crew with no time is the empty-group experience this flow
+            // exists to avoid.
             var cinema = (req.CinemaName ?? "").Trim();
-            if (cinema.Length > 0 || req.ScreeningTime.HasValue)
+            if (cinema.Length == 0 || !req.ScreeningTime.HasValue)
+                return BadRequest(new { error = isVenue ? "Name the place and pick a time." : "Pick a showing first." });
+            var cinemaErr = CheckLength(cinema, GroupFieldLimits.VenueName, "The venue name");
+            if (cinemaErr != null) return BadRequest(new { error = cinemaErr });
+            var showDate = (req.ShowDate ?? "").Trim();
+            var showTime = (req.ShowTime ?? "").Trim();
+            var dateErr = CheckLength(showDate, GroupFieldLimits.ShortLabel, "The date label")
+                ?? CheckLength(showTime, GroupFieldLimits.ShortLabel, "The time label");
+            if (dateErr != null) return BadRequest(new { error = dateErr });
+            var when = ToUtc(req.ScreeningTime);
+            if (when <= DateTime.UtcNow)
+                return BadRequest(new { error = "That showing has already started — pick a later one." });
+            // Compare and store the same (cleaned) string, or a venue that
+            // trips the filter would never converge with itself.
+            var cleanCinema = _profanityFilter.CleanOrFallback(cinema, isVenue ? "A private venue" : cinema);
+
+            // Theater crews converge: same theater (from the showtimes data) +
+            // same showing is the same plan, so join it rather than spawn a
+            // twin. Venue crews never converge — "Home, 8 PM" from two people
+            // in two cities is two different plans.
+            if (!isVenue)
             {
-                var cinemaErr = CheckLength(cinema, GroupFieldLimits.VenueName, "The venue name");
-                if (cinemaErr != null) return BadRequest(new { error = cinemaErr });
-                var when = req.ScreeningTime.HasValue ? ToUtc(req.ScreeningTime) : (DateTime?)null;
                 var twin = candidates.FirstOrDefault(g =>
                     g.Members.Count < g.MaxCapacity
-                    && string.Equals(g.CinemaName, cinema, StringComparison.OrdinalIgnoreCase)
+                    && string.Equals(g.CinemaName, cleanCinema, StringComparison.OrdinalIgnoreCase)
                     && g.ScreeningTime == when);
                 if (twin != null)
                 {
-                    if (twin.Members.Any(m => m.UserId == userId))
-                        return Ok(new { groupId = twin.Id, alreadyIn = true, memberCount = twin.Members.Count });
-                    _db.GroupMembers.Add(new GroupMember { GroupId = twin.Id, Name = cleanHost, UserId = userId, Confirmed = true, HasTicket = req.HasTicket == true });
+                    _db.GroupMembers.Add(new GroupMember { GroupId = twin.Id, Name = cleanHost, UserId = userId, Confirmed = true, HasTicket = hasTicket });
                     await _db.SaveChangesAsync();
                     return Ok(new { groupId = twin.Id, joined = true, memberCount = twin.Members.Count });
                 }
-
-                var crew = new Group
-                {
-                    Slug = GenerateSlug(title),
-                    SpaceCode = await GenerateUniqueSpaceCodeAsync(),
-                    HostName = cleanHost,
-                    UserId = userId,
-                    FilmName = title,
-                    PosterPath = req.PosterPath,
-                    MatchMovieKey = key,
-                    IsPublic = true,
-                    SpaceType = isVenue ? "private_rental" : "public_gathering",
-                    EventCategory = "movie",
-                    MaxCapacity = MatchCrewSize,
-                    CinemaName = _profanityFilter.CleanOrFallback(cinema, ""),
-                    ShowDate = (req.ShowDate ?? "").Trim(),
-                    ShowTime = (req.ShowTime ?? "").Trim(),
-                    ScreeningTime = when,
-                    TheaterLatitude = req.TheaterLatitude,
-                    TheaterLongitude = req.TheaterLongitude,
-                };
-                crew.Members.Add(new GroupMember { GroupId = crew.Id, Name = cleanHost, UserId = userId, Confirmed = true, HasTicket = req.HasTicket == true });
-                _db.Groups.Add(crew);
-                await _db.SaveChangesAsync();
-                return Ok(new { groupId = crew.Id, created = true, memberCount = 1 });
             }
 
-            // Legacy / no showing given: auto-seat in the first open crew,
-            // else start one with no plan yet.
-            // Already in a crew for this movie — including one that has since
-            // filled up — go back to it. Checking only the open group here put
-            // members of a full crew into a second crew for the same film on
-            // a repeat tap (caught in local testing).
-            var mine = candidates.FirstOrDefault(g => g.Members.Any(m => m.UserId == userId));
-            if (mine != null)
-                return Ok(new { groupId = mine.Id, alreadyIn = true, memberCount = mine.Members.Count });
-
-            var openGroup = candidates.FirstOrDefault(g => g.Members.Count < g.MaxCapacity);
-
-            if (openGroup != null)
-            {
-                // _db.GroupMembers.Add (not openGroup.Members.Add): openGroup is a
-                // tracked entity and GroupMember.Id is client-generated, so EF
-                // can't tell the new row is new — via the navigation it marks it
-                // Modified, issues an UPDATE that hits 0 rows, and throws
-                // DbUpdateConcurrencyException (500 on every join). Same pattern
-                // as JoinGroup/JoinGroupWeb below.
-                _db.GroupMembers.Add(new GroupMember { GroupId = openGroup.Id, Name = cleanHost, UserId = userId, Confirmed = true });
-                await _db.SaveChangesAsync();
-                return Ok(new { groupId = openGroup.Id, joined = true, memberCount = openGroup.Members.Count });
-            }
-
-            var group = new Group
+            var crew = new Group
             {
                 Slug = GenerateSlug(title),
                 SpaceCode = await GenerateUniqueSpaceCodeAsync(),
@@ -635,17 +615,21 @@ namespace Backend.Controllers
                 IsPublic = true,
                 SpaceType = isVenue ? "private_rental" : "public_gathering",
                 EventCategory = "movie",
-                // Small cap — a match crew is intimate, not a 5000-person club;
-                // a fresh group spawns once one fills. Six is the Timeleft
-                // dinner-table number: big enough to feel like a group,
-                // small enough that everyone actually talks.
+                // Small cap — a crew is intimate, not a 5000-person club; a
+                // fresh one spawns once this fills. Six is the Timeleft
+                // dinner-table number.
                 MaxCapacity = MatchCrewSize,
-                ScreeningTime = null,
+                CinemaName = cleanCinema,
+                ShowDate = showDate,
+                ShowTime = showTime,
+                ScreeningTime = when,
+                TheaterLatitude = req.TheaterLatitude,
+                TheaterLongitude = req.TheaterLongitude,
             };
-            group.Members.Add(new GroupMember { GroupId = group.Id, Name = cleanHost, UserId = userId, Confirmed = true });
-            _db.Groups.Add(group);
+            crew.Members.Add(new GroupMember { GroupId = crew.Id, Name = cleanHost, UserId = userId, Confirmed = true, HasTicket = hasTicket });
+            _db.Groups.Add(crew);
             await _db.SaveChangesAsync();
-            return Ok(new { groupId = group.Id, created = true, memberCount = 1 });
+            return Ok(new { groupId = crew.Id, created = true, memberCount = 1 });
         }
 
         // GET /api/group/community-spaces/discover?genres=Horror,Sci-Fi
@@ -1788,9 +1772,8 @@ namespace Backend.Controllers
     // Match mode: the movie you want to see. ImdbId when picked from search
     // (exact match key), PosterPath for the group card, HostName for membership.
     // Kind: "theater" (default) or "venue" — see MatchForMovie. Either
-    // JoinGroupId (join a listed crew) or a showing (CinemaName/ScreeningTime/
-    // ShowDate/ShowTime [+ coordinates]) to start one; with neither, falls
-    // back to auto-seating in the first open crew.
+    // JoinGroupId (join a listed crew) or a showing (CinemaName + ScreeningTime
+    // + ShowDate/ShowTime [+ coordinates]) to start one.
     public record MatchRequest(
         string MovieTitle,
         string? ImdbId,

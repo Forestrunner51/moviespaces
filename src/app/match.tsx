@@ -151,6 +151,8 @@ export default function MatchScreen() {
 
   const pickKind = (k: CrewKind) => {
     setKind(k);
+    // Ticket-in-hand is a theater thing; don't carry it into a venue crew.
+    if (k === "venue") setHasTicket(false);
     setStage("film");
   };
 
