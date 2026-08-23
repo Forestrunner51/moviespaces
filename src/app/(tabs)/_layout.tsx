@@ -15,6 +15,14 @@ export default function TabsLayout() {
           backgroundColor: SpaceTheme.deepSpace,
           borderTopColor: Palette.border,
         },
+        // Explicit even distribution. The default item layout is flex-based
+        // and, on some devices/orientations (and iOS's compact "label beside
+        // icon" mode), items size to their label width — "My Spaces" and
+        // "CineMind" then crowd the others and the gaps go uneven.
+        tabBarItemStyle: { flex: 1, paddingHorizontal: 0 },
+        tabBarLabelPosition: "below-icon",
+        tabBarLabelStyle: { fontSize: 11 },
+        tabBarAllowFontScaling: false,
       }}
     >
       <Tabs.Screen
