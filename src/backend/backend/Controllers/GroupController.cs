@@ -458,11 +458,17 @@ namespace Backend.Controllers
 
             // The key that unifies everyone who wants the same film: the imdb id
             // when we have it (exact), else the normalized title.
+            // Two kinds of crew: meet at a theater showing (public_gathering)
+            // or a hosted watch party at someone's venue (private_rental).
+            // They're different plans, so they're different crews even for
+            // the same film — the kind is part of the key.
+            var isVenue = string.Equals(req.Kind, "venue", StringComparison.OrdinalIgnoreCase);
+            var kindTag = isVenue ? "venue" : "theater";
             // Namespaced so an imdb id and a freeform title can never collide
             // in the same column. Title is already capped by CheckLength above.
-            var key = !string.IsNullOrWhiteSpace(req.ImdbId)
+            var key = kindTag + ":" + (!string.IsNullOrWhiteSpace(req.ImdbId)
                 ? "imdb:" + req.ImdbId!.Trim().ToLowerInvariant()
-                : "title:" + title.ToLowerInvariant();
+                : "title:" + title.ToLowerInvariant());
 
             var cleanHost = _profanityFilter.CleanOrFallback(req.HostName ?? "", "A Movie Fan");
 
@@ -509,7 +515,7 @@ namespace Backend.Controllers
                 PosterPath = req.PosterPath,
                 MatchMovieKey = key,
                 IsPublic = true,
-                SpaceType = "public_gathering",
+                SpaceType = isVenue ? "private_rental" : "public_gathering",
                 EventCategory = "movie",
                 // Small cap — a match crew is intimate, not a 5000-person club;
                 // a fresh group spawns once one fills. Six is the Timeleft
@@ -1663,7 +1669,8 @@ namespace Backend.Controllers
 
     // Match mode: the movie you want to see. ImdbId when picked from search
     // (exact match key), PosterPath for the group card, HostName for membership.
-    public record MatchRequest(string MovieTitle, string? ImdbId, string? PosterPath, string? HostName);
+    // Kind: "theater" (default) or "venue" — see MatchForMovie.
+    public record MatchRequest(string MovieTitle, string? ImdbId, string? PosterPath, string? HostName, string? Kind);
 
     // SpaceCode is only checked when joining a private Space (see JoinGroup)
     // — optional so the request shape stays the same for every public join.
