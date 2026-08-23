@@ -518,7 +518,9 @@ namespace Backend.Controllers
                 .Select(k => (k ?? "").Trim().ToLowerInvariant())
                 .Where(k => k.Length > 0 && k.Length <= 32 && k.All(c => char.IsAsciiLetterLower(c) || c == '_'))
                 .Distinct()
-                .Take(10)
+                // One activity per person — a single clear signal ("Sam's up
+                // for drinks"), not a checklist.
+                .Take(1)
                 .ToArray();
             return clean.Length == 0 ? null : string.Join(",", clean);
         }

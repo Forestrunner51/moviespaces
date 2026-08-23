@@ -502,14 +502,15 @@ export default function GroupScreen() {
     new Set((m?.afterActivities ?? "").split(",").filter(Boolean));
   const handleToggleAfter = async (key: string) => {
     if (!group || !myMember || afterSaving) return;
+    // Single choice: tap to pick (replacing any previous pick), tap your
+    // current pick to clear it.
     const mine = myAfterSet(myMember);
-    if (mine.has(key)) mine.delete(key);
-    else mine.add(key);
+    const next = mine.has(key) ? [] : [key];
     setAfterSaving(key);
     try {
       const res = await authFetch(`${process.env.EXPO_PUBLIC_API_URL}/api/group/${group.id}/after`, {
         method: "POST",
-        body: JSON.stringify({ activities: Array.from(mine) }),
+        body: JSON.stringify({ activities: next }),
       });
       if (!res.ok) {
         showToast("Couldn't save that — try again.");
