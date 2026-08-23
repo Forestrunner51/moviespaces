@@ -816,7 +816,7 @@ export default function GroupScreen() {
             </View>
             <Text style={styles.subtitle}>
               {isCrew
-                ? `Movie Crew · ${groupMembers.length} of ${group.maxCapacity} seats`
+                ? `${group.spaceType === "private_rental" ? "Watch Party Crew" : "Theater Crew"} · ${groupMembers.length} of ${group.maxCapacity} seats`
                 : `Hosted by ${group.hostName}`}
             </Text>
           </View>
@@ -868,7 +868,9 @@ export default function GroupScreen() {
                 : isMember
                   ? crewHasPlan
                     ? "Plans are set — see you there."
-                    : "Say hi in chat and agree on a theater and showtime together."
+                    : group.spaceType === "private_rental"
+                      ? "Say hi in chat and work out who hosts, where, and when."
+                      : "Say hi in chat and agree on a theater and showtime together."
                   : `A small crew of up to ${group.maxCapacity} who want to see ${group.filmName}.`}
             </Text>
             {isMember && !crewHasPlan && (
