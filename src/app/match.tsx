@@ -7,6 +7,8 @@ import {
   FlatList,
   ScrollView,
   Platform,
+  InputAccessoryView,
+  Keyboard,
 } from "react-native";
 import { Text, TextInput } from "@/frontend/components/scaled-text";
 import { router } from "expo-router";
@@ -30,6 +32,9 @@ import {
 
 // Keep in sync with GroupController.MatchCrewSize.
 const MATCH_CREW_SIZE = 6;
+// iOS decimal keyboards have no Return key; this accessory bar is the only
+// way out of the cost field (same pattern as create-space).
+const COST_ACCESSORY_ID = "crewVenueCost";
 
 // Movie Crew: the Timeleft pattern applied to movies — get grouped with up
 // to six people going to the same showing. Two flows:
@@ -214,6 +219,13 @@ export default function MatchScreen() {
   const [timeValue, setTimeValue] = useState<Date | null>(null);
   const [datePickerVisible, setDatePickerVisible] = useState(false);
   const [timePickerVisible, setTimePickerVisible] = useState(false);
+  const [venueCost, setVenueCost] = useState("");
+  const venueCostCents = (() => {
+    const t = venueCost.trim();
+    if (!t) return null;
+    const n = parseFloat(t);
+    return Number.isFinite(n) && n >= 0 ? Math.round(n * 100) : NaN;
+  })();
 
   const pickKind = (k: CrewKind) => {
     setKind(k);
@@ -289,7 +301,8 @@ export default function MatchScreen() {
     });
   };
 
-  const venueReady = venueName.trim().length > 0 && !!dateValue && !!timeValue;
+  const venueReady =
+    venueName.trim().length > 0 && !!dateValue && !!timeValue && !Number.isNaN(venueCostCents);
   const startVenueCrew = () => {
     if (!venueReady || !dateValue || !timeValue) return;
     const combined = new Date(dateValue);
@@ -301,6 +314,7 @@ export default function MatchScreen() {
       ShowTime: formatTime(combined),
       TheaterLatitude: placePick?.latitude ?? null,
       TheaterLongitude: placePick?.longitude ?? null,
+      TotalCostCents: venueCostCents,
     });
   };
 
@@ -743,16 +757,33 @@ export default function MatchScreen() {
                 </TouchableOpacity>
               )}
 
+              <Text style={styles.stepLabel}>COST</Text>
+              <View style={styles.placeBox}>
+                <Text style={styles.costPrefix}>$</Text>
+                <TextInput
+                  style={styles.placeInput}
+                  placeholder="Total cost, if any — split per person"
+                  placeholderTextColor={Palette.textFaint}
+                  value={venueCost}
+                  onChangeText={setVenueCost}
+                  keyboardType="decimal-pad"
+                  inputAccessoryViewID={Platform.OS === "ios" ? COST_ACCESSORY_ID : undefined}
+                />
+              </View>
+              <Text style={styles.placeHint}>Leave blank if it&apos;s free. Shown to the crew as a per-person share.</Text>
+
               {/* Inline validation instead of a toast — the toast lands on top
                   of this form's title and reads as a glitch. The button stays
-                  dim until the three fields are in. */}
+                  dim until the fields are in. */}
               {!venueReady && (
                 <Text style={styles.formHint}>
                   {!venueName.trim()
                     ? "Add a place to start."
                     : !dateValue
                       ? "Pick a date."
-                      : "Pick a time."}
+                      : !timeValue
+                        ? "Pick a time."
+                        : "Enter a valid cost, or leave it blank."}
                 </Text>
               )}
               <TouchableOpacity
@@ -776,6 +807,15 @@ export default function MatchScreen() {
                 Anyone who picks this film for a watch party can join you, up to {MATCH_CREW_SIZE}.
               </Text>
             </ScrollView>
+            {Platform.OS === "ios" && (
+              <InputAccessoryView nativeID={COST_ACCESSORY_ID}>
+                <View style={styles.keyboardBar}>
+                  <TouchableOpacity activeOpacity={0.8} onPress={() => Keyboard.dismiss()} hitSlop={8}>
+                    <Text style={styles.pickerDoneText}>Done</Text>
+                  </TouchableOpacity>
+                </View>
+              </InputAccessoryView>
+            )}
           </>
         )}
       </View>
@@ -929,6 +969,14 @@ const styles = StyleSheet.create({
   pickerDone: { alignSelf: "flex-end", paddingVertical: 8, paddingHorizontal: 16, marginTop: 4 },
   pickerDoneText: { ...Type.small, fontFamily: Font.bold, color: Palette.accent },
   formHint: { ...Type.caption, color: Palette.textMuted, marginTop: 14 },
+  costPrefix: { ...Type.body, color: Palette.textMuted },
+  keyboardBar: {
+    backgroundColor: Palette.raised,
+    borderTopWidth: 1,
+    borderTopColor: Palette.border,
+    alignItems: "flex-end",
+    padding: 10,
+  },
   pickerPlaceholder: { color: Palette.textFaint },
   ticketToggle: {
     flexDirection: "row",
