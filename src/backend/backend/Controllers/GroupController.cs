@@ -262,7 +262,11 @@ namespace Backend.Controllers
                 GroupId = group.Id,
                 Name = cleanHostName,
                 UserId = userId,
-                Confirmed = true
+                Confirmed = true,
+                // The host's declared post-show activities double as their
+                // own "up for after" votes — one mechanic everywhere, with
+                // the host's picks pre-seeded.
+                AfterActivities = SanitizeAfterActivities(req.PostActivities)
             });
 
             _db.Groups.Add(group);
@@ -526,8 +530,6 @@ namespace Backend.Controllers
         {
             var userId = GetUserId();
             if (string.IsNullOrEmpty(userId)) return Unauthorized(new { error = "Unauthorized" });
-            var isCrew = await _db.Groups.AnyAsync(g => g.Id == id && g.MatchMovieKey != null);
-            if (!isCrew) return BadRequest(new { error = "After-votes are tracked for crews only." });
             var member = await _db.GroupMembers.FirstOrDefaultAsync(m => m.GroupId == id && m.UserId == userId);
             if (member == null) return Forbid();
             member.AfterActivities = SanitizeAfterActivities(req.Activities);
@@ -542,8 +544,10 @@ namespace Backend.Controllers
         {
             var userId = GetUserId();
             if (string.IsNullOrEmpty(userId)) return Unauthorized(new { error = "Unauthorized" });
-            var isTheaterCrew = await _db.Groups.AnyAsync(g => g.Id == id && g.MatchMovieKey != null && g.SpaceType == "public_gathering");
-            if (!isTheaterCrew) return BadRequest(new { error = "Tickets are tracked for theater crews only." });
+            // Any theater event — crew or hosted Space — where everyone buys
+            // their own ticket. Watch parties (private_rental) book as a group.
+            var isTheaterEvent = await _db.Groups.AnyAsync(g => g.Id == id && g.SpaceType == "public_gathering");
+            if (!isTheaterEvent) return BadRequest(new { error = "Tickets are tracked for theater events only." });
             var member = await _db.GroupMembers.FirstOrDefaultAsync(m => m.GroupId == id && m.UserId == userId);
             if (member == null) return Forbid();
             member.HasTicket = req.HasTicket;

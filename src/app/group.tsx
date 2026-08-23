@@ -28,7 +28,7 @@ import { QuickAction } from "@/frontend/components/quick-action";
 import { MoviePoster } from "@/frontend/components/movie-poster";
 import { SpaceTheme, SpaceStyles, Palette, Type, Radius, Display, Font } from "@/frontend/constants/theme";
 import { buildTicketUrl } from "@/frontend/services/ticket-links";
-import { POST_ACTIVITIES, activityEmoji, activityLabel } from "@/frontend/constants/activities";
+import { POST_ACTIVITIES } from "@/frontend/constants/activities";
 import { useFriends } from "@/frontend/hooks/use-friends";
 import { CineMindLeaderboard } from "@/frontend/components/cinemind-leaderboard";
 import { EVENT_CATEGORIES, eventCategoryOf } from "@/frontend/constants/event-categories";
@@ -1008,6 +1008,33 @@ export default function GroupScreen() {
           </View>
         )}
 
+        {/* Everyone buys their own ticket at a theater event, hosted or
+            crew — same self-reported flag either way. The crew card has its
+            own copy of this; hosted Spaces get it here. */}
+        {!isCrew && isMember && group.spaceType === "public_gathering" && !hasPassed && (
+          <TouchableOpacity
+            activeOpacity={0.8}
+            style={[styles.ticketToggle, styles.ticketToggleStandalone, myMember?.hasTicket && styles.ticketToggleOn]}
+            onPress={handleToggleTicket}
+            disabled={ticketSaving}
+            accessibilityRole="switch"
+            accessibilityState={{ checked: !!myMember?.hasTicket }}
+            accessibilityLabel="I have my ticket"
+          >
+            <Ionicons
+              name={myMember?.hasTicket ? "checkmark-circle" : "ticket-outline"}
+              size={16}
+              color={myMember?.hasTicket ? Palette.positive : Palette.textMuted}
+            />
+            <Text style={[styles.ticketToggleText, myMember?.hasTicket && styles.ticketToggleTextOn]}>
+              {myMember?.hasTicket ? "Ticketed" : "I've got my ticket"}
+            </Text>
+            <Text style={styles.ticketCount}>
+              {groupMembers.filter((m) => m.hasTicket).length}/{groupMembers.length} ticketed
+            </Text>
+          </TouchableOpacity>
+        )}
+
         {/* Movie Crew reveal — the Timeleft "your table" moment. Seats fill
             with faces as people pick this film; open seats stay dashed so a
             crew of one reads as "forming", not "empty". */}
@@ -1074,38 +1101,6 @@ export default function GroupScreen() {
                   {groupMembers.filter((m) => m.hasTicket).length}/{groupMembers.length} ticketed
                 </Text>
               </TouchableOpacity>
-            )}
-            {/* Afterwards — per-member votes ("3 up for drinks"), the crew's
-                icebreaker. Members toggle their own; everyone sees counts. */}
-            {(isMember || groupMembers.some((m) => myAfterSet(m).size > 0)) && (
-              <View style={styles.voteBlock}>
-                <Text style={styles.voteLabel}>UP FOR AFTER</Text>
-                <View style={styles.voteRow}>
-                  {POST_ACTIVITIES.filter(
-                    (a) => isMember || groupMembers.some((m) => myAfterSet(m).has(a.key)),
-                  ).map((a) => {
-                    const count = groupMembers.filter((m) => myAfterSet(m).has(a.key)).length;
-                    const mine = myAfterSet(myMember).has(a.key);
-                    return (
-                      <TouchableOpacity
-                        key={a.key}
-                        activeOpacity={0.8}
-                        style={[styles.voteChip, mine && styles.voteChipMine]}
-                        onPress={() => handleToggleAfter(a.key)}
-                        disabled={!isMember || afterSaving !== null}
-                        accessibilityRole="button"
-                        accessibilityState={{ selected: mine }}
-                        accessibilityLabel={`${a.label}${count > 0 ? `, ${count} up for it` : ""}`}
-                      >
-                        <Text style={[styles.voteChipText, mine && styles.voteChipTextMine]}>
-                          {a.emoji} {a.label}
-                          {count > 0 ? `  ${count}` : ""}
-                        </Text>
-                      </TouchableOpacity>
-                    );
-                  })}
-                </View>
-              </View>
             )}
             {isMember && !crewHasPlan && (
               <View style={styles.crewActions}>
@@ -1198,26 +1193,48 @@ export default function GroupScreen() {
             BookingUrl itself lives on — it's the private_rental card's
             "Event / Venue Link" below, where it means something concrete. */}
 
-        {group.postActivities && (
-          <View style={styles.hangoutCapsule}>
-            <View style={styles.hangoutCapsuleHeader}>
-              <Ionicons name="chatbubbles-outline" size={15} color={Palette.accent} />
-              <Text style={styles.hangoutCapsuleTitle}>Hangout After</Text>
+        {/* Hangout after — per-member votes on every Space, not just crews.
+            The host's creation-time picks arrive pre-seeded as their own
+            votes (CreateGroup), so this replaced the old host-declared
+            badge list with the same chips everywhere: counts for everyone,
+            your own picks highlighted, tap to toggle if you're a member. */}
+        {(isMember || groupMembers.some((m) => myAfterSet(m).size > 0) || !!group.hangoutNotes) &&
+          group.status !== "cancelled" && (
+            <View style={styles.hangoutCapsule}>
+              <View style={styles.hangoutCapsuleHeader}>
+                <Ionicons name="chatbubbles-outline" size={15} color={Palette.accent} />
+                <Text style={styles.hangoutCapsuleTitle}>Hangout After</Text>
+              </View>
+              <View style={styles.voteRow}>
+                {POST_ACTIVITIES.filter(
+                  (a) => (isMember && !hasPassed) || groupMembers.some((m) => myAfterSet(m).has(a.key)),
+                ).map((a) => {
+                  const count = groupMembers.filter((m) => myAfterSet(m).has(a.key)).length;
+                  const mine = myAfterSet(myMember).has(a.key);
+                  return (
+                    <TouchableOpacity
+                      key={a.key}
+                      activeOpacity={0.8}
+                      style={[styles.voteChip, mine && styles.voteChipMine]}
+                      onPress={() => handleToggleAfter(a.key)}
+                      disabled={!isMember || hasPassed || afterSaving !== null}
+                      accessibilityRole="button"
+                      accessibilityState={{ selected: mine }}
+                      accessibilityLabel={`${a.label}${count > 0 ? `, ${count} up for it` : ""}`}
+                    >
+                      <Text style={[styles.voteChipText, mine && styles.voteChipTextMine]}>
+                        {a.emoji} {a.label}
+                        {count > 0 ? `  ${count}` : ""}
+                      </Text>
+                    </TouchableOpacity>
+                  );
+                })}
+              </View>
+              {group.hangoutNotes && (
+                <Text style={styles.hangoutNotesText}>{group.hangoutNotes}</Text>
+              )}
             </View>
-            <View style={styles.afterRow}>
-              {group.postActivities.split(",").map((key) => (
-                <View key={key} style={styles.afterBadge}>
-                  <Text style={styles.afterBadgeText}>
-                    {activityEmoji(key)} {activityLabel(key)}
-                  </Text>
-                </View>
-              ))}
-            </View>
-            {group.hangoutNotes && (
-              <Text style={styles.hangoutNotesText}>{group.hangoutNotes}</Text>
-            )}
-          </View>
-        )}
+          )}
 
         {group.spaceType === "private_rental" && (
           <View style={styles.rentalCard}>
@@ -1856,6 +1873,7 @@ const styles = StyleSheet.create({
     borderColor: Palette.border,
     backgroundColor: Palette.raised,
   },
+  ticketToggleStandalone: { marginBottom: 16, marginTop: 0 },
   ticketToggleOn: { borderColor: Palette.positiveBorder, backgroundColor: Palette.positiveDim },
   ticketToggleText: { ...Type.small, fontFamily: Font.semibold, color: Palette.textMuted, flex: 1 },
   ticketToggleTextOn: { color: Palette.positive },
@@ -2002,16 +2020,6 @@ const styles = StyleSheet.create({
     lineHeight: 19,
     marginTop: 8,
   },
-  afterRow: { flexDirection: "row", flexWrap: "wrap", gap: 8 },
-  afterBadge: {
-    backgroundColor: Palette.accentDim,
-    borderWidth: 1,
-    borderColor: Palette.accentBorder,
-    borderRadius: Radius.small,
-    paddingVertical: 6,
-    paddingHorizontal: 10,
-  },
-  afterBadgeText: { ...Type.caption, fontWeight: "600", color: SpaceTheme.supernovaPink },
   rentalCard: {
     ...SpaceStyles.glassCard,
     borderColor: Palette.accentBorder,
