@@ -60,10 +60,31 @@ export function ShowtimePicker({ selection, onSelect, filterTitle }: Props) {
   const [day, setDay] = useState<TheaterShowtimesDay | null>(null);
   const [dayLoading, setDayLoading] = useState(false);
   // Collapsed once a time is chosen; re-expandable to change it.
-  const [open, setOpen] = useState(true);
+  // Collapsed from the start when editing an existing showing.
+  const [open, setOpen] = useState(!selection);
   const [showAllTheaters, setShowAllTheaters] = useState(false);
   const [hasLocation, setHasLocation] = useState(false);
   const [theaterQuery, setTheaterQuery] = useState("");
+
+  // Separate from loadError: that one gates the whole picker's empty state,
+  // while a single day's fetch failing should only message inside the flow
+  // (the theater list is still fine — the user can retap or switch).
+  const [dayError, setDayError] = useState(false);
+
+  const pickTheater = async (t: ShowtimeTheater, date?: string) => {
+    setTheater(t);
+    setDay(null);
+    setDayError(false);
+    setDayLoading(true);
+    try {
+      const data = await fetchTheaterShowtimes(t.slug, date);
+      setDay(data);
+    } catch {
+      setDayError(true);
+    } finally {
+      setDayLoading(false);
+    }
+  };
 
   useEffect(() => {
     let cancelled = false;
@@ -91,6 +112,18 @@ export function ShowtimePicker({ selection, onSelect, filterTitle }: Props) {
           setHasLocation(!!loc);
           setTheaters(list);
           setStale(isStale(result.lastUpdatedUtc));
+          // Editing an existing showing: land on its theater and day so the
+          // times are one tap away. Match by slug, else by name (a group row
+          // stores the theater's name, not its slug). Search the full
+          // result, not the 60-mile cut — the Space may be elsewhere.
+          if (selection && !theater) {
+            const all = result.theaters;
+            const wantName = selection.theaterName.trim().toLowerCase();
+            const t =
+              all.find((x) => x.slug === selection.theaterSlug) ??
+              all.find((x) => x.name.trim().toLowerCase() === wantName);
+            if (t) pickTheater(t, selection.date);
+          }
         }
       } catch {
         if (!cancelled) {
@@ -104,25 +137,6 @@ export function ShowtimePicker({ selection, onSelect, filterTitle }: Props) {
     };
   }, []);
 
-  // Separate from loadError: that one gates the whole picker's empty state,
-  // while a single day's fetch failing should only message inside the flow
-  // (the theater list is still fine — the user can retap or switch).
-  const [dayError, setDayError] = useState(false);
-
-  const pickTheater = async (t: ShowtimeTheater, date?: string) => {
-    setTheater(t);
-    setDay(null);
-    setDayError(false);
-    setDayLoading(true);
-    try {
-      const data = await fetchTheaterShowtimes(t.slug, date);
-      setDay(data);
-    } catch {
-      setDayError(true);
-    } finally {
-      setDayLoading(false);
-    }
-  };
 
   // Film filter: exact normalized match first; otherwise accept a scraped
   // title that is the wanted title followed by a qualifier ("weapons 2025",

@@ -1556,10 +1556,13 @@ namespace Backend.Controllers
             // prompt — resetting it here is what makes fixing the flag
             // actually visible, instead of the count staying stuck at whatever
             // it was before the correction.
+            var cinemaChanged = req.CinemaName != null
+                && !string.Equals(req.CinemaName.Trim(), group.CinemaName, StringComparison.OrdinalIgnoreCase);
             var showtimeChanged =
+                cinemaChanged ||
                 (req.ShowDate != null && req.ShowDate != group.ShowDate) ||
                 (req.ShowTime != null && req.ShowTime != group.ShowTime) ||
-                (req.ScreeningTime.HasValue && req.ScreeningTime != group.ScreeningTime);
+                (req.ScreeningTime.HasValue && ToUtc(req.ScreeningTime) != group.ScreeningTime);
 
             if (req.FilmName != null)
             {
@@ -1612,8 +1615,10 @@ namespace Backend.Controllers
                         .FirstOrDefaultAsync()) ?? group.HostName;
                 await NotifyMembersAsync(
                     id,
-                    "Showtime updated",
-                    $"{editorName} updated {group.FilmName}'s date/time to {group.ShowDate} at {group.ShowTime}.",
+                    cinemaChanged ? "Showing changed" : "Showtime updated",
+                    cinemaChanged
+                        ? $"{editorName} moved {group.FilmName} to {group.CinemaName}, {group.ShowDate} at {group.ShowTime}."
+                        : $"{editorName} updated {group.FilmName}'s date/time to {group.ShowDate} at {group.ShowTime}.",
                     excludeUserId: userId
                 );
             }

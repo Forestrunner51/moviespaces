@@ -36,6 +36,7 @@ import { reportContent } from "@/frontend/services/moderation";
 import { Avatar, AvatarStack } from "@/frontend/components/avatar";
 import { useProfiles } from "@/frontend/hooks/use-profiles";
 import { useForegroundPoll } from "@/frontend/hooks/use-foreground-poll";
+import { ShowtimePicker, ShowtimeSelection } from "@/frontend/components/showtime-picker";
 import { formatEventDate } from "@/frontend/utils/event-date";
 import { membershipLabel } from "@/frontend/constants/theater-memberships";
 import { useToast } from "@/frontend/components/toast";
@@ -485,6 +486,12 @@ export default function GroupScreen() {
   const [editTimeValue, setEditTimeValue] = useState<Date | null>(null);
   const [editDatePickerVisible, setEditDatePickerVisible] = useState(false);
   const [editTimePickerVisible, setEditTimePickerVisible] = useState(false);
+  // Theater crews edit by picking a real showing (theater → day → time of
+  // this film), prefilled with the current one, instead of free-text venue
+  // + generic pickers. Everything a crew has is already a real showing.
+  const [editShowtime, setEditShowtime] = useState<ShowtimeSelection | null>(null);
+  const isTheaterCrewOf = (g: Group | null) =>
+    !!g?.matchMovieKey && g.spaceType !== "private_rental";
 
   // Crew "ticket in hand" toggle — own row only, optimistic, refetch after.
   const [ticketSaving, setTicketSaving] = useState(false);
@@ -525,6 +532,20 @@ export default function GroupScreen() {
     setEditTimeValue(valid);
     setEditDatePickerVisible(false);
     setEditTimePickerVisible(false);
+    if (isTheaterCrewOf(group) && valid) {
+      setEditShowtime({
+        theaterSlug: "",
+        theaterName: group.cinemaName,
+        latitude: null,
+        longitude: null,
+        movieTitle: group.filmName,
+        date: formatEditDate(valid),
+        minutes: valid.getHours() * 60 + valid.getMinutes(),
+        label: group.showTime || formatEditTime(valid),
+      });
+    } else {
+      setEditShowtime(null);
+    }
     setEditModalVisible(true);
   };
 
@@ -544,6 +565,30 @@ export default function GroupScreen() {
   }, [openEdit, group, currentUserId]);
 
   const handleSaveEdit = async () => {
+    // Theater crew: the picker is the whole form.
+    if (isTheaterCrewOf(group)) {
+      if (!editShowtime) {
+        showToast("Pick a showing.");
+        return;
+      }
+      const [y, mo, d] = editShowtime.date.split("-").map(Number);
+      const at = new Date(y, mo - 1, d, Math.floor(editShowtime.minutes / 60), editShowtime.minutes % 60, 0, 0);
+      setSaving(true);
+      const okCrew = await runGroupAction("/edit", {
+        body: JSON.stringify({
+          cinemaName: editShowtime.theaterName,
+          showDate: editShowtime.date,
+          showTime: editShowtime.label,
+          screeningTime: at.toISOString(),
+        }),
+      });
+      if (okCrew) {
+        await fetchGroup();
+        setEditModalVisible(false);
+      }
+      setSaving(false);
+      return;
+    }
     if ((!isCrew && !editFilmName.trim()) || !editCinemaName.trim()) {
       showToast(isCrew ? "Venue can't be blank." : "Title and venue can't be blank.");
       return;
@@ -1438,7 +1483,7 @@ export default function GroupScreen() {
             <Text style={styles.modalTitle}>{isCrew ? "Set the showtime" : "Edit Space"}</Text>
             <Text style={styles.modalSubtitle}>
               {isCrew
-                ? "Anyone in the crew can set or fix the theater and time — agree in chat first."
+                ? "Pick a different showing if plans change — everyone in the crew gets notified."
                 : "Fixing the date or time clears any \u201cflagged as outdated\u201d reports on this Space."}
             </Text>
             {/* A crew's film and size are fixed — see EditGroup, which also
@@ -1453,6 +1498,17 @@ export default function GroupScreen() {
                 maxLength={200}
               />
             )}
+            {isTheaterCrewOf(group) ? (
+              // The crew's showing is real data: show the picker landed on
+              // its theater and day with this film's times, not a venue
+              // text box. Everyone is pushed when it changes (EditGroup).
+              <ShowtimePicker
+                selection={editShowtime}
+                onSelect={setEditShowtime}
+                filterTitle={group.filmName}
+              />
+            ) : (
+            <>
             <TextInput
               style={styles.modalInput}
               placeholder="Venue"
@@ -1514,6 +1570,8 @@ export default function GroupScreen() {
                 }}
                 onDismiss={() => setEditTimePickerVisible(false)}
               />
+            )}
+            </>
             )}
             {!isCrew && (
               <TextInput
