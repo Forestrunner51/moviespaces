@@ -11,7 +11,7 @@ import {
 import { router, useFocusEffect } from "expo-router";
 import { Ionicons } from "@expo/vector-icons";
 import { Starfield } from "@/frontend/components/starfield";
-import { SpaceStyles, Palette, Type, Display } from "@/frontend/constants/theme";
+import { SpaceStyles, Palette, Type, Display, Font, Radius } from "@/frontend/constants/theme";
 import { MoviePoster } from "@/frontend/components/movie-poster";
 import { AvatarStack } from "@/frontend/components/avatar";
 import { CoachTip } from "@/frontend/components/coach-tip";
@@ -250,11 +250,27 @@ export default function HomeScreen() {
     }, []),
   );
 
+  // Read off the real clock, same as every relative label on this screen.
+  const todayLabel = new Date().toLocaleDateString("en-US", {
+    weekday: "long",
+    month: "long",
+    day: "numeric",
+  });
+
   return (
     <Starfield>
       <ScrollView style={styles.flex} contentContainerStyle={styles.container}>
-        <Text style={[styles.title, SpaceStyles.glowText, SpaceStyles.wordmark, styles.titleSpacing]}>MovieSpaces</Text>
-        <Text style={styles.chooseSubtitle}>What do you want to do?</Text>
+        {/* Header reads top-down as brand → moment → question: a small
+            tracked wordmark, today's date as the marquee line, then a
+            headline in the body face asking the only thing that matters on
+            this screen. The wordmark used to be the 32px headline itself,
+            which spent the biggest type on the screen saying the app's own
+            name to someone who already opened it. */}
+        <View style={styles.header}>
+          <Text style={[SpaceStyles.wordmark, styles.wordmark]}>MovieSpaces</Text>
+          <Text style={styles.dateLine}>{todayLabel}</Text>
+          <Text style={styles.headline}>Who are you{"\n"}watching with?</Text>
+        </View>
 
         <CoachTip id="home-welcome" icon="hand-left-outline">
           Welcome! Start by joining a screening near you, or create your own — your Spaces,
@@ -267,17 +283,24 @@ export default function HomeScreen() {
             used to end in "you've created something nobody is in." */}
         <TouchableOpacity
           activeOpacity={0.85}
-          style={styles.chooseCard}
+          style={styles.heroCard}
           onPress={() => router.push({ pathname: "/(tabs)/explore" })}
+          accessibilityRole="button"
+          accessibilityLabel="Find a Space to join"
         >
-          <Ionicons name="telescope-outline" size={28} color={Palette.accent} />
+          <View style={styles.heroIcon}>
+            <Ionicons name="telescope-outline" size={26} color={Palette.base} />
+          </View>
           <View style={{ flex: 1 }}>
-            <Text style={styles.chooseCardTitle}>Find a Space to Join</Text>
-            <Text style={styles.chooseCardSubtitle}>
-              Browse public screenings and watch parties happening near you
+            <Text style={styles.heroKicker}>Tonight, near you</Text>
+            <Text style={styles.heroTitle}>Find a Space to join</Text>
+            <Text style={styles.heroSubtitle}>
+              Public screenings, watch parties and movie crews forming now
             </Text>
           </View>
-          <Ionicons name="chevron-forward" size={20} color={Palette.textMuted} />
+          <View style={styles.heroArrow}>
+            <Ionicons name="arrow-forward" size={18} color={Palette.accent} />
+          </View>
         </TouchableOpacity>
 
         {/* Hosting is the secondary path (a new user with no friends yet
@@ -285,7 +308,7 @@ export default function HomeScreen() {
             row instead of two more full-width cards — four identical
             full-width cards in a column read as a wall. Titles say where it
             happens, not just what you do. */}
-        <Text style={styles.hostLabel}>Or host your own</Text>
+        <Text style={styles.sectionTitle}>Or host your own</Text>
         <View style={styles.hostRow}>
           <TouchableOpacity
             activeOpacity={0.85}
@@ -293,20 +316,28 @@ export default function HomeScreen() {
             onPress={() =>
               router.push({ pathname: "/create-space", params: { spaceType: "public_gathering" } })
             }
+            accessibilityRole="button"
+            accessibilityLabel="See a movie at a theater"
           >
-            <Ionicons name="film-outline" size={24} color={Palette.accent} />
-            <Text style={styles.chooseCardTitle}>See a Movie at a Theater</Text>
-            <Text style={styles.chooseCardSubtitle}>Pick a showtime, invite friends</Text>
+            <View style={styles.hostIcon}>
+              <Ionicons name="film-outline" size={20} color={Palette.accent} />
+            </View>
+            <Text style={styles.hostTitle}>At a theater</Text>
+            <Text style={styles.hostSubtitle}>Pick a showtime, bring people along</Text>
           </TouchableOpacity>
 
           <TouchableOpacity
             activeOpacity={0.85}
             style={styles.hostCard}
             onPress={() => router.push("/rent-a-theater")}
+            accessibilityRole="button"
+            accessibilityLabel="Host at your own venue"
           >
-            <Ionicons name="storefront-outline" size={24} color={Palette.accent} />
-            <Text style={styles.chooseCardTitle}>Host at Your Own Venue</Text>
-            <Text style={styles.chooseCardSubtitle}>Your place, a bar, or a rented space</Text>
+            <View style={styles.hostIcon}>
+              <Ionicons name="storefront-outline" size={20} color={Palette.accent} />
+            </View>
+            <Text style={styles.hostTitle}>At your place</Text>
+            <Text style={styles.hostSubtitle}>Your couch, a bar, a rented room</Text>
           </TouchableOpacity>
         </View>
 
@@ -438,16 +469,52 @@ const styles = StyleSheet.create({
     paddingHorizontal: 16,
     paddingBottom: 40,
   },
-  title: { ...Display.heading, color: Palette.text },
-  titleSpacing: { marginBottom: 12 },
-  chooseSubtitle: { ...Type.small, color: Palette.textMuted, marginBottom: 20 },
-  chooseCard: {
+  header: { marginBottom: 18 },
+  wordmark: { fontSize: 16, lineHeight: 20, color: Palette.textFaint, marginBottom: 14 },
+  dateLine: { ...Display.section, color: Palette.accent, marginBottom: 6 },
+  headline: {
+    fontFamily: Font.bold,
+    fontSize: 30,
+    lineHeight: 35,
+    letterSpacing: -0.4,
+    color: Palette.text,
+  },
+  heroCard: {
     ...SpaceStyles.glassCard,
+    borderColor: Palette.accentBorder,
+    backgroundColor: Palette.accentDim,
     flexDirection: "row",
     alignItems: "center",
     gap: 14,
     padding: 16,
-    marginBottom: 12,
+    marginBottom: 6,
+  },
+  heroIcon: {
+    width: 48,
+    height: 48,
+    borderRadius: Radius.pill,
+    backgroundColor: Palette.accent,
+    alignItems: "center",
+    justifyContent: "center",
+  },
+  heroKicker: {
+    ...Type.caption,
+    fontFamily: Font.semibold,
+    color: Palette.accent,
+    textTransform: "uppercase",
+    letterSpacing: 0.8,
+    marginBottom: 2,
+  },
+  heroTitle: { fontFamily: Font.bold, fontSize: 19, lineHeight: 24, color: Palette.text },
+  heroSubtitle: { ...Type.small, color: Palette.textMuted, marginTop: 3 },
+  heroArrow: {
+    width: 34,
+    height: 34,
+    borderRadius: Radius.pill,
+    borderWidth: 1,
+    borderColor: Palette.accentBorder,
+    alignItems: "center",
+    justifyContent: "center",
   },
   codeEntryLink: {
     flexDirection: "row",
@@ -457,23 +524,27 @@ const styles = StyleSheet.create({
     paddingVertical: 10,
     marginBottom: 6,
   },
-  codeEntryLinkText: { ...Type.small, color: Palette.textMuted, fontWeight: "600" },
-  chooseCardTitle: {
-    ...Type.body,
-    fontWeight: "600",
-    color: Palette.text,
-    marginBottom: 2,
-  },
-  chooseCardSubtitle: { ...Type.small, color: Palette.textMuted },
-  hostLabel: { ...Type.small, color: Palette.textMuted, marginTop: 4, marginBottom: 10 },
-  hostRow: { flexDirection: "row", gap: 12, marginBottom: 12 },
+  codeEntryLinkText: { ...Type.small, fontFamily: Font.semibold, color: Palette.textMuted },
+  hostRow: { flexDirection: "row", gap: 12, marginBottom: 4 },
   hostCard: {
     ...SpaceStyles.glassCard,
     flex: 1,
     padding: 14,
-    gap: 6,
     alignItems: "flex-start",
   },
+  hostIcon: {
+    width: 36,
+    height: 36,
+    borderRadius: Radius.pill,
+    backgroundColor: Palette.accentDim,
+    borderWidth: 1,
+    borderColor: Palette.accentBorder,
+    alignItems: "center",
+    justifyContent: "center",
+    marginBottom: 10,
+  },
+  hostTitle: { fontFamily: Font.bold, fontSize: 16, lineHeight: 20, color: Palette.text, marginBottom: 3 },
+  hostSubtitle: { ...Type.caption, color: Palette.textMuted },
   sectionTitle: {
     ...Display.section,
     color: Palette.textMuted,
@@ -487,7 +558,7 @@ const styles = StyleSheet.create({
   sectionLoading: { marginBottom: 16, alignSelf: "flex-start" },
   emptySection: { marginBottom: 20 },
   emptySectionText: { ...Type.small, color: Palette.textMuted, marginBottom: 8 },
-  emptySectionLink: { ...Type.small, color: Palette.accent, fontWeight: "700" },
+  emptySectionLink: { ...Type.small, fontFamily: Font.bold, color: Palette.accent },
   // flexGrow: 0 + alignItems: "flex-start" keeps items packed to the left of
   // the horizontal scroll area — without it, a short row (e.g. just one or
   // two cards) stretches to fill the FlatList's width and ends up looking
@@ -515,12 +586,12 @@ const styles = StyleSheet.create({
   spaceCardRelative: {
     ...Type.caption,
     color: Palette.accent,
-    fontWeight: "700",
+    fontFamily: Font.bold,
     textTransform: "uppercase",
     letterSpacing: 0.4,
     flexShrink: 1,
   },
-  spaceCardTitle: { ...Type.small, fontWeight: "600", color: Palette.text },
+  spaceCardTitle: { ...Type.small, fontFamily: Font.semibold, color: Palette.text },
   spaceCardSubtitle: { ...Type.caption, color: Palette.textMuted },
   spaceCardFooter: { flexDirection: "row", alignItems: "center", gap: 6, marginTop: 10 },
   spaceCardGoing: { ...Type.caption, color: Palette.textFaint },
@@ -529,6 +600,6 @@ const styles = StyleSheet.create({
     width: 160,
     padding: 14,
   },
-  clubChipTitle: { ...Type.small, fontWeight: "600", color: Palette.text, marginBottom: 4 },
+  clubChipTitle: { ...Type.small, fontFamily: Font.semibold, color: Palette.text, marginBottom: 4 },
   clubChipSubtitle: { ...Type.caption, color: Palette.textMuted },
 });

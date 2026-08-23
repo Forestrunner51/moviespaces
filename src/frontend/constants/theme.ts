@@ -121,19 +121,35 @@ export const SpaceTheme = {
 // ad hoc per screen (10,11,12,13,14,15,16,17,18,20,22,24,26,28,30,32,46),
 // which is what makes an interface read as unconsidered — the eye picks up
 // the inconsistent rhythm even when no single screen looks wrong.
+// Body face. Karla — a grotesque with a slightly quirky, hand-drawn feel
+// (the open 'a', the angled terminals) that reads as chosen rather than
+// defaulted. Deliberately NOT the system font, Inter, Roboto or a geometric
+// (DM Sans / Outfit / Plus Jakarta): those are what every generated UI ships
+// with, and the body text is 95% of what a person reads, so it's where the
+// app's voice actually lives. Loaded at runtime in the root layout next to
+// Bebas. On iOS, expo-font registers the whole family under one alias, so a
+// `fontWeight` on a Karla style resolves to the matching loaded weight —
+// still, prefer the explicit `Font.*` families below for new code.
+export const Font = {
+  regular: "Karla_400Regular",
+  medium: "Karla_500Medium",
+  semibold: "Karla_600SemiBold",
+  bold: "Karla_700Bold",
+} as const;
+
 export const Type = {
   // Metadata, timestamps, badge text.
-  caption: { fontSize: 12, lineHeight: 16 },
+  caption: { fontFamily: Font.regular, fontSize: 12, lineHeight: 16 },
   // Secondary/supporting copy.
-  small: { fontSize: 14, lineHeight: 20 },
+  small: { fontFamily: Font.regular, fontSize: 14, lineHeight: 20 },
   // Default body.
-  body: { fontSize: 16, lineHeight: 22 },
+  body: { fontFamily: Font.regular, fontSize: 16, lineHeight: 22 },
   // Card titles, section headers.
-  title: { fontSize: 20, lineHeight: 26 },
+  title: { fontFamily: Font.semibold, fontSize: 20, lineHeight: 26 },
   // Screen headings.
-  heading: { fontSize: 28, lineHeight: 34 },
+  heading: { fontFamily: Font.bold, fontSize: 28, lineHeight: 34 },
   // The event date on a Space — the primary content of an event app.
-  display: { fontSize: 34, lineHeight: 38 },
+  display: { fontFamily: Font.bold, fontSize: 34, lineHeight: 38 },
 } as const;
 
 // Three radii, not fifteen. Pill is for chips/avatars only.

@@ -5,6 +5,12 @@ import { DarkTheme, ThemeProvider, Stack, router, usePathname } from "expo-route
 import { useEffect, useRef, useState } from "react";
 import * as Sentry from "@sentry/react-native";
 import { useFonts, BebasNeue_400Regular } from "@expo-google-fonts/bebas-neue";
+import {
+  Karla_400Regular,
+  Karla_500Medium,
+  Karla_600SemiBold,
+  Karla_700Bold,
+} from "@expo-google-fonts/karla";
 import "@/frontend/services/sentry";
 import { AnimatedSplashOverlay } from "@/frontend/components/animated-icon";
 import { supabase } from "@/frontend/config/supabase";
@@ -49,7 +55,13 @@ function Layout() {
   const [loading, setLoading] = useState(true);
   // Display font for the wordmark/titles. Rendering waits for it so titles
   // don't flash in the system font first, then snap to Bebas Neue.
-  const [fontsLoaded] = useFonts({ BebasNeue_400Regular });
+  const [fontsLoaded] = useFonts({
+    BebasNeue_400Regular,
+    Karla_400Regular,
+    Karla_500Medium,
+    Karla_600SemiBold,
+    Karla_700Bold,
+  });
   const pathname = usePathname();
   // Read via ref (not the `pathname` closure) inside the callbacks below —
   // those are registered once by a mount-only effect, so a plain closure
