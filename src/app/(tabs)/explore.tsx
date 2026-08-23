@@ -307,7 +307,7 @@ export default function ExploreScreen() {
           </View>
           <View style={{ flex: 1 }}>
             <Text style={styles.crewHeroKicker}>MOVIE CREW</Text>
-            <Text style={styles.crewHeroTitle}>Get seated with strangers who want the same film</Text>
+            <Text style={styles.crewHeroTitle}>Make new friends over the same film</Text>
             <Text style={styles.crewHeroSub}>Pick a movie · we match you with up to 5 others · plan it together</Text>
           </View>
           <Ionicons name="chevron-forward" size={20} color={Palette.accent} />

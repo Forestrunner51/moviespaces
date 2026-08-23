@@ -116,7 +116,19 @@ interface MyClub {
   playedTodayCount: number;
 }
 
+// One of these per app open. Picked in a useState initializer so it's
+// stable for the life of the screen and only changes when Home remounts.
+const HEADLINES = [
+  "Who are you\nwatching with?",
+  "Big screen,\nnew faces.",
+  "Pick a film.\nFind your crew.",
+  "Nobody should\nsee it alone.",
+  "What are we\nseeing tonight?",
+  "Good movie.\nBetter company.",
+];
+
 export default function HomeScreen() {
+  const [headline] = useState(() => HEADLINES[Math.floor(Math.random() * HEADLINES.length)]);
   // Raw, unfiltered feed — the random-2 pick and the "exclude my own"
   // filter both need the full list to draw from, not just whatever survived
   // an earlier pick.
@@ -204,7 +216,7 @@ export default function HomeScreen() {
         <View style={styles.header}>
           <Text style={[SpaceStyles.wordmark, styles.wordmark]}>MovieSpaces</Text>
           <Text style={styles.dateLine}>{todayLabel}</Text>
-          <Text style={styles.headline}>Who are you{"\n"}watching with?</Text>
+          <Text style={styles.headline}>{headline}</Text>
         </View>
 
         <CoachTip id="home-welcome" icon="hand-left-outline">
@@ -220,14 +232,14 @@ export default function HomeScreen() {
           style={styles.heroCard}
           onPress={() => router.push("/match")}
           accessibilityRole="button"
-          accessibilityLabel="Get seated with a movie crew"
+          accessibilityLabel="Make new friends in a movie crew"
         >
           <View style={styles.heroIcon}>
             <Ionicons name="people" size={24} color={Palette.base} />
           </View>
           <View style={{ flex: 1 }}>
             <Text style={styles.heroKicker}>Movie Crew</Text>
-            <Text style={styles.heroTitle}>Get seated with strangers</Text>
+            <Text style={styles.heroTitle}>Make some new friends</Text>
             <Text style={styles.heroSubtitle}>
               Pick a film and a showing — we put you in a crew of up to 6 who picked the same
             </Text>
@@ -237,25 +249,50 @@ export default function HomeScreen() {
           </View>
         </TouchableOpacity>
 
-        {/* Quiet action row: hosting is two taps away on the tabs anyway. */}
-        <View style={styles.actionRow}>
+        {/* Hosting: two cards with a line each on what they mean, under the
+            crew hero so joining still leads. */}
+        <Text style={styles.sectionTitle}>Or host your own</Text>
+        <View style={styles.hostRow}>
           <TouchableOpacity
-            activeOpacity={0.7}
-            style={styles.actionLink}
+            activeOpacity={0.85}
+            style={styles.hostCard}
             onPress={() => router.push({ pathname: "/create-space", params: { spaceType: "public_gathering" } })}
+            accessibilityRole="button"
+            accessibilityLabel="Host at a theater"
           >
-            <Ionicons name="film-outline" size={15} color={Palette.accent} />
-            <Text style={styles.actionLinkText}>Host at a theater</Text>
+            <View style={styles.hostIcon}>
+              <Ionicons name="film-outline" size={20} color={Palette.accent} />
+            </View>
+            <Text style={styles.hostTitle}>At a theater</Text>
+            <Text style={styles.hostBody}>
+              Pick a real showing near you and open it up — friends or anyone can join.
+            </Text>
           </TouchableOpacity>
-          <TouchableOpacity activeOpacity={0.7} style={styles.actionLink} onPress={() => router.push("/rent-a-theater")}>
-            <Ionicons name="home-outline" size={15} color={Palette.accent} />
-            <Text style={styles.actionLinkText}>Host at your place</Text>
-          </TouchableOpacity>
-          <TouchableOpacity activeOpacity={0.7} style={styles.actionLink} onPress={() => router.push("/join-by-code")}>
-            <Ionicons name="key-outline" size={15} color={Palette.textMuted} />
-            <Text style={[styles.actionLinkText, { color: Palette.textMuted }]}>Have a code?</Text>
+          <TouchableOpacity
+            activeOpacity={0.85}
+            style={styles.hostCard}
+            onPress={() => router.push("/rent-a-theater")}
+            accessibilityRole="button"
+            accessibilityLabel="Host at your own place"
+          >
+            <View style={styles.hostIcon}>
+              <Ionicons name="home-outline" size={20} color={Palette.accent} />
+            </View>
+            <Text style={styles.hostTitle}>At your place</Text>
+            <Text style={styles.hostBody}>
+              A watch party at home, a bar, or a rented room. You set the time and the guest list.
+            </Text>
           </TouchableOpacity>
         </View>
+        <TouchableOpacity
+          activeOpacity={0.7}
+          style={styles.codeLink}
+          onPress={() => router.push("/join-by-code")}
+          accessibilityRole="button"
+        >
+          <Ionicons name="key-outline" size={14} color={Palette.textMuted} />
+          <Text style={styles.codeLinkText}>Have a Space code?</Text>
+        </TouchableOpacity>
 
         {myClubs.length > 0 && (
           <>
@@ -373,19 +410,35 @@ const styles = StyleSheet.create({
     alignItems: "center",
     justifyContent: "center",
   },
-  actionRow: { flexDirection: "row", flexWrap: "wrap", gap: 8, marginTop: 10, marginBottom: 8 },
-  actionLink: {
+  hostRow: { flexDirection: "row", gap: 12 },
+  hostCard: {
+    ...SpaceStyles.glassCard,
+    flex: 1,
+    padding: 14,
+    alignItems: "flex-start",
+  },
+  hostIcon: {
+    width: 38,
+    height: 38,
+    borderRadius: Radius.pill,
+    backgroundColor: Palette.accentDim,
+    borderWidth: 1,
+    borderColor: Palette.accentBorder,
+    alignItems: "center",
+    justifyContent: "center",
+    marginBottom: 10,
+  },
+  hostTitle: { fontFamily: Font.bold, fontSize: 17, lineHeight: 22, color: Palette.text, marginBottom: 4 },
+  hostBody: { ...Type.caption, fontSize: 13, lineHeight: 18, color: Palette.textMuted },
+  codeLink: {
     flexDirection: "row",
     alignItems: "center",
+    justifyContent: "center",
     gap: 6,
-    paddingVertical: 7,
-    paddingHorizontal: 12,
-    borderRadius: Radius.pill,
-    borderWidth: 1,
-    borderColor: Palette.border,
-    backgroundColor: Palette.fill,
+    paddingVertical: 12,
+    marginBottom: 4,
   },
-  actionLinkText: { ...Type.small, fontFamily: Font.semibold, color: Palette.accent },
+  codeLinkText: { ...Type.small, fontFamily: Font.semibold, color: Palette.textMuted },
   // Feed
   feedHeader: { flexDirection: "row", alignItems: "center", justifyContent: "space-between", marginTop: 16, marginBottom: 12 },
   feedSeeAll: { ...Type.small, fontFamily: Font.semibold, color: Palette.accent },
