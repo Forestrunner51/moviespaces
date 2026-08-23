@@ -68,6 +68,16 @@ export default function AuthScreen() {
     if (fullName) {
       await AsyncStorage.setItem("userName", fullName);
     }
+    // A brand-new SSO account gets onboarding regardless of the per-device
+    // flag, same as email signup. Supabase doesn't flag "just created", but
+    // an account created within the last couple of minutes is one that this
+    // sign-in just made.
+    const createdAt = user?.created_at ? new Date(user.created_at).getTime() : 0;
+    const isNewAccount = createdAt > 0 && Date.now() - createdAt < 2 * 60 * 1000;
+    if (isNewAccount) {
+      router.replace("/onboarding-interests");
+      return;
+    }
     await afterAuthSuccess(router);
   };
 

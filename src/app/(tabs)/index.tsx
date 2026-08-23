@@ -55,6 +55,9 @@ interface MySpace {
   showTime: string;
   screeningTime: string | null;
   isPublic: boolean;
+  // Non-null for a Movie Crew: IsPublic like a club, but it's a real
+  // gathering the user is attending, so it belongs with their Spaces.
+  matchMovieKey: string | null;
   status: string;
   spaceType: string;
   eventCategory: string | null;
@@ -222,7 +225,7 @@ export default function HomeScreen() {
             // Community Spaces have their own row below — this section is
             // for real one-off gatherings/rentals the user is actually
             // attending. Same past/evergreen logic as group.tsx's hasPassed.
-            .filter((s) => !s.isPublic && s.status !== "cancelled")
+            .filter((s) => (!s.isPublic || !!s.matchMovieKey) && s.status !== "cancelled")
             .filter((s) => !s.screeningTime || new Date(s.screeningTime).getTime() >= now)
             .sort((a, b) => {
               if (!a.screeningTime) return 1;

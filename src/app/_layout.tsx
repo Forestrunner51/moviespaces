@@ -7,6 +7,7 @@ import * as Sentry from "@sentry/react-native";
 import { useFonts, BebasNeue_400Regular } from "@expo-google-fonts/bebas-neue";
 import {
   Karla_400Regular,
+  Karla_400Regular_Italic,
   Karla_500Medium,
   Karla_600SemiBold,
   Karla_700Bold,
@@ -58,6 +59,9 @@ function Layout() {
   const [fontsLoaded] = useFonts({
     BebasNeue_400Regular,
     Karla_400Regular,
+    // Two screens set fontStyle: "italic" on a Type token; without a loaded
+    // italic face iOS silently renders them upright.
+    Karla_400Regular_Italic,
     Karla_500Medium,
     Karla_600SemiBold,
     Karla_700Bold,
