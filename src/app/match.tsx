@@ -21,6 +21,12 @@ import { authFetch } from "@/frontend/services/api";
 import { resolveDisplayName } from "@/frontend/services/display-name";
 import { searchMovies, Movie } from "@/frontend/services/movies";
 import { formatEventDate } from "@/frontend/utils/event-date";
+import {
+  fetchNearbyTheaters,
+  getDeviceLocation,
+  type Coordinates,
+  type NearbyTheater,
+} from "@/frontend/services/nearby-theaters";
 
 // Keep in sync with GroupController.MatchCrewSize.
 const MATCH_CREW_SIZE = 6;
@@ -168,6 +174,42 @@ export default function MatchScreen() {
 
   // --- venue: place + time ---
   const [venueName, setVenueName] = useState("");
+  // Google Places typeahead for the place (same text-search endpoint the
+  // theater modal in create-space uses — it returns any place or address,
+  // not just theaters), so nobody has to paste an address by hand. Picking
+  // a result also carries coordinates onto the crew for distance/directions.
+  const [placePick, setPlacePick] = useState<NearbyTheater | null>(null);
+  const [placeResults, setPlaceResults] = useState<NearbyTheater[] | null>(null);
+  const [placeSearching, setPlaceSearching] = useState(false);
+  const [coords, setCoords] = useState<Coordinates | null>(null);
+  useEffect(() => {
+    if (stage !== "venueShowing" || coords) return;
+    getDeviceLocation().then((c) => c && setCoords(c)).catch(() => {});
+  }, [stage, coords]);
+  const placeTimer = useRef<ReturnType<typeof setTimeout> | null>(null);
+  const onVenueText = (text: string) => {
+    setVenueName(text);
+    setPlacePick(null);
+    if (placeTimer.current) clearTimeout(placeTimer.current);
+    const q = text.trim();
+    if (q.length < 2 || !coords) {
+      setPlaceResults(null);
+      setPlaceSearching(false);
+      return;
+    }
+    setPlaceSearching(true);
+    placeTimer.current = setTimeout(() => {
+      fetchNearbyTheaters(coords, 40233.6, q)
+        .then((r) => setPlaceResults(r.slice(0, 6)))
+        .catch(() => setPlaceResults([]))
+        .finally(() => setPlaceSearching(false));
+    }, 400);
+  };
+  const pickPlace = (pl: NearbyTheater) => {
+    setPlacePick(pl);
+    setVenueName(pl.address && !pl.name.includes(pl.address) ? `${pl.name}, ${pl.address}` : pl.name);
+    setPlaceResults(null);
+  };
   const [dateValue, setDateValue] = useState<Date | null>(null);
   const [timeValue, setTimeValue] = useState<Date | null>(null);
   const [datePickerVisible, setDatePickerVisible] = useState(false);
@@ -259,10 +301,12 @@ export default function MatchScreen() {
     const combined = new Date(dateValue);
     combined.setHours(timeValue.getHours(), timeValue.getMinutes(), 0, 0);
     return submit({
-      CinemaName: venueName.trim(),
+      CinemaName: venueName.trim().slice(0, 250),
       ScreeningTime: combined.toISOString(),
       ShowDate: formatDate(combined),
       ShowTime: formatTime(combined),
+      TheaterLatitude: placePick?.latitude ?? null,
+      TheaterLongitude: placePick?.longitude ?? null,
     });
   };
 
@@ -575,14 +619,54 @@ export default function MatchScreen() {
             <Text style={styles.title}>Where and when?</Text>
             <ScrollView keyboardShouldPersistTaps="handled" contentContainerStyle={{ paddingBottom: 60 }}>
               <Text style={styles.stepLabel}>PLACE</Text>
-              <TextInput
-                style={styles.field}
-                placeholder="Your address, a bar, a rented room…"
-                placeholderTextColor={Palette.textFaint}
-                value={venueName}
-                onChangeText={setVenueName}
-                maxLength={250}
-              />
+              <View style={styles.placeBox}>
+                <Ionicons name="location-outline" size={18} color={Palette.textMuted} />
+                <TextInput
+                  style={styles.placeInput}
+                  placeholder="Search a bar, a venue, or an address…"
+                  placeholderTextColor={Palette.textFaint}
+                  value={venueName}
+                  onChangeText={onVenueText}
+                  maxLength={250}
+                  autoCorrect={false}
+                  clearButtonMode="while-editing"
+                />
+                {placeSearching && <ActivityIndicator color={Palette.accent} size="small" />}
+                {placePick && !placeSearching && (
+                  <Ionicons name="checkmark-circle" size={18} color={Palette.positive} />
+                )}
+              </View>
+              {!coords && venueName.trim().length >= 2 && (
+                <Text style={styles.placeHint}>
+                  Turn on location to search places — or type the address as-is.
+                </Text>
+              )}
+              {placeResults && placeResults.length > 0 && (
+                <View style={styles.placeList}>
+                  {placeResults.map((pl) => (
+                    <TouchableOpacity
+                      key={pl.placeId}
+                      activeOpacity={0.8}
+                      style={styles.placeRow}
+                      onPress={() => pickPlace(pl)}
+                      accessibilityRole="button"
+                      accessibilityLabel={`${pl.name}, ${pl.address}`}
+                    >
+                      <Text style={styles.placeName} numberOfLines={1}>
+                        {pl.name}
+                      </Text>
+                      {!!pl.address && (
+                        <Text style={styles.placeAddress} numberOfLines={1}>
+                          {pl.address}
+                        </Text>
+                      )}
+                    </TouchableOpacity>
+                  ))}
+                </View>
+              )}
+              {placeResults && placeResults.length === 0 && !placeSearching && (
+                <Text style={styles.placeHint}>No places found — you can keep the text as typed.</Text>
+              )}
               <Text style={styles.stepLabel}>DATE</Text>
               <TouchableOpacity
                 activeOpacity={0.8}
@@ -777,6 +861,29 @@ const styles = StyleSheet.create({
   // forms
   stepLabel: { ...Display.section, color: Palette.textMuted, marginTop: 12, marginBottom: 6 },
   field: { ...SpaceStyles.field, ...Type.body, color: Palette.text, padding: 12 },
+  placeBox: {
+    ...SpaceStyles.field,
+    flexDirection: "row",
+    alignItems: "center",
+    gap: 8,
+    paddingVertical: 12,
+    paddingHorizontal: 12,
+  },
+  placeInput: { flex: 1, ...Type.body, color: Palette.text, padding: 0 },
+  placeHint: { ...Type.caption, color: Palette.textFaint, marginTop: 6 },
+  placeList: {
+    ...SpaceStyles.glassCard,
+    marginTop: 6,
+    overflow: "hidden",
+  },
+  placeRow: {
+    paddingVertical: 10,
+    paddingHorizontal: 12,
+    borderBottomWidth: 1,
+    borderBottomColor: Palette.border,
+  },
+  placeName: { ...Type.small, fontFamily: Font.semibold, color: Palette.text },
+  placeAddress: { ...Type.caption, color: Palette.textMuted, marginTop: 1 },
   pickerField: {
     ...SpaceStyles.field,
     flexDirection: "row",
