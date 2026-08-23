@@ -1,6 +1,6 @@
 # MovieSpaces — Technical Product Status & Launch Plan
 
-**Owner:** solo dev · **Status doc date:** 2026‑08‑08, refreshed 2026‑08‑23 · **Goal: ship to the App Store and be done.**
+**Owner:** solo dev · **Status doc date:** 2026‑08‑08, refreshed 2026‑08‑23 (evening) · **Goal: ship to the App Store and be done.**
 **Companion doc:** `LAUNCH_CHECKLIST.md` (tactical, tick-through). This doc is the architectural + PM view.
 
 > Written to be read cold by a new session. The previous version of this doc was dated 2026‑07‑24 and was badly stale — treat anything not in this file as unverified.
@@ -71,7 +71,9 @@ Everything here is committed on `main` and deployed unless noted.
 
 ---
 
-## 3b. What changed 2026‑08‑22 → 08‑23 (deployed through `4a00466` via PR #122; the rest awaits PR #123)
+## 3b. What changed 2026‑08‑22 → 08‑23 (deployed through `4a00466` via PR #122; the rest awaits PR #123 — ~29 commits, three EF migrations: `AddMatchMovieKeyToGroups` [live], `AddHasTicketToGroupMembers`, `AddAfterActivitiesToGroupMembers`)
+
+**Added 08‑23 evening (all on the branch, pushed):** venue-crew Google Places typeahead for the place field (+ coordinates), optional total cost on venue crews (split per person), Done buttons + inline validation on the venue form, one-line breadcrumbs, Spaces tab badge (unread chats + DMs + pending requests), auth-screen slogan ("We believe movies are a social event."), tab label "Spaces", **per-member "up for after" votes** — and then unified across the app: hosted Spaces use the same vote chips (host's creation picks pre-seed their votes; old badge list gone) and the ticket flag now works on hosted theater Spaces too (watch parties still 400). Theater crews pick a real showing via ShowtimePicker (limited to 60 mi with location; no "show all 800" without); the crew edit sheet reopens the picker prefilled and pushes "<member> moved <film> to <theater>…" on change. Design rule adopted: **flows may differ by who holds authority; surfaces never differ.**
 
 **Movie Crew (match mode)** — `POST /api/group/match`, `GET /api/group/match/open`, `POST /{id}/ticket`. Flow: kind (theater / venue) → film → crews already forming for it (join one) → or pick a real showing (`ShowtimePicker` filtered to the film; venue crews name a place + date/time) → crew is created *with* a plan. Crews cap at 6, are keyed `theater:imdb:tt…` / `venue:…`, converge on identical theater showings (never on venue name — "Home, 8 PM" in two cities is two plans), close once their showtime passes, and any seated member can set the where/when (`EditGroup`; film/capacity are locked for crews). Self-reported "ticket in hand" flag + theater-membership badges (AMC A-List etc., already on profiles) per member. Ship decision: **don't gate on ticket ownership** — commitment is visible, not required.
 
@@ -90,7 +92,7 @@ Everything here is committed on `main` and deployed unless noted.
 
 **Decisions:**
 - [ ] Home + Explore merge into 4 tabs (Home absorbs Explore's search/filters; My Spaces → "My Plans" with a badge), or keep 5. Judge from the device.
-- [ ] Fandango affiliate (Impact): apply now; it's a config value, not code.
+- [ ] Fandango affiliate: **apply on CJ Affiliate** (cj.com publisher account, property `moviespaces.org`, apply to Fandango's program) — human-reviewed, days, parallel to App Review. Code is wired behind `EXPO_PUBLIC_AFFILIATE_TAG`; expect ~1h rework to CJ's real deep-link format after approval. Only host-pasted fandango.com links monetize. Do not hold the build for it.
 
 **Blocking the build:**
 - [x] **Rotate the Supabase `JwtSecret`** — DONE 2026‑08‑17. Migrated to asymmetric JWT signing keys + new API keys (`sb_publishable_`/`sb_secret_`); legacy anon/service_role keys disabled and the legacy secret revoked. Verified externally: a forged `service_role` token signed with the leaked secret (`15a1a5d5-…`, recovered from git history) is now rejected 401 by REST, the legacy key is out of JWKS, and the new keys work end‑to‑end (login, backend JWT validation, account deletion via Render). The value remains in git history but is now inert.
