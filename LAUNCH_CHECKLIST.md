@@ -52,8 +52,8 @@ Everything native only becomes real here: SSO, the "MovieSpaces" name, Bebas Neu
 - [x] **`Sentry__Dsn` set on Render** (backend crash reporting live). Still confirm the rest are set: `Omdb__ApiKey`, `GooglePlaces__ApiKey`, `Supabase__ServiceRoleKey`, `Supabase__Url`, `PostgresConnection`, `CineMind__PuzzleSalt`, `CineMind__AdminSecret`. (`CineMind__AdminSecret` confirmed present — a wrong-secret request returns 401, not the 500 a blank one would.)
 - [x] **Delete the inert `Sentry__AuthToken` env var from Render** if still there — the backend never reads it; the auth token belongs in EAS secrets, not Render.
 - [x] **Catalog re-seeded** — `surprise_me` flags populated, ~45 films added for Roulette genre coverage.
-- [ ] **Merge `feature/pushingdata` → `main`** (≈25 commits from 08‑22/23: Movie Crew, Home/My Spaces redesign, Karla, font-scale fix). Render runs `main`; nothing is live until this lands.
-- [ ] Confirm the deploy restarted and the two new EF migrations ran: `AddMatchMovieKeyToGroups`, `AddHasTicketToGroupMembers` (look for them in the Render boot log).
+- [ ] **Open + merge PR #123 (`feature/pushingdata` → `main`)** — the 12 commits after PR #122: showing-first crew flow + ticket badges, Home feed / My Spaces "You've got plans", celebration, profile stats, FAB, font-scale fix. PR #122 (08‑23 10:00) already deployed everything before that.
+- [ ] Confirm the deploy restarted and `AddHasTicketToGroupMembers` ran (Render boot log). `AddMatchMovieKeyToGroups` went live with PR #122.
 - [ ] Delete the three `matchtest-{a,b,c}-0822@moviespaces.org` test users from Supabase Auth.
 - [ ] All Supabase migrations applied to the production DB (friends-only DM policy, reports/blocks, etc.). EF migrations auto-apply on backend boot — confirm the Render deploy actually restarted.
 - [ ] Confirm the `AddGroupPosterPath` EF migration ran (poster feature) — the backend auto-migrates on boot

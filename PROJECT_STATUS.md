@@ -9,7 +9,7 @@
 
 ## 1. Executive read
 
-Feature-complete for v1. Typecheck clean, lint 0 errors, **52 backend tests passing**. **But: `feature/pushingdata` is ~25 commits ahead of `main`, and Render runs `main`** — nothing from 2026‑08‑22/23 is in production until it's merged. Two EF migrations (`AddMatchMovieKeyToGroups`, `AddHasTicketToGroupMembers`) apply automatically on the next backend boot.
+Feature-complete for v1. Typecheck clean, lint 0 errors, **52 backend tests passing**. **Production (`main`, PR #122 merged 2026‑08‑23 10:00) has everything through `4a00466`** — Movie Crew basics, its review fixes, Karla, the first Home redesign, the theater/venue split, and the `AddMatchMovieKeyToGroups` migration. **12 commits since are not deployed:** the showing-first crew flow + ticket/membership badges (with the `AddHasTicketToGroupMembers` migration), the Home feed / "You've got plans" in My Spaces, the celebration card, profile stats, the Find-a-crew FAB, and the font-scaling fix. They're pushed on `feature/pushingdata`; merge = PR #123.
 
 **The app's story is meeting new people over movies** — not coordinating with friends you already have. That framing (corrected by the owner 2026‑08‑22) is why the 08‑22/23 work happened: **Movie Crew** (pick a showing, get grouped with up to 5 strangers going to it), user-created clubs, a Home that leads with a feed of people going to things, and a "you've got plans" card. See §3.
 
@@ -71,7 +71,7 @@ Everything here is committed on `main` and deployed unless noted.
 
 ---
 
-## 3b. What changed 2026‑08‑22 → 08‑23 (all on `feature/pushingdata`, NOT yet deployed)
+## 3b. What changed 2026‑08‑22 → 08‑23 (deployed through `4a00466` via PR #122; the rest awaits PR #123)
 
 **Movie Crew (match mode)** — `POST /api/group/match`, `GET /api/group/match/open`, `POST /{id}/ticket`. Flow: kind (theater / venue) → film → crews already forming for it (join one) → or pick a real showing (`ShowtimePicker` filtered to the film; venue crews name a place + date/time) → crew is created *with* a plan. Crews cap at 6, are keyed `theater:imdb:tt…` / `venue:…`, converge on identical theater showings (never on venue name — "Home, 8 PM" in two cities is two plans), close once their showtime passes, and any seated member can set the where/when (`EditGroup`; film/capacity are locked for crews). Self-reported "ticket in hand" flag + theater-membership badges (AMC A-List etc., already on profiles) per member. Ship decision: **don't gate on ticket ownership** — commitment is visible, not required.
 
@@ -84,7 +84,7 @@ Everything here is committed on `main` and deployed unless noted.
 ## 4. What's still owed
 
 **First (20 minutes):**
-- [ ] **Merge `feature/pushingdata` → `main`** and confirm the Render deploy restarted (migrations apply on boot; check logs for `AddHasTicketToGroupMembers`).
+- [ ] **Open + merge PR #123 (`feature/pushingdata` → `main`)** — 12 commits since PR #122 — and confirm the Render deploy restarted (look for `AddHasTicketToGroupMembers` in the boot log; `AddMatchMovieKeyToGroups` is already live).
 - [ ] Delete the three `matchtest-{a,b,c}-0822@moviespaces.org` test accounts from Supabase Auth.
 - [ ] `brew install watchman`.
 
