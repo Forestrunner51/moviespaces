@@ -1,5 +1,12 @@
 import { useEffect, useState } from "react";
-import { View, Text, StyleSheet, TouchableOpacity, ActivityIndicator, ScrollView, TextInput } from "react-native";
+import {
+  View,
+  StyleSheet,
+  TouchableOpacity,
+  ActivityIndicator,
+  ScrollView,
+} from "react-native";
+import { Text, TextInput } from "@/frontend/components/scaled-text";
 import { Ionicons } from "@expo/vector-icons";
 import { SpaceStyles, Palette, Type, Radius } from "@/frontend/constants/theme";
 import {
@@ -37,9 +44,15 @@ export interface ShowtimeSelection {
 interface Props {
   selection: ShowtimeSelection | null;
   onSelect: (selection: ShowtimeSelection) => void;
+  // When the film is already decided (Movie Crew), only list that film's
+  // showings at each theater instead of the whole marquee.
+  filterTitle?: string;
 }
 
-export function ShowtimePicker({ selection, onSelect }: Props) {
+const normalizeTitle = (t: string) =>
+  t.toLowerCase().replace(/[^a-z0-9]+/g, " ").trim();
+
+export function ShowtimePicker({ selection, onSelect, filterTitle }: Props) {
   const [theaters, setTheaters] = useState<ShowtimeTheater[] | null>(null);
   const [stale, setStale] = useState(false);
   const [loadError, setLoadError] = useState(false);
@@ -47,46 +60,11 @@ export function ShowtimePicker({ selection, onSelect }: Props) {
   const [day, setDay] = useState<TheaterShowtimesDay | null>(null);
   const [dayLoading, setDayLoading] = useState(false);
   // Collapsed once a time is chosen; re-expandable to change it.
-  const [open, setOpen] = useState(true);
+  // Collapsed from the start when editing an existing showing.
+  const [open, setOpen] = useState(!selection);
   const [showAllTheaters, setShowAllTheaters] = useState(false);
+  const [hasLocation, setHasLocation] = useState(false);
   const [theaterQuery, setTheaterQuery] = useState("");
-
-  useEffect(() => {
-    let cancelled = false;
-    (async () => {
-      try {
-        const loc = await getDeviceLocation();
-        const result = await fetchShowtimeTheaters(loc?.latitude, loc?.longitude);
-        // The API returns every covered metro nearest-first — without this
-        // cutoff a user outside coverage saw a "nearest" theater hundreds of
-        // miles away instead of the honest "not near you yet" state. No
-        // location permission → show the list (we can't know they're far).
-        let list = result.theaters;
-        if (loc && list.length > 0) {
-          const nearest = list[0];
-          if (
-            nearest.latitude != null &&
-            nearest.longitude != null &&
-            distanceMiles(loc.latitude, loc.longitude, nearest.latitude, nearest.longitude) > 60
-          ) {
-            list = [];
-          }
-        }
-        if (!cancelled) {
-          setTheaters(list);
-          setStale(isStale(result.lastUpdatedUtc));
-        }
-      } catch {
-        if (!cancelled) {
-          setTheaters([]);
-          setLoadError(true);
-        }
-      }
-    })();
-    return () => {
-      cancelled = true;
-    };
-  }, []);
 
   // Separate from loadError: that one gates the whole picker's empty state,
   // while a single day's fetch failing should only message inside the flow
@@ -107,6 +85,71 @@ export function ShowtimePicker({ selection, onSelect }: Props) {
       setDayLoading(false);
     }
   };
+
+  useEffect(() => {
+    let cancelled = false;
+    (async () => {
+      try {
+        const loc = await getDeviceLocation();
+        const result = await fetchShowtimeTheaters(loc?.latitude, loc?.longitude);
+        // The API returns every covered metro nearest-first — without this
+        // cutoff a user outside coverage saw a "nearest" theater hundreds of
+        // miles away instead of the honest "not near you yet" state. No
+        // location permission → show the list (we can't know they're far).
+        // With a location: only theaters within 60 miles — the API returns
+        // every covered metro, and "Show all 800 theaters" is useless to
+        // someone in Dallas. Without one: keep the list but see canShowAll.
+        let list = result.theaters;
+        if (loc) {
+          list = list.filter(
+            (t) =>
+              t.latitude != null &&
+              t.longitude != null &&
+              distanceMiles(loc.latitude, loc.longitude, t.latitude, t.longitude) <= 60,
+          );
+        }
+        if (!cancelled) {
+          setHasLocation(!!loc);
+          setTheaters(list);
+          setStale(isStale(result.lastUpdatedUtc));
+          // Editing an existing showing: land on its theater and day so the
+          // times are one tap away. Match by slug, else by name (a group row
+          // stores the theater's name, not its slug). Search the full
+          // result, not the 60-mile cut — the Space may be elsewhere.
+          if (selection && !theater) {
+            const all = result.theaters;
+            const wantName = selection.theaterName.trim().toLowerCase();
+            const t =
+              all.find((x) => x.slug === selection.theaterSlug) ??
+              all.find((x) => x.name.trim().toLowerCase() === wantName);
+            if (t) pickTheater(t, selection.date);
+          }
+        }
+      } catch {
+        if (!cancelled) {
+          setTheaters([]);
+          setLoadError(true);
+        }
+      }
+    })();
+    return () => {
+      cancelled = true;
+    };
+  }, []);
+
+
+  // Film filter: exact normalized match first; otherwise accept a scraped
+  // title that is the wanted title followed by a qualifier ("weapons 2025",
+  // "dune part two imax"). Not a contains match — "alien" must not pick up
+  // "aliens" or "alien romulus", which would seat a crew for the wrong film.
+  const visibleMovies = (() => {
+    if (!day) return [];
+    if (!filterTitle) return day.movies;
+    const want = normalizeTitle(filterTitle);
+    const exact = day.movies.filter((m) => normalizeTitle(m.title) === want);
+    if (exact.length > 0) return exact;
+    return day.movies.filter((m) => normalizeTitle(m.title).startsWith(want + " "));
+  })();
 
   if (theaters === null) {
     return <ActivityIndicator color={Palette.accent} style={styles.loading} />;
@@ -197,12 +240,20 @@ export function ShowtimePicker({ selection, onSelect }: Props) {
           <Text style={styles.theaterRowCount}>{t.movieCount} films</Text>
         </TouchableOpacity>
       ))}
-      {!theaterQuery.trim() && theaters.length > 8 && (
+      {/* Without a location the list is every covered metro, nearest-first
+          is meaningless, and "show all" would be hundreds of rows — offer
+          search and a nudge instead. */}
+      {!theaterQuery.trim() && theaters.length > 8 && hasLocation && (
         <TouchableOpacity activeOpacity={0.8} onPress={() => setShowAllTheaters((p) => !p)}>
           <Text style={styles.showAllText}>
-            {showAllTheaters ? "Show fewer" : `Show all ${theaters.length} theaters`}
+            {showAllTheaters ? "Show fewer" : `Show all ${theaters.length} nearby theaters`}
           </Text>
         </TouchableOpacity>
+      )}
+      {!theaterQuery.trim() && !hasLocation && (
+        <Text style={styles.locationHint}>
+          Turn on location to see theaters near you, or search by name.
+        </Text>
       )}
 
       {/* Step 2 — date */}
@@ -239,11 +290,15 @@ export function ShowtimePicker({ selection, onSelect }: Props) {
       {/* Step 3 — film & time */}
       {theater && day && !dayLoading && (
         <>
-          <Text style={styles.stepLabel}>FILM & TIME</Text>
-          {day.movies.length === 0 && (
-            <Text style={styles.emptyText}>No showings listed for this day.</Text>
+          <Text style={styles.stepLabel}>{filterTitle ? "TIME" : "FILM & TIME"}</Text>
+          {visibleMovies.length === 0 && (
+            <Text style={styles.emptyText}>
+              {filterTitle
+                ? `No showings of ${filterTitle} listed here this day — try another date or theater.`
+                : "No showings listed for this day."}
+            </Text>
           )}
-          {day.movies.map((m) => (
+          {visibleMovies.map((m) => (
             <View key={m.slug || m.title} style={styles.movieRow}>
               <Text style={styles.movieTitle} numberOfLines={2}>
                 {m.title}
@@ -308,6 +363,7 @@ const styles = StyleSheet.create({
     marginBottom: 6,
   },
   chipScroll: { gap: 8, paddingRight: 8 },
+  locationHint: { ...Type.caption, color: Palette.textFaint, marginTop: 6 },
   chip: {
     ...SpaceStyles.glassCard,
     paddingVertical: 8,

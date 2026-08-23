@@ -19,21 +19,10 @@ import { SpaceTheme, Palette } from "@/frontend/constants/theme";
 import { registerForPushNotifications } from "@/frontend/services/push-notifications";
 import { setPendingRedirect } from "@/frontend/services/pending-redirect";
 import { ToastProvider } from "@/frontend/components/toast";
-import { Text as RNText, TextInput as RNTextInput } from "react-native";
 
-// Cap OS "Larger Text" / Dynamic-Type scaling app-wide. Without a cap, a large
-// accessibility text setting scales every label without limit and blows copy
-// past its container — the "text looks stretched / overflows on some screens"
-// report. 1.3 keeps real accessibility scaling while staying inside layouts.
-type Scalable = { defaultProps?: { maxFontSizeMultiplier?: number } };
-(RNText as unknown as Scalable).defaultProps = {
-  ...(RNText as unknown as Scalable).defaultProps,
-  maxFontSizeMultiplier: 1.3,
-};
-(RNTextInput as unknown as Scalable).defaultProps = {
-  ...(RNTextInput as unknown as Scalable).defaultProps,
-  maxFontSizeMultiplier: 1.3,
-};
+// Font-scaling cap lives in @/frontend/components/scaled-text (a wrapper
+// Text/TextInput every screen imports) — the old Text.defaultProps
+// assignment here was a no-op under React 19.
 
 // Every screen uses the cosmic theme now, regardless of system light/dark
 // mode — so the native header (back button, title bar) should match rather

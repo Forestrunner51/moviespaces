@@ -1,99 +1,146 @@
-import { useRef, useState } from "react";
+import { useEffect, useRef, useState } from "react";
 import {
   View,
-  Text,
-  TextInput,
   TouchableOpacity,
   StyleSheet,
   ActivityIndicator,
   FlatList,
+  ScrollView,
+  Platform,
 } from "react-native";
+import { Text, TextInput } from "@/frontend/components/scaled-text";
 import { router } from "expo-router";
 import { Ionicons } from "@expo/vector-icons";
+import DateTimePicker from "@react-native-community/datetimepicker";
 import { Starfield } from "@/frontend/components/starfield";
 import { MoviePoster } from "@/frontend/components/movie-poster";
-import {
-  SpaceStyles,
-  Palette,
-  Type,
-  Display,
-  Radius,
-  Font,
-} from "@/frontend/constants/theme";
+import { ShowtimePicker, ShowtimeSelection } from "@/frontend/components/showtime-picker";
+import { SpaceStyles, Palette, Type, Display, Radius, Font } from "@/frontend/constants/theme";
 import { useToast } from "@/frontend/components/toast";
 import { authFetch } from "@/frontend/services/api";
 import { resolveDisplayName } from "@/frontend/services/display-name";
 import { searchMovies, Movie } from "@/frontend/services/movies";
+import { formatEventDate } from "@/frontend/utils/event-date";
 
 // Keep in sync with GroupController.MatchCrewSize.
 const MATCH_CREW_SIZE = 6;
 
-// Movie Crew: the Timeleft pattern applied to movies. Timeleft seats you at
-// a dinner table of six strangers; here you pick how you want to watch and
-// which film, and get seated in a crew of up to six who picked the same.
-// Nothing is scheduled by us — the crew decides the details in chat.
+// Movie Crew: the Timeleft pattern applied to movies — get grouped with up
+// to six people going to the same showing. Two flows:
 //
-// Two kinds of crew, mirroring the two kinds of Space: meet at a theater
-// showing, or a hosted watch party at someone's venue. Same film, different
-// plan — so they're matched separately (the kind is part of the backend key).
+//   theater:  kind → pick a real showing (theater → date → film → time, the
+//             same picker create-space uses, so the film is by construction
+//             one that's actually playing) → confirm: crews already forming
+//             for that film (join one) or start your own with this showing.
+//   venue:    kind → search any film (a watch party can be anything) → crews
+//             forming → or name a place and a date/time.
+//
+// A crew is always born with a plan, so nobody lands in an empty group with
+// a blank date.
 type CrewKind = "theater" | "venue";
+type Stage = "kind" | "pickShowing" | "confirm" | "film" | "crews" | "venueShowing";
 
 const KINDS: {
   kind: CrewKind;
   icon: keyof typeof Ionicons.glyphMap;
   title: string;
   body: string;
-  planStep: string;
 }[] = [
   {
     kind: "theater",
     icon: "film-outline",
     title: "At a theater",
-    body: "Meet a crew at a showing near you. Tickets are on you, company is on us.",
-    planStep: "Agree a theater and showtime in the crew chat, then go.",
+    body: "Pick a real showing near you. You're grouped with others going to it. Tickets are on you, company is on us.",
   },
   {
     kind: "venue",
     icon: "home-outline",
     title: "At a venue",
     body: "A watch party — someone's place, a bar, a rented room. The crew hosts it together.",
-    planStep: "Pick who hosts and when in the crew chat, then show up.",
   },
 ];
 
-const STEPS = (
-  kind: CrewKind,
-): { icon: keyof typeof Ionicons.glyphMap; title: string; body: string }[] => [
-  {
-    icon: "film-outline",
-    title: "Pick a film",
-    body: "Anything you actually want to see with other people.",
-  },
-  {
-    icon: "people-outline",
-    title: "Get seated",
-    body: `We put you in a crew of up to ${MATCH_CREW_SIZE} who picked the same film.`,
-  },
-  {
-    icon: "chatbubbles-outline",
-    title: "Plan it together",
-    body: KINDS.find((k) => k.kind === kind)!.planStep,
-  },
-];
+interface OpenCrew {
+  id: string;
+  cinemaName: string;
+  showDate: string;
+  showTime: string;
+  screeningTime: string | null;
+  hostName: string;
+  memberCount: number;
+  ticketCount: number;
+  maxCapacity: number;
+  alreadyIn: boolean;
+}
+
+// What the backend needs to identify the film. For theater crews it's
+// derived from the scraped showing title (no id), so imdbId may be empty
+// and the key falls back to the normalized title.
+interface PickedMovie {
+  title: string;
+  imdbId: string;
+  posterPath: string | null;
+}
+
+const formatDate = (d: Date) =>
+  `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, "0")}-${String(d.getDate()).padStart(2, "0")}`;
+const formatTime = (d: Date) =>
+  d.toLocaleTimeString(undefined, { hour: "numeric", minute: "2-digit", hour12: true });
+
+// Same resolution create-space does after a showing is picked: the scraped
+// title has no id or art, so look it up — exact title first, newest year
+// among those (a film in theaters is a recent release) — for the poster and
+// IMDb id. A miss just means no poster and a title-based key.
+async function resolveFromShowing(title: string): Promise<PickedMovie> {
+  try {
+    const outcome = await searchMovies(title);
+    const wanted = title.trim().toLowerCase();
+    const exact = outcome.results.filter((r) => r.title.trim().toLowerCase() === wanted);
+    const pick = (exact.length ? exact : outcome.results.filter((r) => r.posterPath))
+      .slice()
+      .sort((a, b) => (b.releaseYear ?? 0) - (a.releaseYear ?? 0))[0];
+    if (pick) return { title, imdbId: exact.length ? pick.imdbId : "", posterPath: pick.posterPath ?? null };
+  } catch {
+    /* offline or OMDb hiccup — proceed with the bare title */
+  }
+  return { title, imdbId: "", posterPath: null };
+}
 
 export default function MatchScreen() {
   const { showToast } = useToast();
+  const [stage, setStage] = useState<Stage>("kind");
+  const [kind, setKind] = useState<CrewKind>("theater");
+  const [movie, setMovie] = useState<PickedMovie | null>(null);
+  const [showtime, setShowtime] = useState<ShowtimeSelection | null>(null);
+  const [hasTicket, setHasTicket] = useState(false);
+  const [submitting, setSubmitting] = useState(false);
+
+  // --- crews already forming (both kinds) ---
+  const [crews, setCrews] = useState<OpenCrew[] | null>(null);
+  useEffect(() => {
+    if ((stage !== "crews" && stage !== "confirm") || !movie) return;
+    let cancelled = false;
+    const params = new URLSearchParams({ kind, imdbId: movie.imdbId, title: movie.title });
+    authFetch(`${process.env.EXPO_PUBLIC_API_URL}/api/group/match/open?${params}`)
+      .then((res) => (res.ok ? res.json() : []))
+      .then((data: OpenCrew[]) => {
+        if (cancelled) return;
+        setCrews(data);
+        // Venue flow: nothing forming yet → straight to naming a place.
+        if (stage === "crews" && data.length === 0) setStage("venueShowing");
+      })
+      .catch(() => !cancelled && setCrews([]));
+    return () => {
+      cancelled = true;
+    };
+  }, [stage, movie, kind]);
+
+  // --- venue: film search ---
   const [query, setQuery] = useState("");
   const [results, setResults] = useState<Movie[]>([]);
   const [searching, setSearching] = useState(false);
-  const [matchingId, setMatchingId] = useState<string | null>(null);
-  const [kind, setKind] = useState<CrewKind | null>(null);
-  // Debounce + stale-response guard: one request per pause in typing, and a
-  // slow earlier response can never overwrite a newer one (or drop the
-  // spinner while a newer query is still in flight).
   const searchTimer = useRef<ReturnType<typeof setTimeout> | null>(null);
   const searchSeq = useRef(0);
-
   const handleSearch = (text: string) => {
     setQuery(text);
     if (searchTimer.current) clearTimeout(searchTimer.current);
@@ -119,70 +166,196 @@ export default function MatchScreen() {
     }, 350);
   };
 
-  const handleMatch = async (movie: Movie) => {
-    if (matchingId) return;
-    setMatchingId(movie.imdbId);
+  // --- venue: place + time ---
+  const [venueName, setVenueName] = useState("");
+  const [dateValue, setDateValue] = useState<Date | null>(null);
+  const [timeValue, setTimeValue] = useState<Date | null>(null);
+  const [datePickerVisible, setDatePickerVisible] = useState(false);
+  const [timePickerVisible, setTimePickerVisible] = useState(false);
+
+  const pickKind = (k: CrewKind) => {
+    setKind(k);
+    if (k === "venue") setHasTicket(false);
+    setMovie(null);
+    setShowtime(null);
+    setCrews(null);
+    setStage(k === "theater" ? "pickShowing" : "film");
+  };
+
+  // Theater: a showing was picked → the film is whatever's playing in it.
+  const [resolving, setResolving] = useState(false);
+  const onShowingPicked = async (sel: ShowtimeSelection) => {
+    setShowtime(sel);
+    setResolving(true);
+    setCrews(null);
+    const m = await resolveFromShowing(sel.movieTitle);
+    setMovie(m);
+    setResolving(false);
+    setStage("confirm");
+  };
+
+  const pickMovie = (m: Movie) => {
+    setMovie({ title: m.title, imdbId: m.imdbId, posterPath: m.posterPath });
+    setCrews(null);
+    setStage("crews");
+  };
+
+  const submit = async (body: Record<string, unknown>) => {
+    if (!movie || submitting) return;
+    setSubmitting(true);
     try {
       const hostName = await resolveDisplayName();
-      const res = await authFetch(
-        `${process.env.EXPO_PUBLIC_API_URL}/api/group/match`,
-        {
-          method: "POST",
-          body: JSON.stringify({
-            MovieTitle: movie.title,
-            ImdbId: movie.imdbId,
-            PosterPath: movie.posterPath,
-            HostName: hostName,
-            Kind: kind ?? "theater",
-          }),
-        },
-      );
-      const body = await res.json().catch(() => null);
+      const res = await authFetch(`${process.env.EXPO_PUBLIC_API_URL}/api/group/match`, {
+        method: "POST",
+        body: JSON.stringify({
+          MovieTitle: movie.title,
+          ImdbId: movie.imdbId || null,
+          PosterPath: movie.posterPath,
+          HostName: hostName,
+          Kind: kind,
+          HasTicket: hasTicket,
+          ...body,
+        }),
+      });
+      const data = await res.json().catch(() => null);
       if (!res.ok) {
-        showToast(
-          body?.error || "Couldn't seat you right now. Please try again.",
-        );
+        showToast(data?.error || "Couldn't seat you right now. Please try again.");
         return;
       }
-      // The group page does the reveal ("you're first in" vs "you're in with
-      // N others") — a toast here would just be dismissed mid-navigation.
-      const matched = body.created
-        ? "created"
-        : body.joined
-          ? "joined"
-          : "already";
-      router.replace({
-        pathname: "/group",
-        params: { groupId: body.groupId, matched },
-      });
+      const matched = data.created ? "created" : data.joined ? "joined" : "already";
+      router.replace({ pathname: "/group", params: { groupId: data.groupId, matched } });
     } catch {
       showToast("Network error — please try again.");
     } finally {
-      setMatchingId(null);
+      setSubmitting(false);
     }
   };
 
-  const showSteps = query.trim().length < 2;
+  const joinCrew = (c: OpenCrew) => submit({ JoinGroupId: c.id });
+
+  const startTheaterCrew = () => {
+    if (!showtime) return;
+    const [y, m, d] = showtime.date.split("-").map(Number);
+    const when = new Date(y, m - 1, d, Math.floor(showtime.minutes / 60), showtime.minutes % 60, 0, 0);
+    return submit({
+      CinemaName: showtime.theaterName,
+      ScreeningTime: when.toISOString(),
+      ShowDate: showtime.date,
+      ShowTime: showtime.label,
+      TheaterLatitude: showtime.latitude,
+      TheaterLongitude: showtime.longitude,
+    });
+  };
+
+  const startVenueCrew = () => {
+    if (!venueName.trim()) {
+      showToast("Name the place — your address, a bar, a rented room.");
+      return;
+    }
+    if (!dateValue || !timeValue) {
+      showToast("Pick a date and a time.");
+      return;
+    }
+    const combined = new Date(dateValue);
+    combined.setHours(timeValue.getHours(), timeValue.getMinutes(), 0, 0);
+    return submit({
+      CinemaName: venueName.trim(),
+      ScreeningTime: combined.toISOString(),
+      ShowDate: formatDate(combined),
+      ShowTime: formatTime(combined),
+    });
+  };
+
+  const goBack = () => {
+    if (stage === "kind") {
+      if (router.canGoBack()) router.back();
+      else router.replace("/(tabs)/explore");
+    } else if (stage === "pickShowing" || stage === "film") setStage("kind");
+    else if (stage === "confirm") setStage("pickShowing");
+    else if (stage === "crews") setStage("film");
+    else if (stage === "venueShowing") setStage(crews && crews.length > 0 ? "crews" : "film");
+  };
+
+  const kindMeta = KINDS.find((k) => k.kind === kind)!;
+  const crumbs = (
+    <View style={styles.crumbs}>
+      <Ionicons name={kindMeta.icon} size={14} color={Palette.accent} />
+      <Text style={styles.crumbText}>{kindMeta.title}</Text>
+      {movie && stage !== "film" && stage !== "pickShowing" && (
+        <>
+          <Text style={styles.crumbDot}>·</Text>
+          <Text style={styles.crumbText} numberOfLines={1}>
+            {movie.title}
+          </Text>
+        </>
+      )}
+      <TouchableOpacity onPress={() => setStage("kind")} hitSlop={8} accessibilityRole="button">
+        <Text style={styles.crumbChange}>Change</Text>
+      </TouchableOpacity>
+    </View>
+  );
+
+  const crewList = (onStartOwn: () => void, startLabel: string) =>
+    crews === null ? (
+      <ActivityIndicator color={Palette.accent} style={{ marginTop: 20 }} />
+    ) : (
+      <>
+        {crews.length > 0 && <Text style={styles.stepLabel}>CREWS ALREADY FORMING</Text>}
+        {crews.map((c) => {
+          const when = formatEventDate(c.screeningTime, c.showDate, c.showTime);
+          const open = c.maxCapacity - c.memberCount;
+          return (
+            <TouchableOpacity
+              key={c.id}
+              activeOpacity={0.85}
+              style={styles.crewCard}
+              onPress={() => joinCrew(c)}
+              disabled={submitting}
+              accessibilityRole="button"
+              accessibilityLabel={`Join crew at ${c.cinemaName}`}
+            >
+              <View style={{ flex: 1 }}>
+                <View style={styles.crewWhen}>
+                  <Text style={styles.crewDate}>{when.date || "Date TBD"}</Text>
+                  {!!when.time && <Text style={styles.crewTime}>{when.time}</Text>}
+                  {!!when.relative && <Text style={styles.crewRelative}>{when.relative}</Text>}
+                </View>
+                <Text style={styles.crewWhere} numberOfLines={1}>
+                  {c.cinemaName || (kind === "venue" ? "Venue TBD" : "Theater TBD")}
+                </Text>
+                <Text style={styles.crewMeta}>
+                  {c.memberCount}/{c.maxCapacity} seated
+                  {c.ticketCount > 0 ? ` · ${c.ticketCount} ticketed` : ""}
+                  {` · started by ${c.hostName}`}
+                </Text>
+              </View>
+              <View style={[styles.seatPill, c.alreadyIn && styles.seatPillMuted]}>
+                <Text style={[styles.seatPillText, c.alreadyIn && styles.seatPillTextMuted]}>
+                  {c.alreadyIn ? "You're in" : open === 1 ? "Last seat" : "Join"}
+                </Text>
+              </View>
+            </TouchableOpacity>
+          );
+        })}
+        <TouchableOpacity activeOpacity={0.85} style={styles.startOwn} onPress={onStartOwn} accessibilityRole="button">
+          <Ionicons name="add-circle-outline" size={18} color={Palette.accent} />
+          <Text style={styles.startOwnText}>{startLabel}</Text>
+        </TouchableOpacity>
+      </>
+    );
 
   return (
     <Starfield>
       <View style={styles.content}>
-        <TouchableOpacity
-          activeOpacity={0.8}
-          style={styles.backButton}
-          onPress={() =>
-            router.canGoBack()
-              ? router.back()
-              : router.replace("/(tabs)/explore")
-          }
-        >
+        <TouchableOpacity activeOpacity={0.8} style={styles.backButton} onPress={goBack}>
           <Ionicons name="chevron-back" size={22} color={Palette.text} />
           <Text style={styles.backText}>Back</Text>
         </TouchableOpacity>
 
         <Text style={styles.kicker}>MOVIE CREW</Text>
 
-        {kind === null ? (
+        {/* ── 1. kind ───────────────────────────────────────────── */}
+        {stage === "kind" && (
           <>
             <Text style={styles.title}>How do you want to watch?</Text>
             <View style={styles.kinds}>
@@ -191,7 +364,7 @@ export default function MatchScreen() {
                   key={k.kind}
                   activeOpacity={0.85}
                   style={styles.kindCard}
-                  onPress={() => setKind(k.kind)}
+                  onPress={() => pickKind(k.kind)}
                   accessibilityRole="button"
                   accessibilityLabel={k.title}
                 >
@@ -202,46 +375,145 @@ export default function MatchScreen() {
                     <Text style={styles.kindTitle}>{k.title}</Text>
                     <Text style={styles.kindBody}>{k.body}</Text>
                   </View>
-                  <Ionicons
-                    name="chevron-forward"
-                    size={18}
-                    color={Palette.textMuted}
-                  />
+                  <Ionicons name="chevron-forward" size={18} color={Palette.textMuted} />
                 </TouchableOpacity>
               ))}
             </View>
             <Text style={styles.fineprint}>
-              Either way you end up in a crew of up to {MATCH_CREW_SIZE} who
-              picked the same film.
+              Either way you end up in a crew of up to {MATCH_CREW_SIZE} who picked the same film
+              and showing.
             </Text>
           </>
-        ) : (
+        )}
+
+        {/* ── theater 2. pick a real showing ────────────────────── */}
+        {stage === "pickShowing" && (
           <>
-            <View style={styles.kindRow}>
-              <Ionicons
-                name={KINDS.find((k) => k.kind === kind)!.icon}
-                size={14}
-                color={Palette.accent}
-              />
-              <Text style={styles.kindRowText}>
-                {KINDS.find((k) => k.kind === kind)!.title}
-              </Text>
+            {crumbs}
+            <Text style={styles.title}>Pick a showing</Text>
+            <Text style={styles.subtitle}>
+              Theater, then day, then what&apos;s playing — only films actually in theaters near you.
+            </Text>
+            <ScrollView keyboardShouldPersistTaps="handled" contentContainerStyle={{ paddingBottom: 60 }}>
+              <ShowtimePicker selection={showtime} onSelect={onShowingPicked} />
+              {resolving && <ActivityIndicator color={Palette.accent} style={{ marginTop: 16 }} />}
+            </ScrollView>
+          </>
+        )}
+
+        {/* ── theater 3. confirm: crews forming or start your own ── */}
+        {stage === "confirm" && movie && showtime && (
+          <>
+            {crumbs}
+            <Text style={styles.title}>{crews && crews.length > 0 ? "Join a crew or start one" : "Start your crew"}</Text>
+            <ScrollView contentContainerStyle={{ paddingBottom: 60 }}>
+              <View style={styles.summary}>
+                <MoviePoster uri={movie.posterPath} width={56} />
+                <View style={{ flex: 1 }}>
+                  <Text style={styles.summaryTitle} numberOfLines={2}>
+                    {movie.title}
+                  </Text>
+                  <Text style={styles.summarySub} numberOfLines={2}>
+                    {showtime.theaterName} · {formatEventDate(null, showtime.date, showtime.label).date} ·{" "}
+                    {showtime.label}
+                  </Text>
+                </View>
+                <TouchableOpacity onPress={() => setStage("pickShowing")} hitSlop={8} accessibilityRole="button">
+                  <Text style={styles.crumbChange}>Change</Text>
+                </TouchableOpacity>
+              </View>
+
               <TouchableOpacity
-                onPress={() => setKind(null)}
-                hitSlop={8}
+                activeOpacity={0.8}
+                style={[styles.ticketToggle, hasTicket && styles.ticketToggleOn]}
+                onPress={() => setHasTicket((v) => !v)}
+                accessibilityRole="switch"
+                accessibilityState={{ checked: hasTicket }}
+              >
+                <Ionicons
+                  name={hasTicket ? "checkmark-circle" : "ticket-outline"}
+                  size={16}
+                  color={hasTicket ? Palette.positive : Palette.textMuted}
+                />
+                <Text style={[styles.ticketToggleText, hasTicket && styles.ticketToggleTextOn]}>
+                  I already have my ticket for this showing
+                </Text>
+              </TouchableOpacity>
+
+              <TouchableOpacity
+                activeOpacity={0.85}
+                style={[styles.primary, submitting && { opacity: 0.6 }]}
+                onPress={startTheaterCrew}
+                disabled={submitting}
                 accessibilityRole="button"
               >
-                <Text style={styles.kindRowChange}>Change</Text>
+                {submitting ? (
+                  <ActivityIndicator color={Palette.base} />
+                ) : (
+                  <>
+                    <Ionicons name="people-outline" size={18} color={Palette.base} />
+                    <Text style={styles.primaryText}>Start the crew for this showing</Text>
+                  </>
+                )}
               </TouchableOpacity>
-            </View>
-            <Text style={styles.title}>Which film do you want to see?</Text>
+              <Text style={styles.fineprint}>
+                Anyone who picks this same showing is seated with you, up to {MATCH_CREW_SIZE}. If a
+                crew already has it, you join them.
+              </Text>
 
+              {/* Other crews for this film (other showings) — join one instead. */}
+              {crews && crews.length > 0 && (
+                <View style={{ marginTop: 8 }}>
+                  <Text style={styles.stepLabel}>OR JOIN A CREW ALREADY GOING</Text>
+                  {crews.map((c) => {
+                    const when = formatEventDate(c.screeningTime, c.showDate, c.showTime);
+                    const open = c.maxCapacity - c.memberCount;
+                    return (
+                      <TouchableOpacity
+                        key={c.id}
+                        activeOpacity={0.85}
+                        style={styles.crewCard}
+                        onPress={() => joinCrew(c)}
+                        disabled={submitting}
+                        accessibilityRole="button"
+                        accessibilityLabel={`Join crew at ${c.cinemaName}`}
+                      >
+                        <View style={{ flex: 1 }}>
+                          <View style={styles.crewWhen}>
+                            <Text style={styles.crewDate}>{when.date || "Date TBD"}</Text>
+                            {!!when.time && <Text style={styles.crewTime}>{when.time}</Text>}
+                            {!!when.relative && <Text style={styles.crewRelative}>{when.relative}</Text>}
+                          </View>
+                          <Text style={styles.crewWhere} numberOfLines={1}>
+                            {c.cinemaName}
+                          </Text>
+                          <Text style={styles.crewMeta}>
+                            {c.memberCount}/{c.maxCapacity} seated
+                            {c.ticketCount > 0 ? ` · ${c.ticketCount} ticketed` : ""}
+                            {` · started by ${c.hostName}`}
+                          </Text>
+                        </View>
+                        <View style={[styles.seatPill, c.alreadyIn && styles.seatPillMuted]}>
+                          <Text style={[styles.seatPillText, c.alreadyIn && styles.seatPillTextMuted]}>
+                            {c.alreadyIn ? "You're in" : open === 1 ? "Last seat" : "Join"}
+                          </Text>
+                        </View>
+                      </TouchableOpacity>
+                    );
+                  })}
+                </View>
+              )}
+            </ScrollView>
+          </>
+        )}
+
+        {/* ── venue 2. film ─────────────────────────────────────── */}
+        {stage === "film" && (
+          <>
+            {crumbs}
+            <Text style={styles.title}>Which film?</Text>
             <View style={styles.searchBox}>
-              <Ionicons
-                name="search-outline"
-                size={18}
-                color={Palette.textMuted}
-              />
+              <Ionicons name="search-outline" size={18} color={Palette.textMuted} />
               <TextInput
                 style={styles.input}
                 placeholder="Search a movie…"
@@ -255,80 +527,140 @@ export default function MatchScreen() {
                 autoFocus
               />
             </View>
-
-            {searching && (
-              <ActivityIndicator
-                color={Palette.accent}
-                style={{ marginTop: 14 }}
-              />
-            )}
-
-            {showSteps ? (
-              <View style={styles.steps}>
-                {STEPS(kind).map((step, i) => (
-                  <View key={step.title} style={styles.step}>
-                    <View style={styles.stepIcon}>
-                      <Ionicons
-                        name={step.icon}
-                        size={20}
-                        color={Palette.accent}
-                      />
-                    </View>
-                    <View style={{ flex: 1 }}>
-                      <Text style={styles.stepTitle}>
-                        {i + 1}. {step.title}
-                      </Text>
-                      <Text style={styles.stepBody}>{step.body}</Text>
-                    </View>
-                  </View>
-                ))}
-                <Text style={styles.fineprint}>
-                  Crews are small on purpose. When one fills, the next person
-                  starts a new one.
-                </Text>
-              </View>
-            ) : (
-              <FlatList
-                data={results}
-                keyExtractor={(m) => m.imdbId}
-                keyboardShouldPersistTaps="handled"
-                contentContainerStyle={{ paddingTop: 8 }}
-                renderItem={({ item }) => (
-                  <TouchableOpacity
-                    activeOpacity={0.85}
-                    style={styles.row}
-                    onPress={() => handleMatch(item)}
-                    disabled={matchingId !== null}
-                    accessibilityRole="button"
-                    accessibilityLabel={`Get seated for ${item.title}`}
-                  >
-                    <MoviePoster uri={item.posterPath} width={44} />
-                    <View style={{ flex: 1 }}>
-                      <Text style={styles.rowTitle} numberOfLines={1}>
-                        {item.title}
-                      </Text>
-                      {item.releaseYear ? (
-                        <Text style={styles.rowYear}>{item.releaseYear}</Text>
-                      ) : null}
-                    </View>
-                    {matchingId === item.imdbId ? (
-                      <ActivityIndicator color={Palette.accent} />
-                    ) : (
-                      <View style={styles.seatPill}>
-                        <Text style={styles.seatPillText}>Get seated</Text>
-                      </View>
-                    )}
-                  </TouchableOpacity>
-                )}
-                ListEmptyComponent={
-                  !searching ? (
-                    <Text style={styles.empty}>
-                      No matches — check the spelling?
+            {searching && <ActivityIndicator color={Palette.accent} style={{ marginTop: 14 }} />}
+            <FlatList
+              data={results}
+              keyExtractor={(m) => m.imdbId}
+              keyboardShouldPersistTaps="handled"
+              contentContainerStyle={{ paddingTop: 8 }}
+              renderItem={({ item }) => (
+                <TouchableOpacity
+                  activeOpacity={0.85}
+                  style={styles.row}
+                  onPress={() => pickMovie(item)}
+                  accessibilityRole="button"
+                  accessibilityLabel={`Choose ${item.title}`}
+                >
+                  <MoviePoster uri={item.posterPath} width={44} />
+                  <View style={{ flex: 1 }}>
+                    <Text style={styles.rowTitle} numberOfLines={1}>
+                      {item.title}
                     </Text>
-                  ) : null
-                }
+                    {item.releaseYear ? <Text style={styles.rowYear}>{item.releaseYear}</Text> : null}
+                  </View>
+                  <Ionicons name="chevron-forward" size={18} color={Palette.textMuted} />
+                </TouchableOpacity>
+              )}
+              ListEmptyComponent={
+                query.trim().length >= 2 && !searching ? (
+                  <Text style={styles.empty}>No matches — check the spelling?</Text>
+                ) : null
+              }
+            />
+          </>
+        )}
+
+        {/* ── venue 3. crews forming ────────────────────────────── */}
+        {stage === "crews" && movie && (
+          <>
+            {crumbs}
+            <Text style={styles.title}>Crews already forming</Text>
+            <ScrollView contentContainerStyle={{ paddingBottom: 40 }}>
+              {crewList(() => setStage("venueShowing"), "None of these work — start your own")}
+            </ScrollView>
+          </>
+        )}
+
+        {/* ── venue 4. place + time ─────────────────────────────── */}
+        {stage === "venueShowing" && movie && (
+          <>
+            {crumbs}
+            <Text style={styles.title}>Where and when?</Text>
+            <ScrollView keyboardShouldPersistTaps="handled" contentContainerStyle={{ paddingBottom: 60 }}>
+              <Text style={styles.stepLabel}>PLACE</Text>
+              <TextInput
+                style={styles.field}
+                placeholder="Your address, a bar, a rented room…"
+                placeholderTextColor={Palette.textFaint}
+                value={venueName}
+                onChangeText={setVenueName}
+                maxLength={250}
               />
-            )}
+              <Text style={styles.stepLabel}>DATE</Text>
+              <TouchableOpacity
+                activeOpacity={0.8}
+                style={styles.pickerField}
+                onPress={() => {
+                  setTimePickerVisible(false);
+                  setDatePickerVisible((v) => !v);
+                }}
+              >
+                <Ionicons name="calendar-outline" size={18} color={Palette.textMuted} />
+                <Text style={[styles.pickerFieldText, !dateValue && styles.pickerPlaceholder]}>
+                  {dateValue ? formatDate(dateValue) : "Select a date"}
+                </Text>
+              </TouchableOpacity>
+              {datePickerVisible && (
+                <DateTimePicker
+                  value={dateValue ?? new Date()}
+                  mode="date"
+                  minimumDate={new Date()}
+                  display={Platform.OS === "ios" ? "spinner" : "default"}
+                  themeVariant="dark"
+                  onValueChange={(_e: unknown, selected: Date) => {
+                    if (Platform.OS === "android") setDatePickerVisible(false);
+                    setDateValue(selected);
+                  }}
+                  onDismiss={() => setDatePickerVisible(false)}
+                />
+              )}
+              <Text style={styles.stepLabel}>TIME</Text>
+              <TouchableOpacity
+                activeOpacity={0.8}
+                style={styles.pickerField}
+                onPress={() => {
+                  setDatePickerVisible(false);
+                  setTimePickerVisible((v) => !v);
+                }}
+              >
+                <Ionicons name="time-outline" size={18} color={Palette.textMuted} />
+                <Text style={[styles.pickerFieldText, !timeValue && styles.pickerPlaceholder]}>
+                  {timeValue ? formatTime(timeValue) : "Select a time"}
+                </Text>
+              </TouchableOpacity>
+              {timePickerVisible && (
+                <DateTimePicker
+                  value={timeValue ?? new Date()}
+                  mode="time"
+                  display={Platform.OS === "ios" ? "spinner" : "default"}
+                  themeVariant="dark"
+                  onValueChange={(_e: unknown, selected: Date) => {
+                    if (Platform.OS === "android") setTimePickerVisible(false);
+                    setTimeValue(selected);
+                  }}
+                  onDismiss={() => setTimePickerVisible(false)}
+                />
+              )}
+              <TouchableOpacity
+                activeOpacity={0.85}
+                style={[styles.primary, submitting && { opacity: 0.6 }]}
+                onPress={startVenueCrew}
+                disabled={submitting}
+                accessibilityRole="button"
+              >
+                {submitting ? (
+                  <ActivityIndicator color={Palette.base} />
+                ) : (
+                  <>
+                    <Ionicons name="people-outline" size={18} color={Palette.base} />
+                    <Text style={styles.primaryText}>Start the crew</Text>
+                  </>
+                )}
+              </TouchableOpacity>
+              <Text style={styles.fineprint}>
+                Anyone who picks this film for a watch party can join you, up to {MATCH_CREW_SIZE}.
+              </Text>
+            </ScrollView>
           </>
         )}
       </View>
@@ -349,7 +681,12 @@ const styles = StyleSheet.create({
   },
   backText: { ...Type.body, color: Palette.text },
   kicker: { ...Display.section, color: Palette.accent, marginBottom: 4 },
-  title: { ...Display.heading, color: Palette.text, marginBottom: 16 },
+  title: { ...Display.heading, color: Palette.text, marginBottom: 12 },
+  subtitle: { ...Type.small, color: Palette.textMuted, marginBottom: 8 },
+  crumbs: { flexDirection: "row", alignItems: "center", gap: 6, marginBottom: 6 },
+  crumbText: { ...Type.small, fontFamily: Font.semibold, color: Palette.accent, flexShrink: 1 },
+  crumbDot: { ...Type.small, color: Palette.textFaint },
+  crumbChange: { ...Type.small, color: Palette.textMuted, textDecorationLine: "underline", marginLeft: 6 },
   kinds: { gap: 12, marginTop: 4 },
   kindCard: {
     ...SpaceStyles.glassCard,
@@ -368,30 +705,8 @@ const styles = StyleSheet.create({
     alignItems: "center",
     justifyContent: "center",
   },
-  kindTitle: {
-    ...Type.body,
-    fontFamily: Font.bold,
-    color: Palette.text,
-    marginBottom: 2,
-  },
+  kindTitle: { ...Type.body, fontFamily: Font.bold, color: Palette.text, marginBottom: 2 },
   kindBody: { ...Type.small, color: Palette.textMuted },
-  kindRow: {
-    flexDirection: "row",
-    alignItems: "center",
-    gap: 6,
-    marginBottom: 6,
-  },
-  kindRowText: {
-    ...Type.small,
-    fontFamily: Font.semibold,
-    color: Palette.accent,
-  },
-  kindRowChange: {
-    ...Type.small,
-    color: Palette.textMuted,
-    textDecorationLine: "underline",
-    marginLeft: 6,
-  },
   searchBox: {
     ...SpaceStyles.field,
     flexDirection: "row",
@@ -401,26 +716,6 @@ const styles = StyleSheet.create({
     paddingHorizontal: 12,
   },
   input: { flex: 1, ...Type.body, color: Palette.text, padding: 0 },
-  steps: { marginTop: 28, gap: 18 },
-  step: { flexDirection: "row", alignItems: "flex-start", gap: 14 },
-  stepIcon: {
-    width: 40,
-    height: 40,
-    borderRadius: Radius.pill,
-    backgroundColor: Palette.accentDim,
-    borderWidth: 1,
-    borderColor: Palette.accentBorder,
-    alignItems: "center",
-    justifyContent: "center",
-  },
-  stepTitle: {
-    ...Type.body,
-    fontFamily: Font.bold,
-    color: Palette.text,
-    marginBottom: 2,
-  },
-  stepBody: { ...Type.small, color: Palette.textMuted },
-  fineprint: { ...Type.caption, color: Palette.textFaint, marginTop: 6 },
   row: {
     flexDirection: "row",
     alignItems: "center",
@@ -431,6 +726,34 @@ const styles = StyleSheet.create({
   },
   rowTitle: { ...Type.body, color: Palette.text },
   rowYear: { ...Type.small, color: Palette.textMuted, marginTop: 2 },
+  empty: { ...Type.small, color: Palette.textMuted, textAlign: "center", marginTop: 24 },
+  fineprint: { ...Type.caption, color: Palette.textFaint, marginTop: 14 },
+  // confirm summary
+  summary: {
+    ...SpaceStyles.glassCard,
+    borderColor: Palette.accentBorder,
+    flexDirection: "row",
+    alignItems: "center",
+    gap: 12,
+    padding: 12,
+  },
+  summaryTitle: { ...Type.body, fontFamily: Font.bold, color: Palette.text },
+  summarySub: { ...Type.small, color: Palette.textMuted, marginTop: 2 },
+  // crews list
+  crewCard: {
+    ...SpaceStyles.glassCard,
+    flexDirection: "row",
+    alignItems: "center",
+    gap: 12,
+    padding: 14,
+    marginBottom: 10,
+  },
+  crewWhen: { flexDirection: "row", alignItems: "baseline", gap: 8, flexWrap: "wrap" },
+  crewDate: { ...Display.dateCard, color: Palette.text },
+  crewTime: { ...Display.stat, color: Palette.textMuted },
+  crewRelative: { ...Type.caption, fontFamily: Font.bold, color: Palette.accent, textTransform: "uppercase" },
+  crewWhere: { ...Type.small, color: Palette.text, marginTop: 2 },
+  crewMeta: { ...Type.caption, color: Palette.textMuted, marginTop: 3 },
   seatPill: {
     paddingVertical: 6,
     paddingHorizontal: 12,
@@ -439,15 +762,58 @@ const styles = StyleSheet.create({
     borderWidth: 1,
     borderColor: Palette.accentBorder,
   },
-  seatPillText: {
-    ...Type.caption,
-    fontFamily: Font.bold,
-    color: Palette.accent,
+  seatPillMuted: { backgroundColor: Palette.fill, borderColor: Palette.border },
+  seatPillText: { ...Type.caption, fontFamily: Font.bold, color: Palette.accent },
+  seatPillTextMuted: { color: Palette.textMuted },
+  startOwn: {
+    flexDirection: "row",
+    alignItems: "center",
+    justifyContent: "center",
+    gap: 8,
+    paddingVertical: 14,
+    marginTop: 4,
+    borderRadius: Radius.medium,
+    borderWidth: 1,
+    borderStyle: "dashed",
+    borderColor: Palette.accentBorder,
   },
-  empty: {
-    ...Type.small,
-    color: Palette.textMuted,
-    textAlign: "center",
-    marginTop: 24,
+  startOwnText: { ...Type.small, fontFamily: Font.semibold, color: Palette.accent },
+  // forms
+  stepLabel: { ...Display.section, color: Palette.textMuted, marginTop: 12, marginBottom: 6 },
+  field: { ...SpaceStyles.field, ...Type.body, color: Palette.text, padding: 12 },
+  pickerField: {
+    ...SpaceStyles.field,
+    flexDirection: "row",
+    alignItems: "center",
+    gap: 10,
+    padding: 12,
   },
+  pickerFieldText: { ...Type.body, color: Palette.text },
+  pickerPlaceholder: { color: Palette.textFaint },
+  ticketToggle: {
+    flexDirection: "row",
+    alignItems: "center",
+    gap: 8,
+    marginTop: 16,
+    paddingVertical: 10,
+    paddingHorizontal: 12,
+    borderRadius: Radius.small,
+    borderWidth: 1,
+    borderColor: Palette.border,
+    backgroundColor: Palette.raised,
+  },
+  ticketToggleOn: { borderColor: Palette.positiveBorder, backgroundColor: Palette.positiveDim },
+  ticketToggleText: { ...Type.small, fontFamily: Font.semibold, color: Palette.textMuted, flex: 1 },
+  ticketToggleTextOn: { color: Palette.positive },
+  primary: {
+    flexDirection: "row",
+    alignItems: "center",
+    justifyContent: "center",
+    gap: 8,
+    marginTop: 16,
+    paddingVertical: 14,
+    borderRadius: Radius.pill,
+    backgroundColor: Palette.accent,
+  },
+  primaryText: { ...Type.body, fontFamily: Font.bold, color: Palette.base },
 });

@@ -1,13 +1,13 @@
 import { useCallback, useEffect, useState } from "react";
 import {
   View,
-  Text,
   StyleSheet,
   ScrollView,
   RefreshControl,
   ActivityIndicator,
   TouchableOpacity,
 } from "react-native";
+import { Text } from "@/frontend/components/scaled-text";
 import { Ionicons } from "@expo/vector-icons";
 import { Starfield } from "@/frontend/components/starfield";
 import { SpaceTheme, SpaceStyles, Palette, Type, Radius, Display } from "@/frontend/constants/theme";

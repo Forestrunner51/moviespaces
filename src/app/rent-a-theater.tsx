@@ -1,6 +1,13 @@
 import { useEffect, useState } from "react";
 import * as WebBrowser from "expo-web-browser";
-import { View, Text, FlatList, StyleSheet, ActivityIndicator, TouchableOpacity } from "react-native";
+import {
+  View,
+  FlatList,
+  StyleSheet,
+  ActivityIndicator,
+  TouchableOpacity,
+} from "react-native";
+import { Text } from "@/frontend/components/scaled-text";
 import { Ionicons } from "@expo/vector-icons";
 import { router } from "expo-router";
 import { Starfield } from "@/frontend/components/starfield";

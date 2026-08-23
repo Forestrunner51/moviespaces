@@ -1,5 +1,6 @@
 import { useEffect, useState, type ReactNode } from "react";
-import { View, Text, TouchableOpacity, StyleSheet } from "react-native";
+import { View, TouchableOpacity, StyleSheet } from "react-native";
+import { Text } from "@/frontend/components/scaled-text";
 import { Ionicons } from "@expo/vector-icons";
 import AsyncStorage from "@react-native-async-storage/async-storage";
 import { Palette, Type, Radius } from "@/frontend/constants/theme";

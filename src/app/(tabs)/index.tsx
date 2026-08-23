@@ -1,24 +1,26 @@
 import { useCallback, useEffect, useMemo, useState } from "react";
 import {
   View,
-  Text,
   TouchableOpacity,
   StyleSheet,
   FlatList,
   ActivityIndicator,
   ScrollView,
 } from "react-native";
+import { Text } from "@/frontend/components/scaled-text";
 import { router, useFocusEffect } from "expo-router";
 import { Ionicons } from "@expo/vector-icons";
 import { Starfield } from "@/frontend/components/starfield";
 import { SpaceStyles, Palette, Type, Display, Font, Radius } from "@/frontend/constants/theme";
 import { MoviePoster } from "@/frontend/components/movie-poster";
-import { AvatarStack } from "@/frontend/components/avatar";
+import { Avatar, AvatarStack } from "@/frontend/components/avatar";
 import { CoachTip } from "@/frontend/components/coach-tip";
 import { useProfiles } from "@/frontend/hooks/use-profiles";
 import { formatEventDate } from "@/frontend/utils/event-date";
 import { EVENT_CATEGORIES, eventCategoryOf } from "@/frontend/constants/event-categories";
 import { authFetch } from "@/frontend/services/api";
+import { resolveDisplayName } from "@/frontend/services/display-name";
+import { useToast } from "@/frontend/components/toast";
 
 // Members carry userId so the cards can show attendee faces (see useProfiles)
 // — the API already returns them, these types just weren't asking.
@@ -27,10 +29,13 @@ interface SpaceMember {
   name: string;
   confirmed: boolean;
   userId: string;
+  hasTicket?: boolean;
 }
 
 interface NearbySpace {
   id: string;
+  // Host's Supabase id — the feed card leads with their face.
+  userId: string;
   hostName: string;
   filmName: string;
   cinemaName: string;
@@ -43,105 +48,121 @@ interface NearbySpace {
   members: SpaceMember[];
 }
 
-// Shape returned by GET /api/group/mine — a superset of NearbySpace, but
-// kept as its own type since "my" cards need isPublic/screeningTime to sort
-// and filter, which the public teaser feed above never needs.
+// Shape returned by GET /api/group/mine — Home only needs ids (to keep the
+// user's own Spaces out of the nearby feed); My Spaces owns the full view.
 interface MySpace {
   id: string;
-  filmName: string;
-  cinemaName: string;
-  posterPath: string | null;
-  showDate: string;
-  showTime: string;
-  screeningTime: string | null;
-  isPublic: boolean;
-  // Non-null for a Movie Crew: IsPublic like a club, but it's a real
-  // gathering the user is attending, so it belongs with their Spaces.
-  matchMovieKey: string | null;
-  status: string;
-  spaceType: string;
-  eventCategory: string | null;
-  members: SpaceMember[];
 }
 
-// One carousel card, shared by "My Upcoming Spaces" and "Nearby Public
-// Gatherings" — they previously had two identical inline renderItems, both
-// showing poster + title + venue + a 12px date line. Now the date leads in
-// the display face and attendees appear as faces, matching the Spaces and
-// Explore lists. Its own component because the avatars need a hook, and a
-// FlatList renderItem can't hold one.
-function CarouselCard({
-  id,
-  filmName,
-  cinemaName,
-  posterPath,
-  showDate,
-  showTime,
-  screeningTime,
-  spaceType,
-  eventCategory,
-  members,
-  hostName,
-}: {
-  id: string;
-  filmName: string;
-  cinemaName: string;
-  posterPath: string | null;
-  showDate: string;
-  showTime: string;
-  screeningTime: string | null;
-  spaceType: string;
-  eventCategory: string | null;
-  members: SpaceMember[];
-  hostName?: string;
-}) {
-  const profiles = useProfiles(members.map((m) => m.userId));
-  // Relative labels ("Tonight", "In 3 days") read the real current time.
-  const eventDate = formatEventDate(screeningTime, showDate, showTime);
+// Feed card — a person doing a thing, not a listing. Strava's feed is
+// "Sam ran 5k", Kaya's is "Ola sent V4"; ours is "Bob is seeing The Caine
+// Mutiny on Sunday". The host's face leads, the film is the subject, and
+// the card has a reaction: "I'm in" joins on the spot.
+function FeedCard({ space }: { space: NearbySpace }) {
+  const { showToast } = useToast();
+  const members = space.members ?? [];
+  const profiles = useProfiles([space.userId, ...members.map((m) => m.userId)]);
+  const host = profiles.get(space.userId);
+  const eventDate = formatEventDate(space.screeningTime, space.showDate, space.showTime);
+  const [joining, setJoining] = useState(false);
+  const isWatchParty = space.spaceType === "private_rental";
+  const others = members.filter((m) => m.userId !== space.userId);
+
+  const imIn = async () => {
+    if (joining) return;
+    setJoining(true);
+    try {
+      const name = await resolveDisplayName("");
+      const res = await authFetch(`${process.env.EXPO_PUBLIC_API_URL}/api/group/${space.id}/join`, {
+        method: "POST",
+        body: JSON.stringify({ name, spaceCode: null }),
+      });
+      if (!res.ok) {
+        const body = await res.json().catch(() => null);
+        showToast(body?.error || "Couldn't join right now — try again.");
+        return;
+      }
+      router.push({ pathname: "/group", params: { groupId: space.id, matched: "joined" } });
+    } catch {
+      showToast("Network error — please try again.");
+    } finally {
+      setJoining(false);
+    }
+  };
 
   return (
     <TouchableOpacity
-      activeOpacity={0.85}
-      style={styles.spaceCard}
-      onPress={() => router.push({ pathname: "/group", params: { groupId: id } })}
+      activeOpacity={0.88}
+      style={styles.feedCard}
+      onPress={() => router.push({ pathname: "/group", params: { groupId: space.id } })}
+      accessibilityRole="button"
+      accessibilityLabel={`${space.hostName} is seeing ${space.filmName}`}
     >
-      <MoviePoster
-        uri={posterPath}
-        width={132}
-        style={styles.spaceCardPoster}
-        fallbackIcon={EVENT_CATEGORIES[eventCategoryOf(spaceType, eventCategory)].icon}
-      />
-      <Text style={styles.spaceCardDate} numberOfLines={1}>
-        {eventDate.date}
-      </Text>
-      <View style={styles.spaceCardMetaRow}>
-        <Text style={styles.spaceCardTime}>{eventDate.time}</Text>
-        {!!eventDate.relative && (
-          <Text style={styles.spaceCardRelative} numberOfLines={1}>
-            {eventDate.relative}
+      <View style={styles.feedHead}>
+        <Avatar uri={host?.avatarUrl} name={space.hostName} size={40} />
+        <View style={{ flex: 1 }}>
+          <Text style={styles.feedLead} numberOfLines={2}>
+            <Text style={styles.feedName}>{space.hostName}</Text>
+            {isWatchParty ? " is hosting " : " is seeing "}
+            <Text style={styles.feedName}>{space.filmName}</Text>
           </Text>
+          <Text style={styles.feedWhenLine} numberOfLines={1}>
+            {eventDate.date}
+            {eventDate.time ? ` · ${eventDate.time}` : ""}
+            {space.cinemaName ? ` · ${space.cinemaName}` : ""}
+          </Text>
+        </View>
+        {!!eventDate.relative && (
+          <View style={styles.feedChip}>
+            <Text style={styles.feedChipText}>{eventDate.relative}</Text>
+          </View>
         )}
       </View>
-      <Text style={styles.spaceCardTitle} numberOfLines={1}>
-        {filmName}
-      </Text>
-      <Text style={styles.spaceCardSubtitle} numberOfLines={1}>
-        {hostName ? `${cinemaName} · ${hostName}` : cinemaName}
-      </Text>
-      {members.length > 0 && (
-        <View style={styles.spaceCardFooter}>
-          <AvatarStack
-            people={members.map((m) => ({
-              userId: m.userId,
-              name: m.name,
-              avatarUrl: profiles.get(m.userId)?.avatarUrl,
-            }))}
-            size={20}
-            max={3}
-          />
-          <Text style={styles.spaceCardGoing}>{members.length} going</Text>
+      <View style={styles.feedBody}>
+        <MoviePoster
+          uri={space.posterPath}
+          width={48}
+          fallbackIcon={EVENT_CATEGORIES[eventCategoryOf(space.spaceType, space.eventCategory)].icon}
+        />
+        <View style={styles.feedPeople}>
+          {others.length > 0 ? (
+            <>
+              <AvatarStack
+                people={others.map((m) => ({
+                  userId: m.userId,
+                  name: m.name,
+                  avatarUrl: profiles.get(m.userId)?.avatarUrl,
+                }))}
+                size={22}
+                max={4}
+              />
+              <Text style={styles.feedMeta}>
+                {others.length === 1 ? "1 other is in" : `${others.length} others are in`}
+              </Text>
+            </>
+          ) : (
+            <Text style={styles.feedMeta}>Be the first to join</Text>
+          )}
         </View>
-      )}
+        <TouchableOpacity
+          activeOpacity={0.85}
+          style={[styles.imIn, joining && { opacity: 0.6 }]}
+          onPress={imIn}
+          disabled={joining}
+          hitSlop={6}
+          accessibilityRole="button"
+          accessibilityLabel={`I'm in for ${space.filmName}`}
+        >
+          {joining ? (
+            <ActivityIndicator color={Palette.base} size="small" />
+          ) : (
+            <>
+              <Ionicons name="hand-right" size={14} color={Palette.base} />
+              <Text style={styles.imInText}>I&apos;m in</Text>
+            </>
+          )}
+        </TouchableOpacity>
+      </View>
     </TouchableOpacity>
   );
 }
@@ -157,25 +178,24 @@ interface MyClub {
   playedTodayCount: number;
 }
 
-// Fisher-Yates-ish partial shuffle — good enough for picking a handful of
-// items out of at most 50 (GetOpenSpaces already caps the feed at that).
-function pickRandom<T>(arr: T[], count: number): T[] {
-  const copy = [...arr];
-  for (let i = copy.length - 1; i > 0; i--) {
-    const j = Math.floor(Math.random() * (i + 1));
-    [copy[i], copy[j]] = [copy[j], copy[i]];
-  }
-  return copy.slice(0, count);
-}
+// One of these per app open. Picked in a useState initializer so it's
+// stable for the life of the screen and only changes when Home remounts.
+const HEADLINES = [
+  "Who are you\nwatching with?",
+  "Big screen,\nnew faces.",
+  "Pick a film.\nFind your crew.",
+  "Nobody should\nsee it alone.",
+  "What are we\nseeing tonight?",
+  "Good movie.\nBetter company.",
+];
 
 export default function HomeScreen() {
+  const [headline] = useState(() => HEADLINES[Math.floor(Math.random() * HEADLINES.length)]);
   // Raw, unfiltered feed — the random-2 pick and the "exclude my own"
   // filter both need the full list to draw from, not just whatever survived
   // an earlier pick.
   const [openSpacesRaw, setOpenSpacesRaw] = useState<NearbySpace[]>([]);
   const [spacesLoading, setSpacesLoading] = useState(true);
-  const [mySpaces, setMySpaces] = useState<MySpace[]>([]);
-  const [mySpacesLoading, setMySpacesLoading] = useState(true);
   const [myClubs, setMyClubs] = useState<MyClub[]>([]);
   // Every Space the user belongs to at all (host or member, any type/status)
   // — deliberately broader than mySpaces' "upcoming, non-public" filter,
@@ -204,7 +224,9 @@ export default function HomeScreen() {
   // meant as a teaser, not the full list (Explore already covers that).
   const nearbySpaces = useMemo(() => {
     const notMine = openSpacesRaw.filter((s) => !myGroupIds.has(s.id));
-    return pickRandom(notMine, 2);
+    const t = (x: NearbySpace) =>
+      x.screeningTime ? new Date(x.screeningTime).getTime() : Number.POSITIVE_INFINITY;
+    return [...notMine].sort((a, b) => t(a) - t(b)).slice(0, 8);
   }, [openSpacesRaw, myGroupIds]);
 
   // Refetched on focus (not just mount) so a Space created or joined
@@ -220,24 +242,8 @@ export default function HomeScreen() {
         .then((data: MySpace[]) => {
           if (cancelled) return;
           setMyGroupIds(new Set((data || []).map((s) => s.id)));
-          const now = Date.now();
-          const upcoming = (data || [])
-            // Community Spaces have their own row below — this section is
-            // for real one-off gatherings/rentals the user is actually
-            // attending. Same past/evergreen logic as group.tsx's hasPassed.
-            .filter((s) => (!s.isPublic || !!s.matchMovieKey) && s.status !== "cancelled")
-            .filter((s) => !s.screeningTime || new Date(s.screeningTime).getTime() >= now)
-            .sort((a, b) => {
-              if (!a.screeningTime) return 1;
-              if (!b.screeningTime) return -1;
-              return new Date(a.screeningTime).getTime() - new Date(b.screeningTime).getTime();
-            });
-          setMySpaces(upcoming.slice(0, 5));
         })
-        .catch((err) => console.warn("Failed to load my spaces for home screen:", err))
-        .finally(() => {
-          if (!cancelled) setMySpacesLoading(false);
-        });
+        .catch((err) => console.warn("Failed to load my spaces for home screen:", err));
 
       authFetch(`${process.env.EXPO_PUBLIC_API_URL}/api/group/community-spaces/discover`)
         .then((res) => (res.ok ? res.json() : { spaces: [] }))
@@ -272,7 +278,7 @@ export default function HomeScreen() {
         <View style={styles.header}>
           <Text style={[SpaceStyles.wordmark, styles.wordmark]}>MovieSpaces</Text>
           <Text style={styles.dateLine}>{todayLabel}</Text>
-          <Text style={styles.headline}>Who are you{"\n"}watching with?</Text>
+          <Text style={styles.headline}>{headline}</Text>
         </View>
 
         <CoachTip id="home-welcome" icon="hand-left-outline">
@@ -280,25 +286,24 @@ export default function HomeScreen() {
           clubs, and the daily CineMind puzzle all live in the tabs below.
         </CoachTip>
 
-        {/* Joining leads, and it's a full card rather than a muted text link.
-            Both hosting options below author an event from scratch — for a
-            new user with no friends and no Spaces yet, every prominent action
-            used to end in "you've created something nobody is in." */}
+        {/* The hero is the one thing on Home the tab bar can't reach: get
+            seated with strangers for a film. Your own plans live in My
+            Spaces — Home is for finding the next one. */}
         <TouchableOpacity
           activeOpacity={0.85}
           style={styles.heroCard}
-          onPress={() => router.push({ pathname: "/(tabs)/explore" })}
+          onPress={() => router.push("/match")}
           accessibilityRole="button"
-          accessibilityLabel="Find a Space to join"
+          accessibilityLabel="Make new friends in a movie crew"
         >
           <View style={styles.heroIcon}>
-            <Ionicons name="telescope-outline" size={26} color={Palette.base} />
+            <Ionicons name="people" size={24} color={Palette.base} />
           </View>
           <View style={{ flex: 1 }}>
-            <Text style={styles.heroKicker}>Tonight, near you</Text>
-            <Text style={styles.heroTitle}>Find a Space to join</Text>
+            <Text style={styles.heroKicker}>Movie Crew</Text>
+            <Text style={styles.heroTitle}>Make some new friends</Text>
             <Text style={styles.heroSubtitle}>
-              Public screenings, watch parties and movie crews forming now
+              Pick a film and a showing — we put you in a crew of up to 6 who picked the same
             </Text>
           </View>
           <View style={styles.heroArrow}>
@@ -306,51 +311,49 @@ export default function HomeScreen() {
           </View>
         </TouchableOpacity>
 
-        {/* Hosting is the secondary path (a new user with no friends yet
-            should join first), so the two host options share one compact
-            row instead of two more full-width cards — four identical
-            full-width cards in a column read as a wall. Titles say where it
-            happens, not just what you do. */}
+        {/* Hosting: two cards with a line each on what they mean, under the
+            crew hero so joining still leads. */}
         <Text style={styles.sectionTitle}>Or host your own</Text>
         <View style={styles.hostRow}>
           <TouchableOpacity
             activeOpacity={0.85}
             style={styles.hostCard}
-            onPress={() =>
-              router.push({ pathname: "/create-space", params: { spaceType: "public_gathering" } })
-            }
+            onPress={() => router.push({ pathname: "/create-space", params: { spaceType: "public_gathering" } })}
             accessibilityRole="button"
-            accessibilityLabel="See a movie at a theater"
+            accessibilityLabel="Host at a theater"
           >
             <View style={styles.hostIcon}>
               <Ionicons name="film-outline" size={20} color={Palette.accent} />
             </View>
             <Text style={styles.hostTitle}>At a theater</Text>
-            <Text style={styles.hostSubtitle}>Pick a showtime, bring people along</Text>
+            <Text style={styles.hostBody}>
+              Pick a real showing near you and open it up — friends or anyone can join.
+            </Text>
           </TouchableOpacity>
-
           <TouchableOpacity
             activeOpacity={0.85}
             style={styles.hostCard}
             onPress={() => router.push("/rent-a-theater")}
             accessibilityRole="button"
-            accessibilityLabel="Host at your own venue"
+            accessibilityLabel="Host at your own place"
           >
             <View style={styles.hostIcon}>
-              <Ionicons name="storefront-outline" size={20} color={Palette.accent} />
+              <Ionicons name="home-outline" size={20} color={Palette.accent} />
             </View>
             <Text style={styles.hostTitle}>At your place</Text>
-            <Text style={styles.hostSubtitle}>Your couch, a bar, a rented room</Text>
+            <Text style={styles.hostBody}>
+              A watch party at home, a bar, or a rented room. You set the time and the guest list.
+            </Text>
           </TouchableOpacity>
         </View>
-
         <TouchableOpacity
           activeOpacity={0.7}
-          style={styles.codeEntryLink}
+          style={styles.codeLink}
           onPress={() => router.push("/join-by-code")}
+          accessibilityRole="button"
         >
-          <Ionicons name="key-outline" size={15} color={Palette.textMuted} />
-          <Text style={styles.codeEntryLinkText}>Have a Space code?</Text>
+          <Ionicons name="key-outline" size={14} color={Palette.textMuted} />
+          <Text style={styles.codeLinkText}>Have a Space code?</Text>
         </TouchableOpacity>
 
         {myClubs.length > 0 && (
@@ -388,77 +391,27 @@ export default function HomeScreen() {
           </>
         )}
 
-        <Text style={styles.sectionTitle}>My Upcoming Spaces</Text>
-        {mySpacesLoading ? (
-          <ActivityIndicator color={Palette.accent} style={styles.sectionLoading} />
-        ) : mySpaces.length === 0 ? (
-          <View style={styles.emptySection}>
-            <Text style={styles.emptySectionText}>
-              Nothing on your calendar yet — host one above or join with a code.
-            </Text>
-          </View>
-        ) : (
-          <FlatList
-            horizontal
-            showsHorizontalScrollIndicator={false}
-            data={mySpaces}
-            keyExtractor={(item) => item.id}
-            contentContainerStyle={styles.carouselContent}
-            renderItem={({ item }) => (
-              <CarouselCard
-                id={item.id}
-                filmName={item.filmName}
-                cinemaName={item.cinemaName}
-                posterPath={item.posterPath}
-                showDate={item.showDate}
-                showTime={item.showTime}
-                screeningTime={item.screeningTime}
-                spaceType={item.spaceType}
-                eventCategory={item.eventCategory}
-                members={item.members ?? []}
-              />
-            )}
-          />
-        )}
-
-        <Text style={styles.sectionTitle}>Nearby Public Gatherings</Text>
+        {/* The feed. Vertical, full-width, soonest first — Home scrolls like
+            a list of real events happening near you. */}
+        <View style={styles.feedHeader}>
+          <Text style={[styles.sectionTitle, { marginTop: 0, marginBottom: 0 }]}>Happening near you</Text>
+          <TouchableOpacity activeOpacity={0.7} onPress={() => router.push({ pathname: "/(tabs)/explore" })} hitSlop={8}>
+            <Text style={styles.feedSeeAll}>See all</Text>
+          </TouchableOpacity>
+        </View>
         {spacesLoading ? (
           <ActivityIndicator color={Palette.accent} style={styles.sectionLoading} />
         ) : nearbySpaces.length === 0 ? (
           <View style={styles.emptySection}>
             <Text style={styles.emptySectionText}>
-              No spaces available — you can check Explore for a larger list of spaces.
+              Nothing public near you yet. Start a crew and be the first thing on this list.
             </Text>
-            <TouchableOpacity
-              activeOpacity={0.8}
-              onPress={() => router.push({ pathname: "/(tabs)/explore" })}
-            >
-              <Text style={styles.emptySectionLink}>Go to Explore</Text>
+            <TouchableOpacity activeOpacity={0.8} onPress={() => router.push("/match")}>
+              <Text style={styles.emptySectionLink}>Find a crew</Text>
             </TouchableOpacity>
           </View>
         ) : (
-          <FlatList
-            horizontal
-            showsHorizontalScrollIndicator={false}
-            data={nearbySpaces}
-            keyExtractor={(item) => item.id}
-            contentContainerStyle={styles.carouselContent}
-            renderItem={({ item }) => (
-              <CarouselCard
-                id={item.id}
-                filmName={item.filmName}
-                cinemaName={item.cinemaName}
-                posterPath={item.posterPath}
-                showDate={item.showDate}
-                showTime={item.showTime}
-                screeningTime={item.screeningTime}
-                spaceType={item.spaceType}
-                eventCategory={item.eventCategory}
-                members={item.members ?? []}
-                hostName={item.hostName}
-              />
-            )}
-          />
+          nearbySpaces.map((space) => <FeedCard key={space.id} space={space} />)
         )}
       </ScrollView>
     </Starfield>
@@ -519,16 +472,7 @@ const styles = StyleSheet.create({
     alignItems: "center",
     justifyContent: "center",
   },
-  codeEntryLink: {
-    flexDirection: "row",
-    alignItems: "center",
-    justifyContent: "center",
-    gap: 6,
-    paddingVertical: 10,
-    marginBottom: 6,
-  },
-  codeEntryLinkText: { ...Type.small, fontFamily: Font.semibold, color: Palette.textMuted },
-  hostRow: { flexDirection: "row", gap: 12, marginBottom: 4 },
+  hostRow: { flexDirection: "row", gap: 12 },
   hostCard: {
     ...SpaceStyles.glassCard,
     flex: 1,
@@ -536,8 +480,8 @@ const styles = StyleSheet.create({
     alignItems: "flex-start",
   },
   hostIcon: {
-    width: 36,
-    height: 36,
+    width: 38,
+    height: 38,
     borderRadius: Radius.pill,
     backgroundColor: Palette.accentDim,
     borderWidth: 1,
@@ -546,8 +490,53 @@ const styles = StyleSheet.create({
     justifyContent: "center",
     marginBottom: 10,
   },
-  hostTitle: { fontFamily: Font.bold, fontSize: 16, lineHeight: 20, color: Palette.text, marginBottom: 3 },
-  hostSubtitle: { ...Type.caption, color: Palette.textMuted },
+  hostTitle: { fontFamily: Font.bold, fontSize: 17, lineHeight: 22, color: Palette.text, marginBottom: 4 },
+  hostBody: { ...Type.caption, fontSize: 13, lineHeight: 18, color: Palette.textMuted },
+  codeLink: {
+    flexDirection: "row",
+    alignItems: "center",
+    justifyContent: "center",
+    gap: 6,
+    paddingVertical: 12,
+    marginBottom: 4,
+  },
+  codeLinkText: { ...Type.small, fontFamily: Font.semibold, color: Palette.textMuted },
+  // Feed
+  feedHeader: { flexDirection: "row", alignItems: "center", justifyContent: "space-between", marginTop: 16, marginBottom: 12 },
+  feedSeeAll: { ...Type.small, fontFamily: Font.semibold, color: Palette.accent },
+  feedCard: {
+    ...SpaceStyles.glassCard,
+    padding: 14,
+    marginBottom: 10,
+  },
+  feedHead: { flexDirection: "row", alignItems: "flex-start", gap: 10 },
+  feedLead: { ...Type.body, color: Palette.textMuted },
+  feedName: { fontFamily: Font.bold, color: Palette.text },
+  feedWhenLine: { ...Type.caption, color: Palette.textMuted, marginTop: 3 },
+  feedChip: {
+    paddingVertical: 3,
+    paddingHorizontal: 8,
+    borderRadius: Radius.pill,
+    backgroundColor: Palette.accentDim,
+    borderWidth: 1,
+    borderColor: Palette.accentBorder,
+  },
+  feedChipText: { ...Type.caption, fontFamily: Font.bold, color: Palette.accent, textTransform: "uppercase", fontSize: 11, lineHeight: 14 },
+  feedBody: { flexDirection: "row", alignItems: "center", gap: 10, marginTop: 12 },
+  feedPeople: { flex: 1, flexDirection: "row", alignItems: "center", gap: 8 },
+  feedMeta: { ...Type.caption, color: Palette.textFaint, flexShrink: 1 },
+  imIn: {
+    flexDirection: "row",
+    alignItems: "center",
+    gap: 6,
+    paddingVertical: 8,
+    paddingHorizontal: 14,
+    borderRadius: Radius.pill,
+    backgroundColor: Palette.accent,
+    minWidth: 84,
+    justifyContent: "center",
+  },
+  imInText: { ...Type.small, fontFamily: Font.bold, color: Palette.base },
   sectionTitle: {
     ...Display.section,
     color: Palette.textMuted,
@@ -572,32 +561,6 @@ const styles = StyleSheet.create({
     gap: 12,
     paddingBottom: 20,
   },
-  spaceCard: {
-    ...SpaceStyles.glassCard,
-    width: 160,
-    padding: 14,
-  },
-  spaceCardPoster: { marginBottom: 10 },
-  spaceCardDate: { ...Display.dateCard, color: Palette.text },
-  spaceCardMetaRow: {
-    flexDirection: "row",
-    alignItems: "baseline",
-    gap: 6,
-    marginBottom: 4,
-  },
-  spaceCardTime: { ...Type.caption, color: Palette.textMuted },
-  spaceCardRelative: {
-    ...Type.caption,
-    color: Palette.accent,
-    fontFamily: Font.bold,
-    textTransform: "uppercase",
-    letterSpacing: 0.4,
-    flexShrink: 1,
-  },
-  spaceCardTitle: { ...Type.small, fontFamily: Font.semibold, color: Palette.text },
-  spaceCardSubtitle: { ...Type.caption, color: Palette.textMuted },
-  spaceCardFooter: { flexDirection: "row", alignItems: "center", gap: 6, marginTop: 10 },
-  spaceCardGoing: { ...Type.caption, color: Palette.textFaint },
   clubChip: {
     ...SpaceStyles.glassCard,
     width: 160,

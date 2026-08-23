@@ -1,16 +1,15 @@
 import { useCallback, useEffect, useRef, useState } from "react";
 import {
   View,
-  Text,
   StyleSheet,
   ScrollView,
   TouchableOpacity,
   ActivityIndicator,
   Share,
-  TextInput,
   KeyboardAvoidingView,
   Platform,
 } from "react-native";
+import { Text, TextInput } from "@/frontend/components/scaled-text";
 import { router } from "expo-router";
 import { Ionicons } from "@expo/vector-icons";
 import { Starfield } from "@/frontend/components/starfield";

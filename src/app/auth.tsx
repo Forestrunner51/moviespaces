@@ -1,8 +1,6 @@
 import React, { useEffect, useState } from "react";
 import {
   StyleSheet,
-  Text,
-  TextInput,
   View,
   TouchableOpacity,
   ActivityIndicator,
@@ -10,6 +8,7 @@ import {
   ScrollView,
   Platform,
 } from "react-native";
+import { Text, TextInput } from "@/frontend/components/scaled-text";
 import AsyncStorage from "@react-native-async-storage/async-storage";
 import * as AppleAuthentication from "expo-apple-authentication";
 import { supabase } from "../frontend/config/supabase";

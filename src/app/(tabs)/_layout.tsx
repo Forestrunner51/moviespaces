@@ -1,9 +1,12 @@
 import { Tabs } from "expo-router";
+import { View } from "react-native";
 import { Ionicons } from "@expo/vector-icons";
 import { SpaceTheme, Palette } from "@/frontend/constants/theme";
+import { CrewFab } from "@/frontend/components/crew-fab";
 
 export default function TabsLayout() {
   return (
+    <View style={{ flex: 1 }}>
     <Tabs
       screenOptions={{
         tabBarActiveTintColor: SpaceTheme.glowCyan,
@@ -12,6 +15,14 @@ export default function TabsLayout() {
           backgroundColor: SpaceTheme.deepSpace,
           borderTopColor: Palette.border,
         },
+        // Explicit even distribution. The default item layout is flex-based
+        // and, on some devices/orientations (and iOS's compact "label beside
+        // icon" mode), items size to their label width — "My Spaces" and
+        // "CineMind" then crowd the others and the gaps go uneven.
+        tabBarItemStyle: { flex: 1, paddingHorizontal: 0 },
+        tabBarLabelPosition: "below-icon",
+        tabBarLabelStyle: { fontSize: 11 },
+        tabBarAllowFontScaling: false,
       }}
     >
       <Tabs.Screen
@@ -78,5 +89,7 @@ export default function TabsLayout() {
       />
       {/* This configuration registers the route but completely hides it from the tab bar */}
     </Tabs>
+    <CrewFab />
+    </View>
   );
 }
