@@ -289,15 +289,9 @@ export default function MatchScreen() {
     });
   };
 
+  const venueReady = venueName.trim().length > 0 && !!dateValue && !!timeValue;
   const startVenueCrew = () => {
-    if (!venueName.trim()) {
-      showToast("Name the place — your address, a bar, a rented room.");
-      return;
-    }
-    if (!dateValue || !timeValue) {
-      showToast("Pick a date and a time.");
-      return;
-    }
+    if (!venueReady || !dateValue || !timeValue) return;
     const combined = new Date(dateValue);
     combined.setHours(timeValue.getHours(), timeValue.getMinutes(), 0, 0);
     return submit({
@@ -695,6 +689,19 @@ export default function MatchScreen() {
                   onDismiss={() => setDatePickerVisible(false)}
                 />
               )}
+              {Platform.OS === "ios" && datePickerVisible && (
+                <TouchableOpacity
+                  activeOpacity={0.8}
+                  style={styles.pickerDone}
+                  onPress={() => {
+                    if (!dateValue) setDateValue(new Date());
+                    setDatePickerVisible(false);
+                  }}
+                  accessibilityRole="button"
+                >
+                  <Text style={styles.pickerDoneText}>Done</Text>
+                </TouchableOpacity>
+              )}
               <Text style={styles.stepLabel}>TIME</Text>
               <TouchableOpacity
                 activeOpacity={0.8}
@@ -722,12 +729,39 @@ export default function MatchScreen() {
                   onDismiss={() => setTimePickerVisible(false)}
                 />
               )}
+              {Platform.OS === "ios" && timePickerVisible && (
+                <TouchableOpacity
+                  activeOpacity={0.8}
+                  style={styles.pickerDone}
+                  onPress={() => {
+                    if (!timeValue) setTimeValue(new Date());
+                    setTimePickerVisible(false);
+                  }}
+                  accessibilityRole="button"
+                >
+                  <Text style={styles.pickerDoneText}>Done</Text>
+                </TouchableOpacity>
+              )}
+
+              {/* Inline validation instead of a toast — the toast lands on top
+                  of this form's title and reads as a glitch. The button stays
+                  dim until the three fields are in. */}
+              {!venueReady && (
+                <Text style={styles.formHint}>
+                  {!venueName.trim()
+                    ? "Add a place to start."
+                    : !dateValue
+                      ? "Pick a date."
+                      : "Pick a time."}
+                </Text>
+              )}
               <TouchableOpacity
                 activeOpacity={0.85}
-                style={[styles.primary, submitting && { opacity: 0.6 }]}
+                style={[styles.primary, (submitting || !venueReady) && { opacity: 0.5 }]}
                 onPress={startVenueCrew}
-                disabled={submitting}
+                disabled={submitting || !venueReady}
                 accessibilityRole="button"
+                accessibilityState={{ disabled: submitting || !venueReady }}
               >
                 {submitting ? (
                   <ActivityIndicator color={Palette.base} />
@@ -892,6 +926,9 @@ const styles = StyleSheet.create({
     padding: 12,
   },
   pickerFieldText: { ...Type.body, color: Palette.text },
+  pickerDone: { alignSelf: "flex-end", paddingVertical: 8, paddingHorizontal: 16, marginTop: 4 },
+  pickerDoneText: { ...Type.small, fontFamily: Font.bold, color: Palette.accent },
+  formHint: { ...Type.caption, color: Palette.textMuted, marginTop: 14 },
   pickerPlaceholder: { color: Palette.textFaint },
   ticketToggle: {
     flexDirection: "row",
