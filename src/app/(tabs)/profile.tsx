@@ -43,6 +43,7 @@ interface MySpace {
   status: string;
   createdAt: string;
   isPublic: boolean;
+  matchMovieKey: string | null;
 }
 
 export default function ProfileScreen() {
@@ -246,7 +247,12 @@ export default function ProfileScreen() {
   // time — falling back to createdAt means they still age out of "Upcoming"
   // eventually instead of being stuck there forever just because we can't
   // pin down their real showtime.
-  const effectiveTime = (s: MySpace) => new Date(s.screeningTime ?? s.createdAt).getTime();
+  // A crew with no showtime yet is still forming — upcoming, not aged out.
+  const effectiveTime = (s: MySpace) =>
+    s.matchMovieKey && !s.screeningTime
+      ? Number.POSITIVE_INFINITY
+      : new Date(s.screeningTime ?? s.createdAt).getTime();
+  const isMine = (s: MySpace) => !s.isPublic || !!s.matchMovieKey;
   // Public Community Spaces (evergreen genre clubs, no real event tied to
   // them) are excluded from both buckets entirely — not folded into
   // "Upcoming" via a never-passes exemption like group.tsx's hasPassed and
@@ -255,10 +261,10 @@ export default function ProfileScreen() {
   // dedicated "My Community Clubs" row is where a joined club actually
   // belongs, and this screen isn't the only place a member can see it.
   const upcomingSpaces = mySpaces
-    .filter((s) => !s.isPublic && s.status !== "cancelled" && effectiveTime(s) >= now)
+    .filter((s) => isMine(s) && s.status !== "cancelled" && effectiveTime(s) >= now)
     .sort((a, b) => effectiveTime(a) - effectiveTime(b));
   const pastSpaces = mySpaces
-    .filter((s) => !s.isPublic && (s.status === "cancelled" || effectiveTime(s) < now))
+    .filter((s) => isMine(s) && (s.status === "cancelled" || effectiveTime(s) < now))
     .sort((a, b) => effectiveTime(b) - effectiveTime(a));
 
   if (loading) {

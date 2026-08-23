@@ -14,7 +14,7 @@ import { Starfield } from "@/frontend/components/starfield";
 import { SpaceStyles, Palette, Type, Display, Radius } from "@/frontend/constants/theme";
 import { useToast } from "@/frontend/components/toast";
 import { authFetch } from "@/frontend/services/api";
-import { supabase } from "@/frontend/config/supabase";
+import { resolveDisplayName } from "@/frontend/services/display-name";
 
 // Kept in sync with the backend's allow-list in CreateCommunityClub — anything
 // else collapses to "General" server-side.
@@ -35,10 +35,7 @@ export default function CreateClubScreen() {
     if (creating) return;
     setCreating(true);
     try {
-      const {
-        data: { user },
-      } = await supabase.auth.getUser();
-      const hostName = (user?.user_metadata?.full_name as string) || "A Movie Fan";
+      const hostName = await resolveDisplayName();
       const res = await authFetch(`${process.env.EXPO_PUBLIC_API_URL}/api/group/community-clubs`, {
         method: "POST",
         body: JSON.stringify({ Name: trimmed, GenreCategory: genre, HostName: hostName }),

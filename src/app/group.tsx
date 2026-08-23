@@ -497,15 +497,15 @@ export default function GroupScreen() {
   };
 
   const handleSaveEdit = async () => {
-    if (!editFilmName.trim() || !editCinemaName.trim()) {
-      showToast("Title and venue can't be blank.");
+    if ((!isCrew && !editFilmName.trim()) || !editCinemaName.trim()) {
+      showToast(isCrew ? "Venue can't be blank." : "Title and venue can't be blank.");
       return;
     }
     if (!editDateValue || !editTimeValue) {
       showToast("Pick a date and a time.");
       return;
     }
-    const capacity = parseInt(editMaxCapacity, 10);
+    const capacity = isCrew ? (group?.maxCapacity ?? 6) : parseInt(editMaxCapacity, 10);
     if (!Number.isFinite(capacity) || capacity < 1) {
       showToast("Enter a capacity of at least 1.");
       return;
@@ -745,7 +745,12 @@ export default function GroupScreen() {
   // hiding the Join button and every other action on a club that's supposed
   // to stay open forever.
   // eslint-disable-next-line react-hooks/purity -- see comment above
-  const hasPassed = !group.isPublic && new Date(group.screeningTime ?? group.createdAt).getTime() < Date.now();
+  const nowMs = Date.now();
+  // A crew is IsPublic (evergreen) but does end once the showtime it set has
+  // gone by; with no showtime set it's still forming, never "passed".
+  const hasPassed = group.matchMovieKey
+    ? !!group.screeningTime && new Date(group.screeningTime).getTime() < nowMs
+    : !group.isPublic && new Date(group.screeningTime ?? group.createdAt).getTime() < nowMs;
 
   // eslint-disable-next-line react-hooks/purity -- relative labels ("Tonight",
   // "In 3 days") are read off the real current time, same as hasPassed above.
@@ -849,9 +854,9 @@ export default function GroupScreen() {
               })}
             </View>
             <Text style={styles.crewTitle}>
-              {matched === "created" || (isMember && groupMembers.length === 1)
+              {isMember && groupMembers.length === 1
                 ? "You're first in."
-                : matched === "joined"
+                : matched && isMember
                   ? "You're in."
                   : isMember
                     ? `${groupMembers.length} of ${group.maxCapacity} seats filled.`
@@ -924,8 +929,11 @@ export default function GroupScreen() {
           </View>
         )}
 
+        {!(isCrew && !crewHasPlan) && (
         <View style={styles.manualRow}>
-          <Text style={styles.manualBadge}>Showtime set by the host</Text>
+          <Text style={styles.manualBadge}>
+            {isCrew ? "Showtime set by the crew" : "Showtime set by the host"}
+          </Text>
           {!hasPassed && (
             <TouchableOpacity
               activeOpacity={0.8}
@@ -939,6 +947,7 @@ export default function GroupScreen() {
             </TouchableOpacity>
           )}
         </View>
+        )}
         {group.showtimeReportCount > 0 && (
           <Text style={styles.reportCountText}>
             Flagged by {group.showtimeReportCount} member
@@ -1282,18 +1291,24 @@ export default function GroupScreen() {
           behavior={Platform.OS === "ios" ? "padding" : undefined}
         >
           <ScrollView style={styles.modal} keyboardShouldPersistTaps="handled">
-            <Text style={styles.modalTitle}>Edit Space</Text>
+            <Text style={styles.modalTitle}>{isCrew ? "Set the showtime" : "Edit Space"}</Text>
             <Text style={styles.modalSubtitle}>
-              Fixing the date or time clears any &quot;flagged as outdated&quot; reports on this Space.
+              {isCrew
+                ? "Anyone in the crew can set or fix the theater and time — agree in chat first."
+                : "Fixing the date or time clears any \u201cflagged as outdated\u201d reports on this Space."}
             </Text>
-            <TextInput
-              style={styles.modalInput}
-              placeholder="Title"
-              placeholderTextColor={SpaceTheme.mutedOrbit}
-              value={editFilmName}
-              onChangeText={setEditFilmName}
-              maxLength={200}
-            />
+            {/* A crew's film and size are fixed — see EditGroup, which also
+                ignores both for crews server-side. */}
+            {!isCrew && (
+              <TextInput
+                style={styles.modalInput}
+                placeholder="Title"
+                placeholderTextColor={SpaceTheme.mutedOrbit}
+                value={editFilmName}
+                onChangeText={setEditFilmName}
+                maxLength={200}
+              />
+            )}
             <TextInput
               style={styles.modalInput}
               placeholder="Venue"
@@ -1356,14 +1371,16 @@ export default function GroupScreen() {
                 onDismiss={() => setEditTimePickerVisible(false)}
               />
             )}
-            <TextInput
-              style={styles.modalInput}
-              placeholder="Max capacity"
-              placeholderTextColor={SpaceTheme.mutedOrbit}
-              value={editMaxCapacity}
-              onChangeText={setEditMaxCapacity}
-              keyboardType="number-pad"
-            />
+            {!isCrew && (
+              <TextInput
+                style={styles.modalInput}
+                placeholder="Max capacity"
+                placeholderTextColor={SpaceTheme.mutedOrbit}
+                value={editMaxCapacity}
+                onChangeText={setEditMaxCapacity}
+                keyboardType="number-pad"
+              />
+            )}
             {group.spaceType === "private_rental" && (
               <TextInput
                 style={styles.modalInput}
@@ -1520,7 +1537,7 @@ const styles = StyleSheet.create({
     marginBottom: 20,
     gap: 6,
   },
-  crewSeats: { flexDirection: "row", gap: 8, marginBottom: 8 },
+  crewSeats: { flexDirection: "row", flexWrap: "wrap", gap: 8, marginBottom: 8 },
   crewSeatFilled: {
     borderRadius: Radius.pill,
     borderWidth: 2,

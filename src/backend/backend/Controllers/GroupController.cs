@@ -458,17 +458,23 @@ namespace Backend.Controllers
 
             // The key that unifies everyone who wants the same film: the imdb id
             // when we have it (exact), else the normalized title.
+            // Namespaced so an imdb id and a freeform title can never collide
+            // in the same column. Title is already capped by CheckLength above.
             var key = !string.IsNullOrWhiteSpace(req.ImdbId)
-                ? req.ImdbId!.Trim().ToLowerInvariant()
-                : title.ToLowerInvariant();
-            if (key.Length > 120) key = key.Substring(0, 120);
+                ? "imdb:" + req.ImdbId!.Trim().ToLowerInvariant()
+                : "title:" + title.ToLowerInvariant();
 
             var cleanHost = _profanityFilter.CleanOrFallback(req.HostName ?? "", "A Movie Fan");
 
             // Find an open (non-full, non-cancelled) match group for this movie.
+            // A crew whose showtime has already passed is done — it shouldn't
+            // keep absorbing new matchers for a screening nobody can attend.
+            var now = DateTime.UtcNow;
             var candidates = await _db.Groups
                 .Include(g => g.Members)
-                .Where(g => g.MatchMovieKey == key && g.Status != "cancelled")
+                .Where(g => g.MatchMovieKey == key
+                    && g.Status != "cancelled"
+                    && (g.ScreeningTime == null || g.ScreeningTime > now))
                 .ToListAsync();
             // Already in a crew for this movie — including one that has since
             // filled up — go back to it. Checking only the open group here put
@@ -1415,6 +1421,13 @@ namespace Backend.Controllers
                 && await _db.GroupMembers.AnyAsync(m => m.GroupId == id && m.UserId == userId);
             if (group.UserId != userId && !isCrewMember) return Forbid();
 
+            // A crew's film is its identity (MatchMovieKey) and its size is
+            // fixed — nobody, host included, gets to retitle the crew or
+            // open it to 5000 seats (MatchForMovie would keep seating
+            // strangers into it). Crews edit the where/when only.
+            if (group.MatchMovieKey != null)
+                req = req with { FilmName = null, MaxCapacity = null };
+
             if (req.MaxCapacity.HasValue)
             {
                 // Same 1..5000 window CreateGroup enforces.
@@ -1481,10 +1494,18 @@ namespace Backend.Controllers
 
             if (showtimeChanged)
             {
+                // Attribute to whoever actually made the change — for a crew
+                // that can be any seated member, not the host.
+                var editorName = group.UserId == userId
+                    ? group.HostName
+                    : (await _db.GroupMembers
+                        .Where(m => m.GroupId == id && m.UserId == userId)
+                        .Select(m => m.Name)
+                        .FirstOrDefaultAsync()) ?? group.HostName;
                 await NotifyMembersAsync(
                     id,
                     "Showtime updated",
-                    $"{group.HostName} updated {group.FilmName}'s date/time to {group.ShowDate} at {group.ShowTime}.",
+                    $"{editorName} updated {group.FilmName}'s date/time to {group.ShowDate} at {group.ShowTime}.",
                     excludeUserId: userId
                 );
             }

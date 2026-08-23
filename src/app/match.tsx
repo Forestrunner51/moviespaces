@@ -1,4 +1,4 @@
-import { useState } from "react";
+import { useRef, useState } from "react";
 import {
   View,
   Text,
@@ -15,11 +15,11 @@ import { MoviePoster } from "@/frontend/components/movie-poster";
 import { SpaceStyles, Palette, Type, Display, Radius } from "@/frontend/constants/theme";
 import { useToast } from "@/frontend/components/toast";
 import { authFetch } from "@/frontend/services/api";
-import { supabase } from "@/frontend/config/supabase";
+import { resolveDisplayName } from "@/frontend/services/display-name";
 import { searchMovies, Movie } from "@/frontend/services/movies";
 
 // Keep in sync with GroupController.MatchCrewSize.
-export const MATCH_CREW_SIZE = 6;
+const MATCH_CREW_SIZE = 6;
 
 // Movie Crew: the Timeleft pattern applied to movies. Timeleft seats you at
 // a dinner table of six strangers; here you pick a film and get seated in a
@@ -49,32 +49,42 @@ export default function MatchScreen() {
   const [results, setResults] = useState<Movie[]>([]);
   const [searching, setSearching] = useState(false);
   const [matchingId, setMatchingId] = useState<string | null>(null);
+  // Debounce + stale-response guard: one request per pause in typing, and a
+  // slow earlier response can never overwrite a newer one (or drop the
+  // spinner while a newer query is still in flight).
+  const searchTimer = useRef<ReturnType<typeof setTimeout> | null>(null);
+  const searchSeq = useRef(0);
 
-  const handleSearch = async (text: string) => {
+  const handleSearch = (text: string) => {
     setQuery(text);
-    if (text.trim().length < 2) {
+    if (searchTimer.current) clearTimeout(searchTimer.current);
+    const q = text.trim();
+    if (q.length < 2) {
+      searchSeq.current += 1;
       setResults([]);
+      setSearching(false);
       return;
     }
     setSearching(true);
-    try {
-      const outcome = await searchMovies(text.trim());
-      setResults(outcome.results);
-    } catch {
-      /* transient — leave prior results */
-    } finally {
-      setSearching(false);
-    }
+    const seq = ++searchSeq.current;
+    searchTimer.current = setTimeout(async () => {
+      try {
+        const outcome = await searchMovies(q);
+        if (seq !== searchSeq.current) return;
+        setResults(outcome.results);
+      } catch {
+        /* transient — leave prior results */
+      } finally {
+        if (seq === searchSeq.current) setSearching(false);
+      }
+    }, 350);
   };
 
   const handleMatch = async (movie: Movie) => {
     if (matchingId) return;
     setMatchingId(movie.imdbId);
     try {
-      const {
-        data: { user },
-      } = await supabase.auth.getUser();
-      const hostName = (user?.user_metadata?.full_name as string) || "A Movie Fan";
+      const hostName = await resolveDisplayName();
       const res = await authFetch(`${process.env.EXPO_PUBLIC_API_URL}/api/group/match`, {
         method: "POST",
         body: JSON.stringify({
