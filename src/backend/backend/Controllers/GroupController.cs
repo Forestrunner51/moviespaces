@@ -262,7 +262,11 @@ namespace Backend.Controllers
                 GroupId = group.Id,
                 Name = cleanHostName,
                 UserId = userId,
-                Confirmed = true
+                Confirmed = true,
+                // The host's declared post-show activities double as their
+                // own "up for after" votes — one mechanic everywhere, with
+                // the host's picks pre-seeded.
+                AfterActivities = SanitizeAfterActivities(req.PostActivities)
             });
 
             _db.Groups.Add(group);
@@ -505,6 +509,34 @@ namespace Backend.Controllers
                 }));
         }
 
+        // Keys are client-side constants (activities.ts); the server only
+        // guarantees they're short, lowercase slugs and the row stays small.
+        private static string? SanitizeAfterActivities(string[]? keys)
+        {
+            if (keys == null) return null;
+            var clean = keys
+                .Select(k => (k ?? "").Trim().ToLowerInvariant())
+                .Where(k => k.Length > 0 && k.Length <= 32 && k.All(c => char.IsAsciiLetterLower(c) || c == '_'))
+                .Distinct()
+                .Take(10)
+                .ToArray();
+            return clean.Length == 0 ? null : string.Join(",", clean);
+        }
+
+        // POST /api/group/{id}/after — the caller's own "up for after"
+        // activity votes on a crew they're seated in. Replaces the whole set.
+        [HttpPost("{id}/after")]
+        public async Task<IActionResult> SetAfterActivities(Guid id, [FromBody] AfterActivitiesRequest req)
+        {
+            var userId = GetUserId();
+            if (string.IsNullOrEmpty(userId)) return Unauthorized(new { error = "Unauthorized" });
+            var member = await _db.GroupMembers.FirstOrDefaultAsync(m => m.GroupId == id && m.UserId == userId);
+            if (member == null) return Forbid();
+            member.AfterActivities = SanitizeAfterActivities(req.Activities);
+            await _db.SaveChangesAsync();
+            return Ok(new { afterActivities = member.AfterActivities });
+        }
+
         // POST /api/group/{id}/ticket — the caller's own "ticket in hand"
         // flag on a crew they're seated in. Self-reported; social, not a gate.
         [HttpPost("{id}/ticket")]
@@ -512,8 +544,10 @@ namespace Backend.Controllers
         {
             var userId = GetUserId();
             if (string.IsNullOrEmpty(userId)) return Unauthorized(new { error = "Unauthorized" });
-            var isTheaterCrew = await _db.Groups.AnyAsync(g => g.Id == id && g.MatchMovieKey != null && g.SpaceType == "public_gathering");
-            if (!isTheaterCrew) return BadRequest(new { error = "Tickets are tracked for theater crews only." });
+            // Any theater event — crew or hosted Space — where everyone buys
+            // their own ticket. Watch parties (private_rental) book as a group.
+            var isTheaterEvent = await _db.Groups.AnyAsync(g => g.Id == id && g.SpaceType == "public_gathering");
+            if (!isTheaterEvent) return BadRequest(new { error = "Tickets are tracked for theater events only." });
             var member = await _db.GroupMembers.FirstOrDefaultAsync(m => m.GroupId == id && m.UserId == userId);
             if (member == null) return Forbid();
             member.HasTicket = req.HasTicket;
@@ -559,7 +593,7 @@ namespace Backend.Controllers
                 // and GroupMember.Id is client-generated, so the navigation route
                 // marks the row Modified (UPDATE → 0 rows → 500). EF fixup still
                 // appends it to target.Members, so the count below is post-add.
-                _db.GroupMembers.Add(new GroupMember { GroupId = target.Id, Name = cleanHost, UserId = userId, Confirmed = true, HasTicket = hasTicket });
+                _db.GroupMembers.Add(new GroupMember { GroupId = target.Id, Name = cleanHost, UserId = userId, Confirmed = true, HasTicket = hasTicket, AfterActivities = SanitizeAfterActivities(req.AfterActivities) });
                 await _db.SaveChangesAsync();
                 return Ok(new { groupId = target.Id, joined = true, memberCount = target.Members.Count });
             }
@@ -599,7 +633,7 @@ namespace Backend.Controllers
                     && g.ScreeningTime == when);
                 if (twin != null)
                 {
-                    _db.GroupMembers.Add(new GroupMember { GroupId = twin.Id, Name = cleanHost, UserId = userId, Confirmed = true, HasTicket = hasTicket });
+                    _db.GroupMembers.Add(new GroupMember { GroupId = twin.Id, Name = cleanHost, UserId = userId, Confirmed = true, HasTicket = hasTicket, AfterActivities = SanitizeAfterActivities(req.AfterActivities) });
                     await _db.SaveChangesAsync();
                     return Ok(new { groupId = twin.Id, joined = true, memberCount = twin.Members.Count });
                 }
@@ -629,7 +663,7 @@ namespace Backend.Controllers
                 TheaterLongitude = req.TheaterLongitude,
                 TotalCostCents = isVenue ? req.TotalCostCents : null,
             };
-            crew.Members.Add(new GroupMember { GroupId = crew.Id, Name = cleanHost, UserId = userId, Confirmed = true, HasTicket = hasTicket });
+            crew.Members.Add(new GroupMember { GroupId = crew.Id, Name = cleanHost, UserId = userId, Confirmed = true, HasTicket = hasTicket, AfterActivities = SanitizeAfterActivities(req.AfterActivities) });
             _db.Groups.Add(crew);
             await _db.SaveChangesAsync();
             return Ok(new { groupId = crew.Id, created = true, memberCount = 1 });
@@ -1798,7 +1832,11 @@ namespace Backend.Controllers
         bool? HasTicket,
         // Venue crews only: what the host is charging in total (split per
         // person on the group page), like a regular watch party.
-        long? TotalCostCents);
+        long? TotalCostCents,
+        // POST_ACTIVITIES keys the starter/joiner is up for after the show.
+        string[]? AfterActivities);
+
+    public record AfterActivitiesRequest(string[]? Activities);
 
     public record TicketRequest(bool HasTicket);
 
