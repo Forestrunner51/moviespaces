@@ -108,41 +108,42 @@ function CarouselCard({
     >
       <MoviePoster
         uri={posterPath}
-        width={132}
-        style={styles.spaceCardPoster}
+        width={56}
         fallbackIcon={EVENT_CATEGORIES[eventCategoryOf(spaceType, eventCategory)].icon}
       />
-      <Text style={styles.spaceCardDate} numberOfLines={1}>
-        {eventDate.date}
-      </Text>
-      <View style={styles.spaceCardMetaRow}>
-        <Text style={styles.spaceCardTime}>{eventDate.time}</Text>
-        {!!eventDate.relative && (
-          <Text style={styles.spaceCardRelative} numberOfLines={1}>
-            {eventDate.relative}
-          </Text>
+      <View style={{ flex: 1 }}>
+        <Text style={styles.spaceCardDate} numberOfLines={1}>
+          {eventDate.date}
+        </Text>
+        <View style={styles.spaceCardMetaRow}>
+          {!!eventDate.time && <Text style={styles.spaceCardTime}>{eventDate.time}</Text>}
+          {!!eventDate.relative && (
+            <Text style={styles.spaceCardRelative} numberOfLines={1}>
+              {eventDate.relative}
+            </Text>
+          )}
+        </View>
+        <Text style={styles.spaceCardTitle} numberOfLines={1}>
+          {filmName}
+        </Text>
+        <Text style={styles.spaceCardSubtitle} numberOfLines={1}>
+          {hostName ? `${cinemaName} · ${hostName}` : cinemaName || "No showtime yet"}
+        </Text>
+        {members.length > 0 && (
+          <View style={styles.spaceCardFooter}>
+            <AvatarStack
+              people={members.map((m) => ({
+                userId: m.userId,
+                name: m.name,
+                avatarUrl: profiles.get(m.userId)?.avatarUrl,
+              }))}
+              size={18}
+              max={3}
+            />
+            <Text style={styles.spaceCardGoing}>{members.length} going</Text>
+          </View>
         )}
       </View>
-      <Text style={styles.spaceCardTitle} numberOfLines={1}>
-        {filmName}
-      </Text>
-      <Text style={styles.spaceCardSubtitle} numberOfLines={1}>
-        {hostName ? `${cinemaName} · ${hostName}` : cinemaName}
-      </Text>
-      {members.length > 0 && (
-        <View style={styles.spaceCardFooter}>
-          <AvatarStack
-            people={members.map((m) => ({
-              userId: m.userId,
-              name: m.name,
-              avatarUrl: profiles.get(m.userId)?.avatarUrl,
-            }))}
-            size={20}
-            max={3}
-          />
-          <Text style={styles.spaceCardGoing}>{members.length} going</Text>
-        </View>
-      )}
     </TouchableOpacity>
   );
 }
@@ -191,7 +192,21 @@ function NextUpCard({ space }: { space: MySpace }) {
               </Text>
             </>
           ) : (
-            <Text style={styles.nextWhere}>No showtime yet — decide in chat</Text>
+            <>
+              <Text style={styles.nextWhere}>No showtime yet</Text>
+              <TouchableOpacity
+                activeOpacity={0.8}
+                style={styles.nextSetLink}
+                onPress={() =>
+                  router.push({ pathname: "/group", params: { groupId: space.id, openEdit: "1" } })
+                }
+                hitSlop={6}
+                accessibilityRole="button"
+              >
+                <Ionicons name="calendar-outline" size={13} color={Palette.accent} />
+                <Text style={styles.nextSetLinkText}>Set the showtime</Text>
+              </TouchableOpacity>
+            </>
           )}
         </View>
       </View>
@@ -644,6 +659,8 @@ const styles = StyleSheet.create({
   nextDate: { ...Display.date, color: Palette.text },
   nextTime: { ...Display.stat, color: Palette.textMuted },
   nextWhere: { ...Type.small, color: Palette.textMuted, marginTop: 2 },
+  nextSetLink: { flexDirection: "row", alignItems: "center", gap: 5, marginTop: 6, alignSelf: "flex-start" },
+  nextSetLinkText: { ...Type.small, fontFamily: Font.semibold, color: Palette.accent },
   nextBottom: {
     flexDirection: "row",
     alignItems: "center",
@@ -704,12 +721,16 @@ const styles = StyleSheet.create({
     gap: 12,
     paddingBottom: 20,
   },
+  // Compact row card: the carousel sits under the hero, so it must read as
+  // subordinate — a tall 132px poster made it the biggest thing on screen.
   spaceCard: {
     ...SpaceStyles.glassCard,
-    width: 160,
-    padding: 14,
+    width: 250,
+    padding: 12,
+    flexDirection: "row",
+    gap: 10,
+    alignItems: "flex-start",
   },
-  spaceCardPoster: { marginBottom: 10 },
   spaceCardDate: { ...Display.dateCard, color: Palette.text },
   spaceCardMetaRow: {
     flexDirection: "row",
@@ -728,7 +749,7 @@ const styles = StyleSheet.create({
   },
   spaceCardTitle: { ...Type.small, fontFamily: Font.semibold, color: Palette.text },
   spaceCardSubtitle: { ...Type.caption, color: Palette.textMuted },
-  spaceCardFooter: { flexDirection: "row", alignItems: "center", gap: 6, marginTop: 10 },
+  spaceCardFooter: { flexDirection: "row", alignItems: "center", gap: 6, marginTop: 6 },
   spaceCardGoing: { ...Type.caption, color: Palette.textFaint },
   clubChip: {
     ...SpaceStyles.glassCard,

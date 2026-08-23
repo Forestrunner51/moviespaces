@@ -1,4 +1,4 @@
-import { useState, useEffect, useCallback } from "react";
+import { useState, useEffect, useCallback, useRef } from "react";
 import { authFetch } from "@/frontend/services/api";
 import {
   View,
@@ -98,12 +98,15 @@ interface Group {
 
 export default function GroupScreen() {
   const { showToast } = useToast();
-  const { groupId, code, matched } = useLocalSearchParams<{
+  const { groupId, code, matched, openEdit } = useLocalSearchParams<{
     groupId: string;
     // Set by match.tsx on arrival so the crew card can do the reveal
     // ("you're first in" vs "you're in") instead of a toast lost to the
     // navigation. Absent on every later visit.
     matched?: "created" | "joined" | "already";
+    // "1" when Home's "Set the showtime" link sent us here: open the edit
+    // sheet as soon as the group is loaded and the viewer may edit it.
+    openEdit?: string;
     // Present when arriving via join-by-code.tsx or a shared link that
     // embedded it — forwarded to /join so a private Space's join call can
     // present it. Absent for someone who found the group id some other way,
@@ -503,6 +506,7 @@ export default function GroupScreen() {
     }
   };
 
+
   const openEditModal = () => {
     if (!group) return;
     setEditFilmName(group.filmName);
@@ -520,6 +524,21 @@ export default function GroupScreen() {
     setEditTimePickerVisible(false);
     setEditModalVisible(true);
   };
+
+  // One-shot auto-open for the openEdit deep-link param (see above). Lives
+  // up here with the other hooks, before the loading early-returns.
+  const autoOpenedEdit = useRef(false);
+  useEffect(() => {
+    if (openEdit !== "1" || !group || !currentUserId || autoOpenedEdit.current) return;
+    const member = group.members?.some((m) => m.userId === currentUserId);
+    const mayEdit = group.userId === currentUserId || (!!group.matchMovieKey && !!member);
+    if (!mayEdit || group.status === "cancelled") return;
+    autoOpenedEdit.current = true;
+    openEditModal();
+    // openEditModal is a stable-enough plain closure over state setters;
+    // listing it would re-run on every render for no benefit.
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [openEdit, group, currentUserId]);
 
   const handleSaveEdit = async () => {
     if ((!isCrew && !editFilmName.trim()) || !editCinemaName.trim()) {
