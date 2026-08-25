@@ -36,6 +36,13 @@ const ICON_BY_GENRE: Record<string, keyof typeof Ionicons.glyphMap> = {
   Indie: "color-palette-outline",
   Action: "flash-outline",
   General: "videocam-outline",
+  Comedy: "happy-outline",
+  Thriller: "eye-outline",
+  Anime: "sparkles-outline",
+  Romance: "heart-outline",
+  Classics: "time-outline",
+  Documentary: "earth-outline",
+  Family: "balloon-outline",
 };
 
 // Preview-before-joining: reached from onboarding's genre picker (with

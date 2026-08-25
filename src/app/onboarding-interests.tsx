@@ -17,6 +17,13 @@ const GENRES = [
   { key: "Horror", label: "Horror", icon: "skull-outline" },
   { key: "Indie", label: "Indie / Arthouse", icon: "color-palette-outline" },
   { key: "Action", label: "Action", icon: "flash-outline" },
+  { key: "Comedy", label: "Comedy", icon: "happy-outline" },
+  { key: "Thriller", label: "Thriller / Mystery", icon: "eye-outline" },
+  { key: "Anime", label: "Anime", icon: "sparkles-outline" },
+  { key: "Romance", label: "Romance", icon: "heart-outline" },
+  { key: "Classics", label: "Classics", icon: "time-outline" },
+  { key: "Documentary", label: "Documentary", icon: "earth-outline" },
+  { key: "Family", label: "Family / Animation", icon: "balloon-outline" },
 ] as const;
 
 // Shown once, right after auth succeeds (see auth.tsx). Solves the empty-room
