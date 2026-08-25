@@ -40,7 +40,9 @@ export default function OnboardingInterestsScreen() {
   };
 
   const handleFindSpaces = () => {
-    router.push({ pathname: "/space-discovery", params: { genres: selected.join(","), onboarding: "1" } });
+    // Genres → taste (top-3s, skippable) → club discovery. "Skip for now"
+    // below stays the fast lane straight into the app.
+    router.push({ pathname: "/onboarding-taste", params: { genres: selected.join(",") } });
   };
 
   return (
@@ -84,7 +86,7 @@ export default function OnboardingInterestsScreen() {
         </TouchableOpacity>
 
         <TouchableOpacity activeOpacity={0.7} onPress={completeOnboarding}>
-          <Text style={styles.skipText}>Skip for now</Text>
+          <Text style={styles.skipText}>Skip all — jump straight in</Text>
         </TouchableOpacity>
       </View>
     </Starfield>
