@@ -350,6 +350,13 @@ namespace Backend.Controllers
                 ("Action Junkies", "ACTION", "Action"),
                 ("Arthouse & Indie Circle", "INDIE1", "Indie"),
                 ("Pop Culture Cinephiles", "POPCOR", "General"),
+                ("Comedy Night Crowd", "COMEDY", "Comedy"),
+                ("Thriller & Mystery Society", "THRILL", "Thriller"),
+                ("Anime Screening Room", "ANIME1", "Anime"),
+                ("Rom-Com Rewatchers", "ROMCOM", "Romance"),
+                ("Classic Film Vault", "CLASSC", "Classics"),
+                ("Documentary Corner", "DOCUM1", "Documentary"),
+                ("Family & Animation Matinee", "FAMANI", "Family"),
             };
 
             var existingCodes = await _db.Groups
@@ -409,7 +416,8 @@ namespace Backend.Controllers
             // Allow-listed to the genres the app has icons/posters for; anything
             // else collapses to General rather than creating an unfilterable one-off.
             var validGenres = new HashSet<string>(StringComparer.OrdinalIgnoreCase)
-                { "Blockbusters", "Horror", "Sci-Fi", "Action", "Indie", "General" };
+                { "Blockbusters", "Horror", "Sci-Fi", "Action", "Indie", "General",
+                  "Comedy", "Thriller", "Anime", "Romance", "Classics", "Documentary", "Family" };
             var genre = validGenres.Contains(req.GenreCategory ?? "") ? req.GenreCategory! : "General";
 
             // Cap clubs per creator so one account can't flood the public

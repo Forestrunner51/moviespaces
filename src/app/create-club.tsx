@@ -17,7 +17,21 @@ import { resolveDisplayName } from "@/frontend/services/display-name";
 
 // Kept in sync with the backend's allow-list in CreateCommunityClub — anything
 // else collapses to "General" server-side.
-const GENRES = ["Blockbusters", "Sci-Fi", "Horror", "Action", "Indie", "General"];
+const GENRES = [
+  "Blockbusters",
+  "Sci-Fi",
+  "Horror",
+  "Action",
+  "Indie",
+  "Comedy",
+  "Thriller",
+  "Anime",
+  "Romance",
+  "Classics",
+  "Documentary",
+  "Family",
+  "General",
+];
 
 export default function CreateClubScreen() {
   const { showToast } = useToast();

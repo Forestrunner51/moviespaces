@@ -53,6 +53,8 @@ Everything native only becomes real here: SSO, the "MovieSpaces" name, Bebas Neu
 - [x] **Delete the inert `Sentry__AuthToken` env var from Render** if still there — the backend never reads it; the auth token belongs in EAS secrets, not Render.
 - [x] **Catalog re-seeded** — `surprise_me` flags populated, ~45 films added for Roulette genre coverage.
 - [ ] **Open + merge PR #123 (`feature/pushingdata` → `main`)** — the 12 commits after PR #122: showing-first crew flow + ticket badges, Home feed / My Spaces "You've got plans", celebration, profile stats, FAB, font-scale fix. PR #122 (08‑23 10:00) already deployed everything before that.
+- [ ] Apply `supabase/migrations/20260825_profile_taste.sql` in the Supabase SQL editor (favorite_movies / least_favorite_movies on profiles) — without it the onboarding taste step saves nothing (it fails silently by design)
+- [ ] After the deploy, hit the admin seed endpoint once so the 7 new genre clubs exist (Comedy/Thriller/Anime/Romance/Classics/Documentary/Family) — idempotent, only adds missing codes; without it those onboarding picks show an empty discovery list
 - [ ] Confirm the deploy restarted and `AddHasTicketToGroupMembers` ran (Render boot log). `AddMatchMovieKeyToGroups` went live with PR #122.
 - [ ] Delete the three `matchtest-{a,b,c}-0822@moviespaces.org` test users from Supabase Auth.
 - [ ] All Supabase migrations applied to the production DB (friends-only DM policy, reports/blocks, etc.). EF migrations auto-apply on backend boot — confirm the Render deploy actually restarted.

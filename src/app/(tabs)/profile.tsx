@@ -17,6 +17,7 @@ import * as ImagePicker from "expo-image-picker";
 import { uploadImage } from "@/frontend/services/image-upload";
 import { Ionicons } from "@expo/vector-icons";
 import { Starfield } from "@/frontend/components/starfield";
+import { MoviePoster } from "@/frontend/components/movie-poster";
 import { SpaceStyles, Palette, Type, Display, Font } from "@/frontend/constants/theme";
 import { fetchTodayPuzzle } from "@/frontend/services/cinemind";
 import { THEATER_MEMBERSHIPS, membershipLabel } from "@/frontend/constants/theater-memberships";
@@ -31,6 +32,7 @@ interface ProfileData {
   email: string | null;
   joinedAt: string | null;
   theaterMemberships: string[];
+  favoriteMovies: { imdbId: string; title: string; posterPath: string | null }[];
 }
 
 interface MySpace {
@@ -104,7 +106,7 @@ export default function ProfileScreen() {
 
     const { data: row } = await supabase
       .from("profiles")
-      .select("display_name, avatar_url, created_at, theater_memberships, username")
+      .select("display_name, avatar_url, created_at, theater_memberships, username, favorite_movies")
       .eq("id", user.id)
       .maybeSingle();
 
@@ -117,6 +119,7 @@ export default function ProfileScreen() {
     setProfile({
       displayName,
       username: row?.username ?? null,
+      favoriteMovies: Array.isArray(row?.favorite_movies) ? row.favorite_movies : [],
       avatarUrl: row?.avatar_url ?? null,
       email: user.email ?? null,
       joinedAt: row?.created_at || user.created_at || null,
@@ -464,6 +467,16 @@ export default function ProfileScreen() {
           )}
         </View>
 
+        {/* Top 3 from onboarding — taste as identity, next to the numbers. */}
+        {!editing && profile && profile.favoriteMovies.length > 0 && (
+          <View style={styles.topThreeRow}>
+            <Text style={styles.topThreeLabel}>TOP 3</Text>
+            {profile.favoriteMovies.slice(0, 3).map((m) => (
+              <MoviePoster key={m.imdbId} uri={m.posterPath} width={52} />
+            ))}
+          </View>
+        )}
+
         {/* Identity in numbers — what Strava's totals and Kaya's send count do
             for a profile. Films seen = Spaces that have passed; crews = Movie
             Crews joined; streak = CineMind. */}
@@ -560,6 +573,15 @@ const styles = StyleSheet.create({
     alignItems: "center",
     marginBottom: 12,
   },
+  topThreeRow: {
+    ...SpaceStyles.glassCard,
+    flexDirection: "row",
+    alignItems: "center",
+    gap: 10,
+    padding: 12,
+    marginBottom: 12,
+  },
+  topThreeLabel: { ...Display.section, fontSize: 14, lineHeight: 17, color: Palette.textFaint, marginRight: 4 },
   statRow: {
     ...SpaceStyles.glassCard,
     flexDirection: "row",
