@@ -1,0 +1,5 @@
+# Canonical legal/support pages are served by the API (LegalController) so
+# there is exactly one copy of the text. These give them brandable URLs.
+/privacy   https://moviespaces.onrender.com/legal/privacy  302
+/terms     https://moviespaces.onrender.com/legal/terms    302
+/support   https://moviespaces.onrender.com/support        302

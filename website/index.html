@@ -1,0 +1,62 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>MovieSpaces</title>
+<meta name="description" content="We believe movies are a social event. Pick a showing, get grouped with people going to it, and make some new friends.">
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link href="https://fonts.googleapis.com/css2?family=Bebas+Neue&family=Karla:ital,wght@0,400;0,600;0,700;1,400&display=swap" rel="stylesheet">
+<style>
+  :root{
+    --base:#16100D; --raised:#221913; --surface:#2B201A;
+    --text:#F7F0E8; --muted:#B3A296; --faint:#7D6D61;
+    --accent:#EF8A3C; --accent-dim:rgba(239,138,60,.14); --accent-border:rgba(239,138,60,.38);
+    --border:rgba(247,240,232,.10);
+  }
+  *{margin:0;padding:0;box-sizing:border-box}
+  body{background:var(--base);color:var(--text);font-family:Karla,system-ui,sans-serif;line-height:1.6;-webkit-font-smoothing:antialiased}
+  .wrap{max-width:680px;margin:0 auto;padding:0 24px}
+  header{padding:64px 0 0;text-align:center}
+  .wordmark{font-family:'Bebas Neue',sans-serif;font-size:20px;letter-spacing:4px;color:var(--faint)}
+  h1{font-weight:700;font-size:clamp(34px,7vw,52px);line-height:1.12;letter-spacing:-.5px;margin:26px 0 14px}
+  .slogan{font-style:italic;color:var(--accent);font-size:19px}
+  .sub{color:var(--muted);font-size:17px;max-width:480px;margin:18px auto 0}
+  .cta{display:inline-block;margin:34px auto 0;background:var(--accent);color:var(--base);font-weight:700;font-size:17px;padding:14px 30px;border-radius:999px;text-decoration:none}
+  .cta.soon{background:var(--accent-dim);color:var(--accent);border:1px solid var(--accent-border);cursor:default}
+  main{padding:64px 0 24px}
+  .cards{display:grid;grid-template-columns:repeat(auto-fit,minmax(180px,1fr));gap:14px;margin-top:8px}
+  .card{background:var(--surface);border:1px solid var(--border);border-radius:14px;padding:20px}
+  .card h3{font-size:17px;margin-bottom:6px}
+  .card p{color:var(--muted);font-size:14.5px}
+  .k{font-family:'Bebas Neue',sans-serif;font-size:15px;letter-spacing:2.5px;color:var(--accent);display:block;margin-bottom:10px}
+  footer{border-top:1px solid var(--border);margin-top:64px;padding:28px 0 48px;text-align:center;color:var(--faint);font-size:14px}
+  footer a{color:var(--muted);text-decoration:none;margin:0 10px}
+  footer a:hover{color:var(--accent)}
+</style>
+</head>
+<body>
+  <div class="wrap">
+    <header>
+      <div class="wordmark">MOVIESPACES</div>
+      <h1>Good movie.<br>Better company.</h1>
+      <p class="slogan">We believe movies are a social event.</p>
+      <p class="sub">Pick a real showing near you and get grouped with up to five other people going to it — or host your own movie night at a theater, your place, or anywhere with a screen.</p>
+      <span class="cta soon">Coming soon to the App&nbsp;Store</span>
+    </header>
+    <main>
+      <span class="k">WHAT'S INSIDE</span>
+      <div class="cards">
+        <div class="card"><h3>Movie Crew</h3><p>Pick a showing, get seated with people who picked the same one, and plan the rest together in chat.</p></div>
+        <div class="card"><h3>Spaces</h3><p>Host a screening or a watch party — friends or anyone nearby can join, RSVP, and chat.</p></div>
+        <div class="card"><h3>Hangout after</h3><p>Everyone votes what they're up for after the credits — drinks, food, or the spoiler debrief.</p></div>
+        <div class="card"><h3>CineMind</h3><p>A daily movie puzzle with leaderboards for you and your clubs.</p></div>
+      </div>
+    </main>
+    <footer>
+      <a href="/privacy">Privacy</a><a href="/terms">Terms</a><a href="/support">Support</a>
+      <div style="margin-top:12px">&copy; 2026 MovieSpaces &middot; support@moviespaces.org</div>
+    </footer>
+  </div>
+</body>
+</html>
