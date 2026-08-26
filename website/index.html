@@ -114,6 +114,11 @@
     .grid{grid-template-columns:1fr}
     nav .links a{margin-left:16px}
   }
+  @media (max-width:560px){
+    /* One-scroll page: the anchor nav wraps badly at phone widths and the
+       footer repeats every link anyway. */
+    nav .links{display:none}
+  }
 </style>
 </head>
 <body>
