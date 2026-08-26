@@ -1,0 +1,14 @@
+// Cloudflare Workers config for the marketing site ONLY. The deployable is
+// the static `website/` folder — never `expo export -p web`: this repo's
+// Expo app is a native app, and exporting it to web both fails (no env) and
+// isn't the site we want. With this file present, wrangler's auto-detect
+// (which guessed the Expo export) is skipped entirely.
+{
+  "$schema": "node_modules/wrangler/config-schema.json",
+  "name": "moviespaces",
+  "compatibility_date": "2026-08-25",
+  "assets": {
+    "directory": "website",
+    "not_found_handling": "single-page-application"
+  }
+}

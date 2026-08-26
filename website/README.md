@@ -3,8 +3,10 @@
 Static landing site. Deploy on Cloudflare Pages (the domain's DNS is already
 on Cloudflare):
 
-1. Cloudflare dashboard → Workers & Pages → Create → Pages → Upload assets
-   (or connect the repo with root directory `website/`, no build command).
+1. Repo is connected to Cloudflare Workers Builds; `wrangler.jsonc` at the
+   repo root points assets at `website/` with no build step, so the deploy
+   command is just `npx wrangler deploy`. (Never let it run
+   `expo export -p web` — that tries to compile the mobile app.)
 2. Add custom domain `moviespaces.org` (and `www`) — Cloudflare creates the
    records itself; the existing MX/SPF email routing is untouched.
 3. Done. `/privacy`, `/terms`, `/support` redirect to the canonical pages the
