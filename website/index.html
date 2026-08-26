@@ -3,59 +3,227 @@
 <head>
 <meta charset="utf-8">
 <meta name="viewport" content="width=device-width, initial-scale=1">
-<title>MovieSpaces</title>
-<meta name="description" content="We believe movies are a social event. Pick a showing, get grouped with people going to it, and make some new friends.">
+<title>MovieSpaces — We believe movies are a social event</title>
+<meta name="description" content="Pick a real showing near you and get grouped with up to five other people going to it. Host movie nights. Make some new friends.">
+<meta property="og:title" content="MovieSpaces">
+<meta property="og:description" content="We believe movies are a social event.">
 <link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
 <link href="https://fonts.googleapis.com/css2?family=Bebas+Neue&family=Karla:ital,wght@0,400;0,600;0,700;1,400&display=swap" rel="stylesheet">
 <style>
   :root{
-    --base:#16100D; --raised:#221913; --surface:#2B201A;
+    --base:#16100D; --raised:#221913; --surface:#2B201A; --surface2:#35281F;
     --text:#F7F0E8; --muted:#B3A296; --faint:#7D6D61;
-    --accent:#EF8A3C; --accent-dim:rgba(239,138,60,.14); --accent-border:rgba(239,138,60,.38);
-    --border:rgba(247,240,232,.10);
+    --accent:#EF8A3C; --accent-deep:#C96F2E;
+    --accent-dim:rgba(239,138,60,.13); --accent-border:rgba(239,138,60,.35);
+    --positive:#6FBF73; --border:rgba(247,240,232,.10); --border2:rgba(247,240,232,.16);
   }
   *{margin:0;padding:0;box-sizing:border-box}
-  body{background:var(--base);color:var(--text);font-family:Karla,system-ui,sans-serif;line-height:1.6;-webkit-font-smoothing:antialiased}
-  .wrap{max-width:680px;margin:0 auto;padding:0 24px}
-  header{padding:64px 0 0;text-align:center}
-  .wordmark{font-family:'Bebas Neue',sans-serif;font-size:20px;letter-spacing:4px;color:var(--faint)}
-  h1{font-weight:700;font-size:clamp(34px,7vw,52px);line-height:1.12;letter-spacing:-.5px;margin:26px 0 14px}
-  .slogan{font-style:italic;color:var(--accent);font-size:19px}
-  .sub{color:var(--muted);font-size:17px;max-width:480px;margin:18px auto 0}
-  .cta{display:inline-block;margin:34px auto 0;background:var(--accent);color:var(--base);font-weight:700;font-size:17px;padding:14px 30px;border-radius:999px;text-decoration:none}
-  .cta.soon{background:var(--accent-dim);color:var(--accent);border:1px solid var(--accent-border);cursor:default}
-  main{padding:64px 0 24px}
-  .cards{display:grid;grid-template-columns:repeat(auto-fit,minmax(180px,1fr));gap:14px;margin-top:8px}
-  .card{background:var(--surface);border:1px solid var(--border);border-radius:14px;padding:20px}
-  .card h3{font-size:17px;margin-bottom:6px}
-  .card p{color:var(--muted);font-size:14.5px}
-  .k{font-family:'Bebas Neue',sans-serif;font-size:15px;letter-spacing:2.5px;color:var(--accent);display:block;margin-bottom:10px}
-  footer{border-top:1px solid var(--border);margin-top:64px;padding:28px 0 48px;text-align:center;color:var(--faint);font-size:14px}
-  footer a{color:var(--muted);text-decoration:none;margin:0 10px}
-  footer a:hover{color:var(--accent)}
+  html{scroll-behavior:smooth}
+  body{
+    background:var(--base);color:var(--text);
+    font-family:Karla,system-ui,sans-serif;line-height:1.6;-webkit-font-smoothing:antialiased;
+    background-image:
+      radial-gradient(1000px 500px at 70% -100px, rgba(239,138,60,.09), transparent 60%),
+      radial-gradient(1.2px 1.2px at 12% 18%, rgba(247,240,232,.28), transparent 100%),
+      radial-gradient(1px 1px at 33% 64%, rgba(247,240,232,.18), transparent 100%),
+      radial-gradient(1.4px 1.4px at 58% 30%, rgba(247,240,232,.22), transparent 100%),
+      radial-gradient(1px 1px at 79% 72%, rgba(247,240,232,.16), transparent 100%),
+      radial-gradient(1.2px 1.2px at 91% 12%, rgba(247,240,232,.25), transparent 100%),
+      radial-gradient(1px 1px at 22% 88%, rgba(247,240,232,.14), transparent 100%);
+    background-repeat:no-repeat,repeat,repeat,repeat,repeat,repeat,repeat;
+    background-size:auto, 900px 700px, 780px 620px, 1020px 800px, 860px 680px, 940px 760px, 800px 640px;
+  }
+  .wrap{max-width:1040px;margin:0 auto;padding:0 24px}
+  .bebas{font-family:'Bebas Neue',sans-serif}
+
+  nav{display:flex;align-items:center;justify-content:space-between;padding:26px 0}
+  .wordmark{font-family:'Bebas Neue',sans-serif;font-size:22px;letter-spacing:4px;color:var(--text);text-decoration:none}
+  .wordmark span{color:var(--accent)}
+  nav .links a{color:var(--muted);text-decoration:none;font-size:15px;font-weight:600;margin-left:26px}
+  nav .links a:hover{color:var(--accent)}
+
+  .hero{display:grid;grid-template-columns:1.15fr .85fr;gap:48px;align-items:center;padding:56px 0 30px}
+  .kicker{font-family:'Bebas Neue',sans-serif;letter-spacing:3px;font-size:15px;color:var(--accent);margin-bottom:14px}
+  h1{font-weight:700;font-size:clamp(38px,5.4vw,60px);line-height:1.06;letter-spacing:-1px}
+  h1 em{font-style:normal;color:var(--accent)}
+  .slogan{font-style:italic;color:var(--accent);font-size:18px;margin-top:16px}
+  .sub{color:var(--muted);font-size:17.5px;max-width:440px;margin-top:14px}
+  .cta-row{display:flex;align-items:center;gap:16px;margin-top:30px;flex-wrap:wrap}
+  .cta{display:inline-flex;align-items:center;gap:10px;background:var(--accent);color:var(--base);font-weight:700;font-size:16px;padding:14px 26px;border-radius:999px;text-decoration:none;box-shadow:0 8px 30px rgba(239,138,60,.25)}
+  .cta svg{flex:none}
+  .cta-note{color:var(--faint);font-size:14px}
+
+  /* phone mockup, pure CSS */
+  .phone-col{display:flex;justify-content:center}
+  .phone{width:300px;background:#0d0906;border:1px solid var(--border2);border-radius:44px;padding:12px;box-shadow:0 40px 80px rgba(0,0,0,.5), 0 0 0 1px rgba(0,0,0,.6);transform:rotate(2.5deg)}
+  .screen{background:var(--base);border-radius:34px;overflow:hidden;border:1px solid var(--border)}
+  .notch{height:26px;display:flex;justify-content:center;align-items:center}
+  .notch i{width:84px;height:18px;background:#000;border-radius:12px;display:block}
+  .screen .inner{padding:14px 14px 18px}
+  .s-date{font-family:'Bebas Neue',sans-serif;letter-spacing:2px;font-size:11px;color:var(--accent)}
+  .s-head{font-weight:700;font-size:19px;line-height:1.2;margin:4px 0 12px}
+  .s-card{background:var(--surface);border:1px solid var(--accent-border);border-radius:14px;padding:12px;margin-bottom:10px}
+  .s-kick{font-size:9px;letter-spacing:1.2px;color:var(--accent);font-weight:700;text-transform:uppercase}
+  .s-title{font-weight:700;font-size:14px;margin-top:2px}
+  .s-sub{font-size:11px;color:var(--muted);margin-top:3px}
+  .s-row{background:var(--surface);border:1px solid var(--border);border-radius:14px;padding:10px 12px;margin-bottom:8px;display:flex;gap:10px;align-items:center}
+  .s-poster{width:30px;height:44px;border-radius:5px;background:linear-gradient(160deg,var(--accent-deep),#5a3617);flex:none}
+  .s-poster.alt{background:linear-gradient(160deg,#7d3b45,#2e1a2e)}
+  .s-meta{flex:1;min-width:0}
+  .s-when{font-family:'Bebas Neue',sans-serif;font-size:13px;letter-spacing:1px}
+  .s-when b{color:var(--accent);font-size:10px;letter-spacing:.5px;font-family:Karla;font-weight:700;margin-left:6px;text-transform:uppercase}
+  .s-film{font-size:11px;color:var(--muted);white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
+  .s-join{background:var(--accent);color:var(--base);font-size:11px;font-weight:700;border-radius:999px;padding:5px 12px;flex:none}
+  .s-seats{display:flex;gap:5px;margin-top:8px}
+  .s-seat{width:22px;height:22px;border-radius:50%;background:var(--raised);border:1.5px solid var(--accent-border)}
+  .s-seat.f1{background:#8a5a3b}.s-seat.f2{background:#5f7d62}.s-seat.f3{background:#7d5f74}
+  .s-seat.open{border-style:dashed;border-color:var(--border2);background:transparent}
+
+  section{padding:64px 0}
+  .sec-kick{font-family:'Bebas Neue',sans-serif;letter-spacing:3px;font-size:15px;color:var(--accent);margin-bottom:10px}
+  h2{font-weight:700;font-size:clamp(26px,3.4vw,34px);letter-spacing:-.4px;margin-bottom:8px}
+  .sec-sub{color:var(--muted);max-width:560px}
+
+  .steps{display:grid;grid-template-columns:repeat(3,1fr);gap:16px;margin-top:34px}
+  .step{background:var(--surface);border:1px solid var(--border);border-radius:16px;padding:22px;position:relative}
+  .step .n{font-family:'Bebas Neue',sans-serif;font-size:34px;color:var(--accent);line-height:1}
+  .step h3{font-size:17px;margin:10px 0 4px}
+  .step p{color:var(--muted);font-size:14.5px}
+
+  .grid{display:grid;grid-template-columns:repeat(2,1fr);gap:16px;margin-top:34px}
+  .feat{background:var(--surface);border:1px solid var(--border);border-radius:16px;padding:24px;transition:border-color .2s}
+  .feat:hover{border-color:var(--accent-border)}
+  .feat .ic{width:42px;height:42px;border-radius:50%;background:var(--accent-dim);border:1px solid var(--accent-border);display:flex;align-items:center;justify-content:center;margin-bottom:14px}
+  .feat h3{font-size:18px;margin-bottom:5px}
+  .feat p{color:var(--muted);font-size:15px}
+
+  .band{background:linear-gradient(180deg,var(--raised),transparent);border-top:1px solid var(--border);border-bottom:1px solid var(--border);text-align:center}
+  .band .slogan-big{font-style:italic;font-size:clamp(22px,3.4vw,32px);color:var(--text)}
+  .band .slogan-big em{color:var(--accent);font-style:italic}
+
+  footer{padding:36px 0 56px;display:flex;align-items:center;justify-content:space-between;gap:16px;flex-wrap:wrap;border-top:1px solid var(--border)}
+  footer .links a{color:var(--muted);text-decoration:none;margin-right:22px;font-size:14.5px}
+  footer .links a:hover{color:var(--accent)}
+  footer .fine{color:var(--faint);font-size:13.5px}
+
+  @media (max-width:820px){
+    .hero{grid-template-columns:1fr;gap:44px;padding-top:34px}
+    .phone{transform:rotate(0)}
+    .steps{grid-template-columns:1fr}
+    .grid{grid-template-columns:1fr}
+    nav .links a{margin-left:16px}
+  }
 </style>
 </head>
 <body>
   <div class="wrap">
-    <header>
-      <div class="wordmark">MOVIESPACES</div>
-      <h1>Good movie.<br>Better company.</h1>
-      <p class="slogan">We believe movies are a social event.</p>
-      <p class="sub">Pick a real showing near you and get grouped with up to five other people going to it — or host your own movie night at a theater, your place, or anywhere with a screen.</p>
-      <span class="cta soon">Coming soon to the App&nbsp;Store</span>
-    </header>
-    <main>
-      <span class="k">WHAT'S INSIDE</span>
-      <div class="cards">
-        <div class="card"><h3>Movie Crew</h3><p>Pick a showing, get seated with people who picked the same one, and plan the rest together in chat.</p></div>
-        <div class="card"><h3>Spaces</h3><p>Host a screening or a watch party — friends or anyone nearby can join, RSVP, and chat.</p></div>
-        <div class="card"><h3>Hangout after</h3><p>Everyone votes what they're up for after the credits — drinks, food, or the spoiler debrief.</p></div>
-        <div class="card"><h3>CineMind</h3><p>A daily movie puzzle with leaderboards for you and your clubs.</p></div>
+    <nav>
+      <a class="wordmark" href="/">MOVIE<span>SPACES</span></a>
+      <div class="links">
+        <a href="#how">How it works</a>
+        <a href="#inside">Features</a>
+        <a href="/support">Support</a>
       </div>
-    </main>
+    </nav>
+
+    <div class="hero">
+      <div>
+        <div class="kicker">MOVIE NIGHTS, WITH PEOPLE</div>
+        <h1>Good movie.<br><em>Better company.</em></h1>
+        <p class="slogan">We believe movies are a social event.</p>
+        <p class="sub">Pick a real showing near you and get grouped with up to five other people going to it — or host your own movie night at a theater, your place, or anywhere with a screen.</p>
+        <div class="cta-row">
+          <a class="cta" href="#how">
+            <svg width="18" height="18" viewBox="0 0 24 24" fill="none"><path d="M12 2C6.5 2 2 6.5 2 12s4.5 10 10 10 10-4.5 10-10S17.5 2 12 2Zm-2 14.5v-9l7 4.5-7 4.5Z" fill="currentColor"/></svg>
+            Coming soon to the App Store
+          </a>
+          <span class="cta-note">iPhone · free</span>
+        </div>
+      </div>
+      <div class="phone-col">
+        <div class="phone" aria-hidden="true">
+          <div class="screen">
+            <div class="notch"><i></i></div>
+            <div class="inner">
+              <div class="s-date">SATURDAY, AUGUST 29</div>
+              <div class="s-head">Who are you<br>watching with?</div>
+              <div class="s-card">
+                <div class="s-kick">Movie Crew</div>
+                <div class="s-title">Make some new friends</div>
+                <div class="s-sub">Pick a film and a showing — we group you with up to 5 who picked the same</div>
+                <div class="s-seats">
+                  <span class="s-seat f1"></span><span class="s-seat f2"></span><span class="s-seat f3"></span>
+                  <span class="s-seat open"></span><span class="s-seat open"></span><span class="s-seat open"></span>
+                </div>
+              </div>
+              <div class="s-row">
+                <div class="s-poster"></div>
+                <div class="s-meta">
+                  <div class="s-when">SAT, AUG 29 · 7:30 PM <b>Tonight</b></div>
+                  <div class="s-film">Bob is going to The Long Take · AMC NorthPark</div>
+                </div>
+                <div class="s-join">Join</div>
+              </div>
+              <div class="s-row">
+                <div class="s-poster alt"></div>
+                <div class="s-meta">
+                  <div class="s-when">SUN, AUG 30 · 6:15 PM</div>
+                  <div class="s-film">Maya is hosting a watch party · 2 going</div>
+                </div>
+                <div class="s-join">Join</div>
+              </div>
+            </div>
+          </div>
+        </div>
+      </div>
+    </div>
+
+    <section id="how">
+      <div class="sec-kick">HOW IT WORKS</div>
+      <h2>A crew in three taps</h2>
+      <p class="sec-sub">No swiping, no profiles to grind through. The movie is the icebreaker.</p>
+      <div class="steps">
+        <div class="step"><div class="n">1</div><h3>Pick a showing</h3><p>Real theaters, real times, near you — or name a place for a watch party.</p></div>
+        <div class="step"><div class="n">2</div><h3>Get grouped</h3><p>You're seated with up to five other people going to the same showing. Small on purpose.</p></div>
+        <div class="step"><div class="n">3</div><h3>Plan it together</h3><p>Chat opens instantly. Flag your ticket, vote what you're up for after — drinks, food, the spoiler debrief.</p></div>
+      </div>
+    </section>
+
+    <section id="inside">
+      <div class="sec-kick">WHAT'S INSIDE</div>
+      <h2>Built for going out, not scrolling</h2>
+      <div class="grid">
+        <div class="feat">
+          <div class="ic"><svg width="20" height="20" viewBox="0 0 24 24" fill="none"><path d="M16 11c1.66 0 3-1.34 3-3s-1.34-3-3-3-3 1.34-3 3 1.34 3 3 3Zm-8 0c1.66 0 3-1.34 3-3S9.66 5 8 5 5 6.34 5 8s1.34 3 3 3Zm0 2c-2.33 0-7 1.17-7 3.5V19h14v-2.5c0-2.33-4.67-3.5-7-3.5Zm8 0c-.29 0-.62.02-.97.05 1.16.84 1.97 1.97 1.97 3.45V19h6v-2.5c0-2.33-4.67-3.5-7-3.5Z" fill="#EF8A3C"/></svg></div>
+          <h3>Movie Crew</h3><p>Groups cap at six people who picked the same showing — big enough to feel like a night out, small enough that everyone actually talks.</p>
+        </div>
+        <div class="feat">
+          <div class="ic"><svg width="20" height="20" viewBox="0 0 24 24" fill="none"><path d="M18 3v2h-2V3H8v2H6V3H4v18h2v-2h2v2h8v-2h2v2h2V3h-2ZM8 17H6v-2h2v2Zm0-4H6v-2h2v2Zm0-4H6V7h2v2Zm10 8h-2v-2h2v2Zm0-4h-2v-2h2v2Zm0-4h-2V7h2v2Z" fill="#EF8A3C"/></svg></div>
+          <h3>Spaces</h3><p>Host a screening or a watch party. Friends or anyone nearby can join, RSVP, split the cost, and chat — all in one place.</p>
+        </div>
+        <div class="feat">
+          <div class="ic"><svg width="20" height="20" viewBox="0 0 24 24" fill="none"><path d="M12 3C6.5 3 2 6.58 2 11c0 2.13 1.05 4.07 2.75 5.5-.14 1.05-.6 2.4-1.68 3.5 0 0 2.58-.18 4.4-1.55.8.23 1.65.38 2.53.44V19c0-4.42 4.5-8 10-8 .34 0 .68.01 1.01.04C20.42 6.78 16.65 3 12 3Z" fill="#EF8A3C" opacity=".45"/><path d="M17.5 13C13.9 13 11 15.46 11 18.5c0 3.04 2.9 5.5 6.5 5.5.62 0 1.22-.08 1.79-.22 1.28.96 3.11 1.1 3.11 1.1-.76-.78-1.09-1.72-1.19-2.46A5.14 5.14 0 0 0 24 18.5c0-3.04-2.9-5.5-6.5-5.5Z" fill="#EF8A3C"/></svg></div>
+          <h3>Hangout after</h3><p>Everyone votes one thing they're up for after the credits — so the night doesn't end when the lights come on.</p>
+        </div>
+        <div class="feat">
+          <div class="ic"><svg width="20" height="20" viewBox="0 0 24 24" fill="none"><path d="M12 2a7 7 0 0 0-7 7c0 2.38 1.19 4.47 3 5.74V17a1 1 0 0 0 1 1h6a1 1 0 0 0 1-1v-2.26c1.81-1.27 3-3.36 3-5.74a7 7 0 0 0-7-7Zm-3 19a1 1 0 0 0 1 1h4a1 1 0 0 0 1-1v-1H9v1Z" fill="#EF8A3C"/></svg></div>
+          <h3>CineMind</h3><p>A daily movie puzzle with streaks and leaderboards — for you, your friends, and your clubs.</p>
+        </div>
+      </div>
+    </section>
+
+    <section class="band">
+      <p class="slogan-big">"We believe movies are a <em>social event</em>."</p>
+    </section>
+
     <footer>
-      <a href="/privacy">Privacy</a><a href="/terms">Terms</a><a href="/support">Support</a>
-      <div style="margin-top:12px">&copy; 2026 MovieSpaces &middot; support@moviespaces.org</div>
+      <div class="links">
+        <a href="/privacy">Privacy</a>
+        <a href="/terms">Terms</a>
+        <a href="/support">Support</a>
+      </div>
+      <div class="fine">&copy; 2026 MovieSpaces &middot; support@moviespaces.org</div>
     </footer>
   </div>
 </body>
