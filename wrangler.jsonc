@@ -7,6 +7,11 @@
   "$schema": "node_modules/wrangler/config-schema.json",
   "name": "moviespaces",
   "compatibility_date": "2026-08-25",
+  // Custom domains: deploying creates the DNS records in the Cloudflare zone.
+  "routes": [
+    { "pattern": "moviespaces.org", "custom_domain": true },
+    { "pattern": "www.moviespaces.org", "custom_domain": true }
+  ],
   "assets": {
     "directory": "website",
     "not_found_handling": "single-page-application"

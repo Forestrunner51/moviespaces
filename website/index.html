@@ -3,6 +3,7 @@
 <head>
 <meta charset="utf-8">
 <meta name="viewport" content="width=device-width, initial-scale=1">
+<meta name="theme-color" content="#16100D">
 <title>MovieSpaces — We believe movies are a social event</title>
 <meta name="description" content="Pick a real showing near you and get grouped with up to five other people going to it. Host movie nights. Make some new friends.">
 <meta property="og:title" content="MovieSpaces">
@@ -118,6 +119,22 @@
     /* One-scroll page: the anchor nav wraps badly at phone widths and the
        footer repeats every link anyway. */
     nav .links{display:none}
+    .wrap{padding:0 18px}
+    nav{padding:20px 0}
+    .hero{gap:36px;padding-top:22px}
+    h1{font-size:clamp(33px,10vw,44px)}
+    .sub{font-size:16.5px}
+    /* full-width CTA reads as a button, not a pill lost in space */
+    .cta-row{flex-direction:column;align-items:stretch;gap:10px}
+    .cta{justify-content:center}
+    .cta-note{text-align:center}
+    .phone{width:270px}
+    section{padding:48px 0}
+    .steps,.grid{margin-top:26px;gap:12px}
+    .step,.feat{padding:20px}
+    .band{padding:40px 0}
+    footer{flex-direction:column;align-items:flex-start;gap:12px}
+    footer .links{display:flex;flex-wrap:wrap;gap:6px 0}
   }
 </style>
 </head>
