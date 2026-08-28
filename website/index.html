@@ -36,7 +36,9 @@
     background-repeat:no-repeat,repeat,repeat,repeat,repeat,repeat,repeat;
     background-size:auto, 900px 700px, 780px 620px, 1020px 800px, 860px 680px, 940px 760px, 800px 640px;
   }
-  .wrap{max-width:1040px;margin:0 auto;padding:0 24px}
+  .wrap{max-width:1120px;margin:0 auto;padding:0 28px}
+  /* sections that should run edge-to-edge regardless of the column */
+  .bleed{margin-left:calc(50% - 50vw);margin-right:calc(50% - 50vw)}
   .bebas{font-family:'Bebas Neue',sans-serif}
 
   nav{display:flex;align-items:center;justify-content:space-between;padding:26px 0}
@@ -100,7 +102,7 @@
   .feat h3{font-size:18px;margin-bottom:5px}
   .feat p{color:var(--muted);font-size:15px}
 
-  .band{background:linear-gradient(180deg,var(--raised),transparent);border-top:1px solid var(--border);border-bottom:1px solid var(--border);text-align:center}
+  .band{background:linear-gradient(180deg,var(--raised),var(--base));border-top:1px solid var(--border);text-align:center;padding:84px 28px}
   .band .slogan-big{font-style:italic;font-size:clamp(22px,3.4vw,32px);color:var(--text)}
   .band .slogan-big em{color:var(--accent);font-style:italic}
 
@@ -119,7 +121,7 @@
   }
 
   /* --- title marquee --- */
-  .marquee{border-top:1px solid var(--border);border-bottom:1px solid var(--border);padding:14px 0;overflow:hidden;white-space:nowrap;position:relative}
+  .marquee{border-top:1px solid var(--border);border-bottom:1px solid var(--border);padding:16px 0;overflow:hidden;white-space:nowrap;position:relative;background:rgba(0,0,0,.18)}
   .marquee::before,.marquee::after{content:"";position:absolute;top:0;bottom:0;width:80px;z-index:1;pointer-events:none}
   .marquee::before{left:0;background:linear-gradient(90deg,var(--base),transparent)}
   .marquee::after{right:0;background:linear-gradient(270deg,var(--base),transparent)}
@@ -188,7 +190,7 @@
     .stub .body{padding:18px}
     .marquee span{font-size:16px;padding:0 16px}
     .step,.feat{padding:20px}
-    .band{padding:40px 0}
+    .band{padding:52px 18px}
     footer{flex-direction:column;align-items:flex-start;gap:12px}
     footer .links{display:flex;flex-wrap:wrap;gap:6px 0}
   }
@@ -260,7 +262,7 @@
     </div>
     </div><!-- /hero-wrap -->
 
-    <div class="marquee" aria-hidden="true"><div class="track"><span>Jaws</span><span>In the Mood for Love</span><span>Heat</span><span>Spirited Away</span><span>The Godfather</span><span>Alien</span><span>Do the Right Thing</span><span>Parasite</span><span>Before Sunrise</span><span>Mad Max: Fury Road</span><span>Moonlight</span><span>The Thing</span><span>Casablanca</span><span>Get Out</span><span>Chungking Express</span><span>Dune</span><span>Rear Window</span><span>Whiplash</span><span>Pulp Fiction</span><span>Everything Everywhere All at Once</span><span>Jaws</span><span>In the Mood for Love</span><span>Heat</span><span>Spirited Away</span><span>The Godfather</span><span>Alien</span><span>Do the Right Thing</span><span>Parasite</span><span>Before Sunrise</span><span>Mad Max: Fury Road</span><span>Moonlight</span><span>The Thing</span><span>Casablanca</span><span>Get Out</span><span>Chungking Express</span><span>Dune</span><span>Rear Window</span><span>Whiplash</span><span>Pulp Fiction</span><span>Everything Everywhere All at Once</span></div></div>
+    <div class="marquee bleed" aria-hidden="true"><div class="track"><span>Jaws</span><span>In the Mood for Love</span><span>Heat</span><span>Spirited Away</span><span>The Godfather</span><span>Alien</span><span>Do the Right Thing</span><span>Parasite</span><span>Before Sunrise</span><span>Mad Max: Fury Road</span><span>Moonlight</span><span>The Thing</span><span>Casablanca</span><span>Get Out</span><span>Chungking Express</span><span>Dune</span><span>Rear Window</span><span>Whiplash</span><span>Pulp Fiction</span><span>Everything Everywhere All at Once</span><span>Jaws</span><span>In the Mood for Love</span><span>Heat</span><span>Spirited Away</span><span>The Godfather</span><span>Alien</span><span>Do the Right Thing</span><span>Parasite</span><span>Before Sunrise</span><span>Mad Max: Fury Road</span><span>Moonlight</span><span>The Thing</span><span>Casablanca</span><span>Get Out</span><span>Chungking Express</span><span>Dune</span><span>Rear Window</span><span>Whiplash</span><span>Pulp Fiction</span><span>Everything Everywhere All at Once</span></div></div>
 
     <section id="story">
       <div class="story">
@@ -315,7 +317,7 @@
       </div>
     </section>
 
-    <section class="band">
+    <section class="band bleed">
       <div class="place">BUILT IN DALLAS</div>
       <p class="slogan-big">"We believe movies are a <em>social event</em>."</p>
       <p class="fineline">Starting at the theaters we actually go to.</p>
