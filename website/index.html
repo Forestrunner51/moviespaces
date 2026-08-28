@@ -21,6 +21,7 @@
   }
   *{margin:0;padding:0;box-sizing:border-box}
   html{scroll-behavior:smooth}
+  body{overflow-x:hidden}
   body{
     background:var(--base);color:var(--text);
     font-family:Karla,system-ui,sans-serif;line-height:1.6;-webkit-font-smoothing:antialiased;
@@ -108,11 +109,62 @@
   footer .links a:hover{color:var(--accent)}
   footer .fine{color:var(--faint);font-size:13.5px}
 
+  /* --- film grain over the hero --- */
+  .hero-wrap{position:relative}
+  .hero-wrap::after{
+    content:"";position:absolute;inset:-40px -24px 0;pointer-events:none;opacity:.07;mix-blend-mode:screen;
+    background-image:url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='220' height='220'%3E%3Cfilter id='n'%3E%3CfeTurbulence type='fractalNoise' baseFrequency='.9' numOctaves='2' stitchTiles='stitch'/%3E%3CfeColorMatrix values='0 0 0 0 1 0 0 0 0 .94 0 0 0 0 .9 0 0 0 .9 0'/%3E%3C/filter%3E%3Crect width='100%25' height='100%25' filter='url(%23n)'/%3E%3C/svg%3E");
+    background-size:220px 220px;
+    mask-image:linear-gradient(180deg,#000 55%,transparent);-webkit-mask-image:linear-gradient(180deg,#000 55%,transparent);
+  }
+
+  /* --- title marquee --- */
+  .marquee{border-top:1px solid var(--border);border-bottom:1px solid var(--border);padding:14px 0;overflow:hidden;white-space:nowrap;position:relative}
+  .marquee::before,.marquee::after{content:"";position:absolute;top:0;bottom:0;width:80px;z-index:1;pointer-events:none}
+  .marquee::before{left:0;background:linear-gradient(90deg,var(--base),transparent)}
+  .marquee::after{right:0;background:linear-gradient(270deg,var(--base),transparent)}
+  .marquee .track{display:inline-block;animation:marquee 60s linear infinite}
+  .marquee span{font-family:'Bebas Neue',sans-serif;font-size:19px;letter-spacing:3px;color:var(--faint);padding:0 22px}
+  .marquee span::after{content:"\2022";color:var(--accent);margin-left:44px}
+  @keyframes marquee{from{transform:translateX(0)}to{transform:translateX(-50%)}}
+  @media (prefers-reduced-motion:reduce){.marquee .track{animation:none}}
+
+  /* --- founder story --- */
+  .story{display:grid;grid-template-columns:1fr 1.2fr;gap:56px;align-items:start}
+  .story .pull{font-family:'Bebas Neue',sans-serif;font-size:clamp(34px,4.6vw,52px);line-height:1.02;letter-spacing:.5px;border-left:3px solid var(--accent);padding-left:22px}
+  .story .pull em{font-style:normal;color:var(--accent)}
+  .story p{color:var(--muted);font-size:17px;margin-bottom:18px}
+  .story p strong{color:var(--text)}
+  .story .sign{margin-top:22px;display:flex;align-items:center;gap:14px}
+  .story .sign .name{font-family:'Bebas Neue',sans-serif;letter-spacing:3px;font-size:16px}
+  .story .sign .role{color:var(--faint);font-size:13.5px}
+  .story .more{color:var(--accent);text-decoration:none;font-weight:700;font-size:15px}
+  .story .more:hover{text-decoration:underline}
+
+  /* --- ticket stubs --- */
+  .stubs{display:grid;grid-template-columns:repeat(2,1fr);gap:18px;margin-top:34px}
+  .stub{display:grid;grid-template-columns:64px 1fr;background:var(--surface);border:1px solid var(--border);border-radius:12px;position:relative;overflow:hidden;transition:border-color .2s}
+  .stub:hover{border-color:var(--accent-border)}
+  .stub .tear{border-right:2px dashed var(--border2);display:flex;align-items:center;justify-content:center;background:var(--raised)}
+  .stub .tear b{font-family:'Bebas Neue',sans-serif;font-size:13px;letter-spacing:3px;color:var(--accent);writing-mode:vertical-rl;transform:rotate(180deg)}
+  .stub::before,.stub::after{content:"";position:absolute;left:55px;width:18px;height:18px;border-radius:50%;background:var(--base);border:1px solid var(--border)}
+  .stub::before{top:-10px}.stub::after{bottom:-10px}
+  .stub .body{padding:22px 24px 22px 22px}
+  .stub .adm{font-family:'Bebas Neue',sans-serif;letter-spacing:2.5px;font-size:12px;color:var(--faint);margin-bottom:6px}
+  .stub h3{font-family:'Bebas Neue',sans-serif;font-weight:400;font-size:28px;letter-spacing:1px;line-height:1;margin-bottom:8px}
+  .stub p{color:var(--muted);font-size:15px}
+
+  /* --- Dallas closer --- */
+  .band .place{font-family:'Bebas Neue',sans-serif;letter-spacing:3px;font-size:15px;color:var(--accent);margin-bottom:12px}
+  .band .fineline{color:var(--muted);margin-top:12px;font-size:16px}
+
   @media (max-width:820px){
     .hero{grid-template-columns:1fr;gap:44px;padding-top:34px}
     .phone{transform:rotate(0)}
     .steps{grid-template-columns:1fr}
     .grid{grid-template-columns:1fr}
+    .story{grid-template-columns:1fr;gap:28px}
+    .stubs{grid-template-columns:1fr}
     nav .links a{margin-left:16px}
   }
   @media (max-width:560px){
@@ -130,7 +182,11 @@
     .cta-note{text-align:center}
     .phone{width:270px}
     section{padding:48px 0}
-    .steps,.grid{margin-top:26px;gap:12px}
+    .steps,.grid,.stubs{margin-top:26px;gap:12px}
+    .stub{grid-template-columns:52px 1fr}
+    .stub::before,.stub::after{left:43px}
+    .stub .body{padding:18px}
+    .marquee span{font-size:16px;padding:0 16px}
     .step,.feat{padding:20px}
     .band{padding:40px 0}
     footer{flex-direction:column;align-items:flex-start;gap:12px}
@@ -150,6 +206,7 @@
       </div>
     </nav>
 
+    <div class="hero-wrap">
     <div class="hero">
       <div>
         <div class="kicker">MOVIE NIGHTS, WITH PEOPLE</div>
@@ -161,7 +218,7 @@
             <svg width="18" height="18" viewBox="0 0 24 24" fill="none"><path d="M12 2C6.5 2 2 6.5 2 12s4.5 10 10 10 10-4.5 10-10S17.5 2 12 2Zm-2 14.5v-9l7 4.5-7 4.5Z" fill="currentColor"/></svg>
             Coming soon to the App Store
           </a>
-          <span class="cta-note">iPhone · free</span>
+          <span class="cta-note">iPhone · free · First crews forming in Dallas this fall.</span>
         </div>
       </div>
       <div class="phone-col">
@@ -201,6 +258,28 @@
         </div>
       </div>
     </div>
+    </div><!-- /hero-wrap -->
+
+    <div class="marquee" aria-hidden="true"><div class="track"><span>Jaws</span><span>In the Mood for Love</span><span>Heat</span><span>Spirited Away</span><span>The Godfather</span><span>Alien</span><span>Do the Right Thing</span><span>Parasite</span><span>Before Sunrise</span><span>Mad Max: Fury Road</span><span>Moonlight</span><span>The Thing</span><span>Casablanca</span><span>Get Out</span><span>Chungking Express</span><span>Dune</span><span>Rear Window</span><span>Whiplash</span><span>Pulp Fiction</span><span>Everything Everywhere All at Once</span><span>Jaws</span><span>In the Mood for Love</span><span>Heat</span><span>Spirited Away</span><span>The Godfather</span><span>Alien</span><span>Do the Right Thing</span><span>Parasite</span><span>Before Sunrise</span><span>Mad Max: Fury Road</span><span>Moonlight</span><span>The Thing</span><span>Casablanca</span><span>Get Out</span><span>Chungking Express</span><span>Dune</span><span>Rear Window</span><span>Whiplash</span><span>Pulp Fiction</span><span>Everything Everywhere All at Once</span></div></div>
+
+    <section id="story">
+      <div class="story">
+        <div>
+          <div class="sec-kick">WHY THIS EXISTS</div>
+          <p class="pull">The best part of the movies was never the screen. <em>It was the room.</em></p>
+        </div>
+        <div>
+          <p>One night in October I walked into a theater not expecting much, and walked out different. The movie mattered — but what stayed with me was everything around it: a dark room full of strangers gasping at the same moment, the conversation spilling out into the parking lot, the feeling that for two hours a room of people who'd never met were <strong>somewhere together</strong>.</p>
+          <p>I spent a long time trying to get that back, and kept hitting the same wall — not the movies, the logistics. So I built the thing I kept wishing existed. <a class="more" href="/about">Read the whole story &rarr;</a></p>
+          <div class="sign">
+            <div>
+              <div class="name">OLAOLUWA KAYODE</div>
+              <div class="role">Founder, MovieSpaces &middot; Dallas, TX</div>
+            </div>
+          </div>
+        </div>
+      </div>
+    </section>
 
     <section id="how">
       <div class="sec-kick">HOW IT WORKS</div>
@@ -216,28 +295,30 @@
     <section id="inside">
       <div class="sec-kick">WHAT'S INSIDE</div>
       <h2>Built for going out, not scrolling</h2>
-      <div class="grid">
-        <div class="feat">
-          <div class="ic"><svg width="20" height="20" viewBox="0 0 24 24" fill="none"><path d="M16 11c1.66 0 3-1.34 3-3s-1.34-3-3-3-3 1.34-3 3 1.34 3 3 3Zm-8 0c1.66 0 3-1.34 3-3S9.66 5 8 5 5 6.34 5 8s1.34 3 3 3Zm0 2c-2.33 0-7 1.17-7 3.5V19h14v-2.5c0-2.33-4.67-3.5-7-3.5Zm8 0c-.29 0-.62.02-.97.05 1.16.84 1.97 1.97 1.97 3.45V19h6v-2.5c0-2.33-4.67-3.5-7-3.5Z" fill="#EF8A3C"/></svg></div>
-          <h3>Movie Crew</h3><p>Groups cap at six people who picked the same showing — big enough to feel like a night out, small enough that everyone actually talks.</p>
-        </div>
-        <div class="feat">
-          <div class="ic"><svg width="20" height="20" viewBox="0 0 24 24" fill="none"><path d="M18 3v2h-2V3H8v2H6V3H4v18h2v-2h2v2h8v-2h2v2h2V3h-2ZM8 17H6v-2h2v2Zm0-4H6v-2h2v2Zm0-4H6V7h2v2Zm10 8h-2v-2h2v2Zm0-4h-2v-2h2v2Zm0-4h-2V7h2v2Z" fill="#EF8A3C"/></svg></div>
-          <h3>Spaces</h3><p>Host a screening or a watch party. Friends or anyone nearby can join, RSVP, split the cost, and chat — all in one place.</p>
-        </div>
-        <div class="feat">
-          <div class="ic"><svg width="20" height="20" viewBox="0 0 24 24" fill="none"><path d="M12 3C6.5 3 2 6.58 2 11c0 2.13 1.05 4.07 2.75 5.5-.14 1.05-.6 2.4-1.68 3.5 0 0 2.58-.18 4.4-1.55.8.23 1.65.38 2.53.44V19c0-4.42 4.5-8 10-8 .34 0 .68.01 1.01.04C20.42 6.78 16.65 3 12 3Z" fill="#EF8A3C" opacity=".45"/><path d="M17.5 13C13.9 13 11 15.46 11 18.5c0 3.04 2.9 5.5 6.5 5.5.62 0 1.22-.08 1.79-.22 1.28.96 3.11 1.1 3.11 1.1-.76-.78-1.09-1.72-1.19-2.46A5.14 5.14 0 0 0 24 18.5c0-3.04-2.9-5.5-6.5-5.5Z" fill="#EF8A3C"/></svg></div>
-          <h3>Hangout after</h3><p>Everyone votes one thing they're up for after the credits — so the night doesn't end when the lights come on.</p>
-        </div>
-        <div class="feat">
-          <div class="ic"><svg width="20" height="20" viewBox="0 0 24 24" fill="none"><path d="M12 2a7 7 0 0 0-7 7c0 2.38 1.19 4.47 3 5.74V17a1 1 0 0 0 1 1h6a1 1 0 0 0 1-1v-2.26c1.81-1.27 3-3.36 3-5.74a7 7 0 0 0-7-7Zm-3 19a1 1 0 0 0 1 1h4a1 1 0 0 0 1-1v-1H9v1Z" fill="#EF8A3C"/></svg></div>
-          <h3>CineMind</h3><p>A daily movie puzzle with streaks and leaderboards — for you, your friends, and your clubs.</p>
-        </div>
+      <div class="stubs">
+        <div class="stub"><div class="tear"><b>ADMIT SIX</b></div><div class="body">
+          <div class="adm">01 &middot; MOVIE CREW</div><h3>Get grouped</h3>
+          <p>Groups cap at six people who picked the same showing — big enough to feel like a night out, small enough that everyone actually talks.</p>
+        </div></div>
+        <div class="stub"><div class="tear"><b>YOUR PLACE</b></div><div class="body">
+          <div class="adm">02 &middot; SPACES</div><h3>Host a night</h3>
+          <p>A screening or a watch party — at a theater, your place, anywhere with a screen. Friends or anyone nearby can join, RSVP, split the cost, and chat.</p>
+        </div></div>
+        <div class="stub"><div class="tear"><b>AFTER 10PM</b></div><div class="body">
+          <div class="adm">03 &middot; HANGOUT</div><h3>Don't end at the credits</h3>
+          <p>Everyone votes one thing they're up for after — drinks, food, the spoiler debrief — so the night has somewhere to go.</p>
+        </div></div>
+        <div class="stub"><div class="tear"><b>DAILY</b></div><div class="body">
+          <div class="adm">04 &middot; CINEMIND</div><h3>One puzzle a day</h3>
+          <p>A daily movie puzzle with streaks and leaderboards — for you, your friends, and your clubs.</p>
+        </div></div>
       </div>
     </section>
 
     <section class="band">
+      <div class="place">BUILT IN DALLAS</div>
       <p class="slogan-big">"We believe movies are a <em>social event</em>."</p>
+      <p class="fineline">Starting at the theaters we actually go to.</p>
     </section>
 
     <footer>
