@@ -13,6 +13,16 @@ export async function hasOnboardedInterests(): Promise<boolean> {
 // Shared by every exit point from the onboarding flow (skip on the genre
 // picker, "Continue" on the discovery screen) so marking onboarded and
 // honoring a pending deep-link redirect can't drift between them.
+// Sign-out / account deletion: the flag is per-device, so without clearing it
+// the next account to sign in on this phone skips onboarding entirely.
+export async function clearOnboardingFlag() {
+  try {
+    await AsyncStorage.removeItem(ONBOARDED_KEY);
+  } catch {
+    /* best effort */
+  }
+}
+
 export async function completeOnboarding() {
   await AsyncStorage.setItem(ONBOARDED_KEY, "1");
   router.replace(consumePendingRedirect() ?? "/");

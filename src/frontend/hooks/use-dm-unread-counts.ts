@@ -1,5 +1,6 @@
 import { useCallback, useEffect, useRef, useState } from "react";
 import { supabase } from "@/frontend/config/supabase";
+import { loadBlockedIds } from "@/frontend/services/moderation";
 import { useForegroundPoll } from "@/frontend/hooks/use-foreground-poll";
 
 // Same shape/purpose as use-unread-counts.ts (Spaces' "N new messages"
@@ -84,8 +85,14 @@ export function useDmUnreadCounts(friendIds: string[]) {
 
       if (cancelledRef.current) return;
 
+      // Messages from someone you've blocked don't count — they aren't shown
+      // in the chat either, so a badge for them would never clear.
+      const blocked = await loadBlockedIds().catch(() => new Set<string>());
+      if (cancelledRef.current) return;
+
       const next: Record<string, number> = {};
       (messages || []).forEach((m) => {
+        if (blocked.has(m.sender_id)) return;
         const lastRead = lastReadByFriend[m.sender_id];
         if (!lastRead || new Date(m.created_at) > new Date(lastRead)) {
           next[m.sender_id] = (next[m.sender_id] || 0) + 1;

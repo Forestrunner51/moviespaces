@@ -16,7 +16,9 @@ export default function SpaceRedirectScreen() {
   // Space (see group.tsx's shareLink) — forwarded through so the eventual
   // /join call can present it, same as the join-by-code.tsx path.
   const { id, code } = useLocalSearchParams<{ id: string; code?: string }>();
-  const [error, setError] = useState(false);
+  // "notFound" (a 404 — the link is dead or the Space was deleted) reads
+  // differently from a network/server failure, which is worth retrying.
+  const [error, setError] = useState<"notFound" | "failed" | null>(null);
 
   useEffect(() => {
     if (!id) return;
@@ -36,13 +38,17 @@ export default function SpaceRedirectScreen() {
             code ? `?code=${encodeURIComponent(code)}` : ""
           }`,
         );
-        if (!res.ok) throw new Error("Space not found");
+        if (res.status === 404) {
+          if (!cancelled) setError("notFound");
+          return;
+        }
+        if (!res.ok) throw new Error(`Space lookup failed (status ${res.status})`);
         const group = await res.json();
         if (cancelled) return;
         router.replace({ pathname: "/group", params: { groupId: group.id, code } });
       } catch (err) {
         console.error("Failed to resolve shared space link:", err);
-        if (!cancelled) setError(true);
+        if (!cancelled) setError("failed");
       }
     })();
 
@@ -56,9 +62,18 @@ export default function SpaceRedirectScreen() {
       <View style={styles.center}>
         {error ? (
           <>
-            <Text style={styles.errorText}>This Space link couldn&apos;t be found.</Text>
-            <Text style={styles.backLink} onPress={() => router.back()}>
-              Go back
+            <Text style={styles.errorText}>
+              {error === "notFound"
+                ? "This Space link couldn't be found — it may have been deleted."
+                : "Couldn't load this Space — check your connection and try again."}
+            </Text>
+            {/* A deep link is usually the first screen in the stack, so there
+                is nothing to go back to — land on Home instead of a dead tap. */}
+            <Text
+              style={styles.backLink}
+              onPress={() => (router.canGoBack() ? router.back() : router.replace("/"))}
+            >
+              {router.canGoBack() ? "Go back" : "Go to Home"}
             </Text>
           </>
         ) : (

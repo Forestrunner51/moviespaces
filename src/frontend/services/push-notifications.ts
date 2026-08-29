@@ -74,6 +74,14 @@ export async function setNotificationsEnabled(enabled: boolean): Promise<void> {
     return;
   }
 
+  await unregisterPushToken();
+}
+
+// Deletes this user's push token rows server-side. Also called on sign-out —
+// otherwise the device keeps receiving the previous account's notifications
+// after someone else signs in (or after nobody does). Best-effort: never
+// throws, so it can run before signOut without blocking it.
+export async function unregisterPushToken(): Promise<void> {
   try {
     await authFetch(`${process.env.EXPO_PUBLIC_API_URL}/api/pushtokens`, { method: "DELETE" });
   } catch (err) {

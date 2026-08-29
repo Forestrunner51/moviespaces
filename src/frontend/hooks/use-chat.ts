@@ -1,7 +1,7 @@
 import { useState, useEffect, useRef } from "react";
 import { supabase } from "@/frontend/config/supabase";
 import { authFetch } from "@/frontend/services/api";
-import { getBlockedUserIds } from "@/frontend/services/moderation";
+import { loadBlockedIds } from "@/frontend/services/moderation";
 import { useForegroundPoll } from "@/frontend/hooks/use-foreground-poll";
 
 export interface Message {
@@ -24,6 +24,25 @@ export interface Message {
 // query at all — anything that isn't a UUID is simply not a chat target.
 const UUID_RE = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i;
 
+// Newest rows loaded on open. Older history isn't paged in yet — a DM
+// thread deeper than this is rare, and the previous behaviour (re-download
+// everything every 4s) was the actual problem.
+const INITIAL_PAGE = 100;
+
+// Appends `incoming` server rows onto `prev`, dropping any whose id is already
+// present (the row we optimistically inserted and then confirmed, or an
+// overlap at the poll boundary). Optimistic temp_ bubbles are kept at the
+// end so an in-flight send never disappears under a poll.
+export function mergeMessages<T extends { id: string; created_at: string }>(prev: T[], incoming: T[]): T[] {
+  if (incoming.length === 0) return prev;
+  const seen = new Set(prev.map((m) => m.id));
+  const added = incoming.filter((m) => !seen.has(m.id));
+  if (added.length === 0) return prev;
+  const real = prev.filter((m) => !m.id.startsWith("temp_"));
+  const temps = prev.filter((m) => m.id.startsWith("temp_"));
+  return [...real, ...added, ...temps];
+}
+
 export function useChat(chatTargetId: string) {
   const validTargetId = UUID_RE.test(chatTargetId) ? chatTargetId : "";
   const [currentUserId, setCurrentUserId] = useState<string | null>(null);
@@ -33,14 +52,27 @@ export function useChat(chatTargetId: string) {
   // someone you've blocked stop rendering, including in the DM thread
   // itself. (RLS still delivers the rows — this is the display-layer filter
   // the App Store moderation flow expects.)
-  const blockedIdsRef = useRef<Set<string>>(new Set());
+  const blockedIdsRef = useRef<ReadonlySet<string>>(new Set());
   useEffect(() => {
-    getBlockedUserIds()
+    loadBlockedIds()
       .then((ids) => {
-        blockedIdsRef.current = new Set(ids);
+        blockedIdsRef.current = ids;
       })
       .catch(() => {});
   }, []);
+
+  // Incremental polling: the first fetch takes the newest INITIAL_PAGE rows;
+  // every poll after that asks only for rows newer than the newest one seen
+  // and appends. Previously each 4s tick re-downloaded the entire thread.
+  // Keyed by conversation: switching targets starts over (replace, not
+  // append) rather than stacking the new thread onto the old one.
+  const newestSeenRef = useRef<{ key: string; at: string | null }>({ key: "", at: null });
+  // Which conversation is on screen right now — a poll response for a chat
+  // the user has already left must not be merged into the new one.
+  const activeTargetRef = useRef(validTargetId);
+  useEffect(() => {
+    activeTargetRef.current = validTargetId;
+  }, [validTargetId]);
 
   // Get current user id
   useEffect(() => {
@@ -53,18 +85,37 @@ export function useChat(chatTargetId: string) {
 
   const fetchHistory = async () => {
     if (!currentUserId || !validTargetId) return;
-    setLoading(true);
+    const switched = newestSeenRef.current.key !== validTargetId;
+    const since = switched ? null : newestSeenRef.current.at;
+    const targetAtStart = validTargetId;
+    if (switched) setLoading(true);
     try {
-      const { data, error } = await supabase
+      let query = supabase
         .from("messages")
         .select("id, sender_id, receiver_id, content, created_at")
         .or(
           `and(sender_id.eq.${currentUserId},receiver_id.eq.${validTargetId}),and(sender_id.eq.${validTargetId},receiver_id.eq.${currentUserId})`
-        )
-        .order("created_at", { ascending: true });
-
+        );
+      if (since) {
+        query = query.gt("created_at", since).order("created_at", { ascending: true });
+      } else {
+        query = query.order("created_at", { ascending: false }).limit(INITIAL_PAGE);
+      }
+      const { data, error } = await query;
       if (error) throw error;
-      setMessages((data || []).filter((m) => !blockedIdsRef.current.has(m.sender_id)));
+      // Stale response for a conversation we've already left.
+      if (targetAtStart !== activeTargetRef.current) return;
+
+      const rows = since ? data || [] : [...(data || [])].reverse();
+      newestSeenRef.current = {
+        key: validTargetId,
+        at: rows.length > 0 ? rows[rows.length - 1].created_at : since,
+      };
+      const fresh = rows.filter((m) => !blockedIdsRef.current.has(m.sender_id));
+      setMessages((prev) => {
+        if (switched) return fresh;
+        return mergeMessages(since ? prev : prev.filter((m) => m.id.startsWith("temp_")), fresh);
+      });
     } catch (err) {
       console.error("Error fetching message history:", err);
     } finally {
@@ -157,10 +208,15 @@ export function useChat(chatTargetId: string) {
 
       if (error) throw error;
 
-      // Replace temporary message with the actual saved one
+      // Replace temporary message with the actual saved one — unless a poll
+      // already appended that row, in which case just drop the temp bubble
+      // (otherwise the same message shows twice).
       if (data && data.length > 0) {
+        const sent = data[0] as Message;
         setMessages((prev) =>
-          prev.map((m) => (m.id === tempId ? (data[0] as Message) : m))
+          prev.some((m) => m.id === sent.id)
+            ? prev.filter((m) => m.id !== tempId)
+            : prev.map((m) => (m.id === tempId ? sent : m)),
         );
       }
 

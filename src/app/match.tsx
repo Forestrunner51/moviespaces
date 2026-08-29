@@ -22,7 +22,7 @@ import { useToast } from "@/frontend/components/toast";
 import { authFetch } from "@/frontend/services/api";
 import { resolveDisplayName } from "@/frontend/services/display-name";
 import { searchMovies, Movie } from "@/frontend/services/movies";
-import { formatEventDate } from "@/frontend/utils/event-date";
+import { combineDateAndTime, formatEventDate, isPastDateTime } from "@/frontend/utils/event-date";
 import { POST_ACTIVITIES } from "@/frontend/constants/activities";
 import {
   fetchNearbyTheaters,
@@ -234,6 +234,8 @@ export default function MatchScreen() {
   })();
 
   const pickKind = (k: CrewKind) => {
+    resolveSeq.current += 1;
+    setResolving(false);
     setKind(k);
     if (k === "venue") setHasTicket(false);
     setMovie(null);
@@ -244,11 +246,17 @@ export default function MatchScreen() {
 
   // Theater: a showing was picked → the film is whatever's playing in it.
   const [resolving, setResolving] = useState(false);
+  // Same sequence-guard as handleSearch: Back (or picking another showing)
+  // during the title lookup bumps the counter, so the stale resolution can't
+  // land afterwards and push the user forward to Confirm on its own.
+  const resolveSeq = useRef(0);
   const onShowingPicked = async (sel: ShowtimeSelection) => {
+    const seq = ++resolveSeq.current;
     setShowtime(sel);
     setResolving(true);
     setCrews(null);
     const m = await resolveFromShowing(sel.movieTitle);
+    if (seq !== resolveSeq.current) return;
     setMovie(m);
     setResolving(false);
     setStage("confirm");
@@ -308,12 +316,18 @@ export default function MatchScreen() {
     });
   };
 
+  // The date picker has minimumDate today, but the time picker doesn't know
+  // the date — "today at 2pm" at 9pm is a crew for a showing already over.
+  const venueInPast = isPastDateTime(dateValue, timeValue);
   const venueReady =
-    venueName.trim().length > 0 && !!dateValue && !!timeValue && !Number.isNaN(venueCostCents);
+    venueName.trim().length > 0 &&
+    !!dateValue &&
+    !!timeValue &&
+    !venueInPast &&
+    !Number.isNaN(venueCostCents);
   const startVenueCrew = () => {
-    if (!venueReady || !dateValue || !timeValue) return;
-    const combined = new Date(dateValue);
-    combined.setHours(timeValue.getHours(), timeValue.getMinutes(), 0, 0);
+    if (!venueReady || !dateValue || !timeValue || isPastDateTime(dateValue, timeValue)) return;
+    const combined = combineDateAndTime(dateValue, timeValue);
     return submit({
       CinemaName: venueName.trim().slice(0, 250),
       ScreeningTime: combined.toISOString(),
@@ -326,6 +340,9 @@ export default function MatchScreen() {
   };
 
   const goBack = () => {
+    // Cancel any showing-title lookup in flight — see resolveSeq.
+    resolveSeq.current += 1;
+    setResolving(false);
     if (stage === "kind") {
       if (router.canGoBack()) router.back();
       else router.replace("/(tabs)/explore");
@@ -834,7 +851,9 @@ export default function MatchScreen() {
                       ? "Pick a date."
                       : !timeValue
                         ? "Pick a time."
-                        : "Enter a valid cost, or leave it blank."}
+                        : venueInPast
+                          ? "That time has already passed — pick a later one."
+                          : "Enter a valid cost, or leave it blank."}
                 </Text>
               )}
               <TouchableOpacity

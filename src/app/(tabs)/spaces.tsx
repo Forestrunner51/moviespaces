@@ -16,8 +16,8 @@ import { FriendsPanel } from "@/frontend/components/friends-panel";
 import { Starfield } from "@/frontend/components/starfield";
 import { MoviePoster } from "@/frontend/components/movie-poster";
 import { SpaceTheme, SpaceStyles, Palette, Type, Radius, Display, Font } from "@/frontend/constants/theme";
-import { useUnreadCounts } from "@/frontend/hooks/use-unread-counts";
 import { useFriends } from "@/frontend/hooks/use-friends";
+import { LoadError } from "@/frontend/components/load-error";
 import { CoachTip } from "@/frontend/components/coach-tip";
 import { useProfiles } from "@/frontend/hooks/use-profiles";
 import { AvatarStack } from "@/frontend/components/avatar";
@@ -157,13 +157,16 @@ export default function MySpacesScreen() {
   // Powers the pending-request count on the Friends tab so an incoming request
   // is visible from anywhere in My Spaces, not only after opening Friends.
   // Foreground-polled (see useFriends), so it pauses when backgrounded.
-  const { pendingRequests } = useFriends();
+  const { pendingRequests, unreadCounts } = useFriends();
   const { tab: initialTab } = useLocalSearchParams<{ tab?: Tab }>();
   const [tab, setTab] = useState<Tab>(
     initialTab === "rent" || initialTab === "friends" ? initialTab : "spaces",
   );
   const [spaces, setSpaces] = useState<Space[]>([]);
   const [loading, setLoading] = useState(true);
+  // Set when the fetch failed and there's nothing loaded to show — the
+  // empty states below must not claim "no spaces" for a network error.
+  const [loadError, setLoadError] = useState(false);
   const [rentCategoryFilter, setRentCategoryFilter] = useState<EventCategory | "all">("all");
 
   // A ref, not `spaces.length`, because the focus effect below captures the
@@ -184,14 +187,17 @@ export default function MySpacesScreen() {
       if (res.ok) {
         const data = await res.json();
         setSpaces(data);
+        setLoadError(false);
       } else {
         console.error(
           "Failed to pull secure user spaces status code:",
           res.status,
         );
+        setLoadError(true);
       }
     } catch (err) {
       console.error("Network error trying to fetch spaces:", err);
+      setLoadError(true);
     } finally {
       hasLoadedOnceRef.current = true;
       setLoading(false);
@@ -210,7 +216,6 @@ export default function MySpacesScreen() {
       (s) => rentCategoryFilter === "all" || eventCategoryOf(s.spaceType, s.eventCategory) === rentCategoryFilter,
     );
   const gatheringSpaces = spaces.filter((s) => s.spaceType !== "private_rental");
-  const unreadCounts = useUnreadCounts(spaces.map((s) => s.id));
 
   // Legacy Spaces predate the screeningTime column — fall back to createdAt
   // (same pattern as profile.tsx and group.tsx) so they still register as
@@ -355,6 +360,9 @@ export default function MySpacesScreen() {
                   />
                 )}
                 ListEmptyComponent={
+                  loadError && spaces.length === 0 ? (
+                    <LoadError onRetry={loadSpaces} />
+                  ) : (
                   <View style={styles.emptyState}>
                     <Ionicons name="storefront-outline" size={40} color={SpaceTheme.mutedOrbit} />
                     <Text style={styles.emptyTitle}>No watch parties yet</Text>
@@ -362,6 +370,7 @@ export default function MySpacesScreen() {
                       Find a venue and set one up to see it here
                     </Text>
                   </View>
+                  )
                 }
               />
             </>
@@ -394,6 +403,9 @@ export default function MySpacesScreen() {
                 />
               )}
               ListEmptyComponent={
+                loadError && spaces.length === 0 ? (
+                  <LoadError onRetry={loadSpaces} />
+                ) : (
                 <View style={styles.emptyState}>
                   <Ionicons name="planet-outline" size={40} color={SpaceTheme.mutedOrbit} />
                   <Text style={styles.emptyTitle}>No spaces yet</Text>
@@ -413,6 +425,7 @@ export default function MySpacesScreen() {
                     <Text style={styles.emptyButtonText}>Find a Movie</Text>
                   </TouchableOpacity>
                 </View>
+                )
               }
             />
           </>

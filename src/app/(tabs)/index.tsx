@@ -11,6 +11,7 @@ import { Text } from "@/frontend/components/scaled-text";
 import { router, useFocusEffect } from "expo-router";
 import { Ionicons } from "@expo/vector-icons";
 import { Starfield } from "@/frontend/components/starfield";
+import { LoadError } from "@/frontend/components/load-error";
 import { SpaceStyles, Palette, Type, Display, Font, Radius } from "@/frontend/constants/theme";
 import { MoviePoster } from "@/frontend/components/movie-poster";
 import { Avatar, AvatarStack } from "@/frontend/components/avatar";
@@ -196,6 +197,7 @@ export default function HomeScreen() {
   // an earlier pick.
   const [openSpacesRaw, setOpenSpacesRaw] = useState<NearbySpace[]>([]);
   const [spacesLoading, setSpacesLoading] = useState(true);
+  const [spacesError, setSpacesError] = useState(false);
   const [myClubs, setMyClubs] = useState<MyClub[]>([]);
   // Every Space the user belongs to at all (host or member, any type/status)
   // — deliberately broader than mySpaces' "upcoming, non-public" filter,
@@ -203,16 +205,43 @@ export default function HomeScreen() {
   // not for deciding what counts as "upcoming."
   const [myGroupIds, setMyGroupIds] = useState<Set<string>>(new Set());
 
+  // Bumped by Retry; the effect below refetches on change. The spinner is
+  // flipped on in the tap handler, so the effect itself only fetches.
+  const [reloadKey, setReloadKey] = useState(0);
+  const retryOpenSpaces = () => {
+    setSpacesLoading(true);
+    setReloadKey((k) => k + 1);
+  };
   useEffect(() => {
-    fetch(`${process.env.EXPO_PUBLIC_API_URL}/api/group/open`)
-      .then((res) => (res.ok ? res.json() : []))
-      .then((data: NearbySpace[]) => setOpenSpacesRaw(data || []))
+    let cancelled = false;
+    // authFetch, not bare fetch: /api/group/open blanks member/host userIds
+    // for anonymous callers, which would degrade every avatar to initials.
+    // authFetch still sends no header when there's no session.
+    authFetch(`${process.env.EXPO_PUBLIC_API_URL}/api/group/open`)
+      .then((res) => {
+        // A non-OK response used to become `[]` — indistinguishable from
+        // "nothing near you", which is the wrong story on a bad connection.
+        if (!res.ok) throw new Error(`open spaces failed (status ${res.status})`);
+        return res.json();
+      })
+      .then((data: NearbySpace[]) => {
+        if (cancelled) return;
+        setOpenSpacesRaw(data || []);
+        setSpacesError(false);
+      })
       .catch((err) => {
+        if (cancelled) return;
         console.warn("Failed to load open spaces for home screen:", err);
         setOpenSpacesRaw([]);
+        setSpacesError(true);
       })
-      .finally(() => setSpacesLoading(false));
-  }, []);
+      .finally(() => {
+        if (!cancelled) setSpacesLoading(false);
+      });
+    return () => {
+      cancelled = true;
+    };
+  }, [reloadKey]);
 
   // Derived, not stored — recomputes only when the raw feed or the user's
   // own-Space set actually changes (e.g. returning to Home after
@@ -401,6 +430,8 @@ export default function HomeScreen() {
         </View>
         {spacesLoading ? (
           <ActivityIndicator color={Palette.accent} style={styles.sectionLoading} />
+        ) : spacesError ? (
+          <LoadError compact onRetry={retryOpenSpaces} />
         ) : nearbySpaces.length === 0 ? (
           <View style={styles.emptySection}>
             <Text style={styles.emptySectionText}>

@@ -11,7 +11,7 @@ import { NativeModules } from "react-native";
 // calls it — silently breaking every signUp/signIn/resetPassword on any build
 // that predates adding this package. Once rebuilt, this check passes and the
 // real, secure polyfill installs as intended.
-const hasRandomValuesNativeModule =
+export const hasRandomValuesNativeModule =
   !!NativeModules.RNGetRandomValues ||
   !!NativeModules.ExpoRandom ||
   !!(globalThis as any).ExpoModules?.ExpoRandom ||

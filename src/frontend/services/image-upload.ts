@@ -1,5 +1,34 @@
 import { File } from "expo-file-system";
+import { ImageManipulator, SaveFormat } from "expo-image-manipulator";
 import { supabase } from "@/frontend/config/supabase";
+
+// Downscales the picked image so a 12-megapixel camera photo isn't shipped
+// to Storage (and then to every viewer) at full size. Avatars render at
+// ≤128pt; Space covers at screen width. Longest side is capped, aspect kept.
+// Returns the original URI if the resize fails — a slightly large upload
+// beats a failed save.
+async function downscale(uri: string, maxSide: number): Promise<string> {
+  try {
+    const context = ImageManipulator.manipulate(uri);
+    const ref = await context.renderAsync();
+    const { width, height } = ref;
+    if (width > maxSide || height > maxSide) {
+      const scale = maxSide / Math.max(width, height);
+      const resized = await context
+        .resize({ width: Math.round(width * scale), height: Math.round(height * scale) })
+        .renderAsync();
+      const saved = await resized.saveAsync({ format: SaveFormat.JPEG, compress: 0.85 });
+      return saved.uri;
+    }
+    // Re-encode anyway so the upload is always a JPEG (the content type we
+    // send) even when the picker handed back a PNG/HEIC.
+    const saved = await ref.saveAsync({ format: SaveFormat.JPEG, compress: 0.85 });
+    return saved.uri;
+  } catch (err) {
+    console.warn("Image downscale failed; uploading original:", err);
+    return uri;
+  }
+}
 
 // Reads a local image URI into a real ArrayBuffer for Supabase Storage.
 //
@@ -29,15 +58,17 @@ async function readAsArrayBuffer(uri: string): Promise<ArrayBuffer> {
 }
 
 // Uploads a picked image and returns its public URL.
+// `maxSide` caps the longest edge (default 1600px, cover photos); avatars pass 512.
 // `upsert` is for fixed-path objects (an avatar is always "<userId>.jpg");
 // leave it off for append-only paths like Space cover photos.
 export async function uploadImage(
   bucket: string,
   path: string,
   localUri: string,
-  options: { upsert?: boolean } = {},
+  options: { upsert?: boolean; maxSide?: number } = {},
 ): Promise<string> {
-  const arrayBuffer = await readAsArrayBuffer(localUri);
+  const uri = await downscale(localUri, options.maxSide ?? 1600);
+  const arrayBuffer = await readAsArrayBuffer(uri);
 
   const { error: uploadError } = await supabase.storage
     .from(bucket)

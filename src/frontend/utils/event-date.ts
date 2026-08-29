@@ -62,3 +62,19 @@ export function formatEventDate(
     relative: relativeLabel(d),
   };
 }
+
+// Merges a date-picker value (the day) with a time-picker value (the clock
+// time) into one instant — the shape both the crew and edit forms submit.
+export function combineDateAndTime(date: Date, time: Date): Date {
+  const combined = new Date(date);
+  combined.setHours(time.getHours(), time.getMinutes(), 0, 0);
+  return combined;
+}
+
+// Whether a picked date+time is already behind us. A minimumDate on the date
+// picker can't catch "today, but an hour ago", so forms check this too.
+// Lives here (not inline) so the clock read stays out of render bodies.
+export function isPastDateTime(date: Date | null, time: Date | null): boolean {
+  if (!date || !time) return false;
+  return combineDateAndTime(date, time).getTime() <= Date.now();
+}

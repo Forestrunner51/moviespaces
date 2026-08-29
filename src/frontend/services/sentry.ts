@@ -9,7 +9,9 @@ const dsn = process.env.EXPO_PUBLIC_SENTRY_DSN;
 if (dsn) {
   Sentry.init({
     dsn,
-    tracesSampleRate: 1.0,
+    // Full tracing in dev; 20% in production so a real user base doesn't
+    // burn the transaction quota.
+    tracesSampleRate: __DEV__ ? 1.0 : 0.2,
     debug: false,
     // Turn on the Sentry Logs product (structured logs), separate from crash
     // reporting. Without this every Sentry.logger.* call and the console

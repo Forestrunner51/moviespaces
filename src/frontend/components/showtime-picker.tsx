@@ -16,6 +16,7 @@ import {
   ShowtimeTheater,
   TheaterShowtimesDay,
 } from "@/frontend/services/showtimes";
+import * as Location from "expo-location";
 import { getDeviceLocation } from "@/frontend/services/nearby-theaters";
 import { distanceMiles } from "@/frontend/utils/distance";
 
@@ -64,6 +65,9 @@ export function ShowtimePicker({ selection, onSelect, filterTitle }: Props) {
   const [open, setOpen] = useState(!selection);
   const [showAllTheaters, setShowAllTheaters] = useState(false);
   const [hasLocation, setHasLocation] = useState(false);
+  // Location permission was granted but no fix arrived (timeout/indoors) —
+  // distinct from "not granted" so the hint says what actually happened.
+  const [locationFailed, setLocationFailed] = useState(false);
   const [theaterQuery, setTheaterQuery] = useState("");
 
   // Separate from loadError: that one gates the whole picker's empty state,
@@ -91,6 +95,10 @@ export function ShowtimePicker({ selection, onSelect, filterTitle }: Props) {
     (async () => {
       try {
         const loc = await getDeviceLocation();
+        if (!loc && !cancelled) {
+          const perm = await Location.getForegroundPermissionsAsync().catch(() => null);
+          setLocationFailed(perm?.status === "granted");
+        }
         const result = await fetchShowtimeTheaters(loc?.latitude, loc?.longitude);
         // The API returns every covered metro nearest-first — without this
         // cutoff a user outside coverage saw a "nearest" theater hundreds of
@@ -252,7 +260,9 @@ export function ShowtimePicker({ selection, onSelect, filterTitle }: Props) {
       )}
       {!theaterQuery.trim() && !hasLocation && (
         <Text style={styles.locationHint}>
-          Turn on location to see theaters near you, or search by name.
+          {locationFailed
+            ? "Couldn't get your location — search for a theater by name instead."
+            : "Turn on location to see theaters near you, or search by name."}
         </Text>
       )}
 

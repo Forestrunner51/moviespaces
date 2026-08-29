@@ -1,5 +1,6 @@
 import { useCallback, useEffect, useRef, useState } from "react";
 import { supabase } from "@/frontend/config/supabase";
+import { loadBlockedIds } from "@/frontend/services/moderation";
 import { useForegroundPoll } from "@/frontend/hooks/use-foreground-poll";
 
 // Counts messages sent (by someone else) after the user's last read marker
@@ -74,7 +75,7 @@ export function useUnreadCounts(groupIds: string[]) {
 
       const { data: messages } = await supabase
         .from("group_messages")
-        .select("group_id, created_at")
+        .select("group_id, sender_id, created_at")
         .eq("group_type", "group")
         .in("group_id", groupIds)
         .neq("sender_id", user.id)
@@ -82,8 +83,14 @@ export function useUnreadCounts(groupIds: string[]) {
 
       if (cancelledRef.current) return;
 
+      // Messages from someone you've blocked don't count — they aren't shown
+      // in the chat either, so a badge for them would never clear.
+      const blocked = await loadBlockedIds().catch(() => new Set<string>());
+      if (cancelledRef.current) return;
+
       const next: Record<string, number> = {};
       (messages || []).forEach((m) => {
+        if (blocked.has(m.sender_id)) return;
         const lastRead = lastReadByGroup[m.group_id];
         if (!lastRead || new Date(m.created_at) > new Date(lastRead)) {
           next[m.group_id] = (next[m.group_id] || 0) + 1;
