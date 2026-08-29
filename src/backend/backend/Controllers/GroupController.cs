@@ -687,9 +687,17 @@ namespace Backend.Controllers
         // _db.GroupMembers.Add, not crew.Members.Add: crew is tracked and
         // GroupMember.Id is client-generated, so the navigation route marks
         // the row Modified (UPDATE → 0 rows → 500).
+        // Serializes seat-taking per Space. A transaction alone doesn't: under
+        // Postgres read-committed two concurrent COUNTs both see N-1 seats and
+        // both insert. Locking the Group row makes the second joiner wait for
+        // the first to commit, so its COUNT sees the new member.
+        private Task LockGroupRowAsync(Guid groupId) =>
+            _db.Database.ExecuteSqlInterpolatedAsync($"SELECT 1 FROM \"Groups\" WHERE \"Id\" = {groupId} FOR UPDATE");
+
         private async Task<IActionResult> SeatInCrewAsync(Group crew, string userId, string name, bool hasTicket, string[]? afterActivities)
         {
             await using var tx = await _db.Database.BeginTransactionAsync();
+            await LockGroupRowAsync(crew.Id);
             var seated = await _db.GroupMembers.CountAsync(m => m.GroupId == crew.Id);
             if (seated >= crew.MaxCapacity)
                 return BadRequest(new { error = "That crew just filled up — pick another or start your own." });
@@ -1264,6 +1272,7 @@ namespace Backend.Controllers
             // index is the backstop for the duplicate-join race the
             // existing-member read above can't close on its own.
             await using var tx = await _db.Database.BeginTransactionAsync();
+            await LockGroupRowAsync(id);
             var memberCount = await _db.GroupMembers.CountAsync(m => m.GroupId == id);
             if (memberCount >= group.MaxCapacity)
                 return BadRequest(new { error = "This Space is already full." });
