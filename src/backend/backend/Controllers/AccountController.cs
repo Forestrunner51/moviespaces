@@ -44,7 +44,8 @@ namespace Backend.Controllers
         // completeness requirement (5.1.1(v)). The full set: Groups they host,
         // their GroupMemberships, their PushToken, their CineMind daily
         // progress (which carries their display name and shows on the global
-        // leaderboard), and their Roulette spin history. Hosted Spaces are
+        // leaderboard), their Roulette spin history, and their CineMind
+        // PuzzleFirstSeen timing rows. Hosted Spaces are
         // deleted outright (same as the host "Delete Space" action) — there's
         // no one left to consent to taking them over.
         [HttpDelete]
@@ -73,6 +74,10 @@ namespace Backend.Controllers
 
             var spins = await _db.RouletteSpinHistory.Where(s => s.UserId == userId).ToListAsync();
             _db.RouletteSpinHistory.RemoveRange(spins);
+
+            // Server-side CineMind timing rows — keyed by UserId like the rest.
+            var firstSeen = await _db.PuzzleFirstSeen.Where(p => p.UserId == userId).ToListAsync();
+            _db.PuzzleFirstSeen.RemoveRange(firstSeen);
 
             await _db.SaveChangesAsync();
 

@@ -150,8 +150,10 @@ namespace Backend.Controllers
             return $"{Guid.NewGuid():N}"[..8].ToUpperInvariant();
         }
 
-        private Task NotifyMembersAsync(Guid groupId, string title, string body, string? excludeUserId = null) =>
-            _pushNotificationService.NotifyMembersAsync(_db, groupId, title, body, excludeUserId);
+        // `type` is what the app routes on when the push is tapped (see
+        // PushRules); every group push at least carries the groupId.
+        private Task NotifyMembersAsync(Guid groupId, string title, string body, string? excludeUserId = null, string type = "group") =>
+            _pushNotificationService.NotifyMembersAsync(_db, groupId, title, body, excludeUserId, PushRules.GroupData(type, groupId));
 
         private string GetUserId() =>
             User.FindFirstValue(ClaimTypes.NameIdentifier)
@@ -205,6 +207,12 @@ namespace Backend.Controllers
             var bookingUrl = req.BookingUrl?.Trim() ?? "";
             if (bookingUrl.Length > 0 && !IsWebUrl(bookingUrl))
                 return BadRequest(new { error = "The booking link must be a full web address (starting with https://)." });
+
+            // Same rule as MatchForMovie/EditGroup: a Space can't be created
+            // already in the past.
+            if (req.ScreeningTime.HasValue
+                && GroupRules.ScreeningTimeHasPassed(ToUtc(req.ScreeningTime)!.Value, DateTime.UtcNow))
+                return BadRequest(new { error = GroupRules.ScreeningTimePassedMessage });
 
             var filmNameIsFreeform = req.FilmId == null && req.TmdbMovieId == null;
             var cleanFilmName = filmNameIsFreeform
@@ -599,13 +607,7 @@ namespace Backend.Controllers
                     return BadRequest(new { error = "That crew is no longer open — pick another or start your own." });
                 if (target.Members.Count >= target.MaxCapacity)
                     return BadRequest(new { error = "That crew just filled up — pick another or start your own." });
-                // _db.GroupMembers.Add, not target.Members.Add: target is tracked
-                // and GroupMember.Id is client-generated, so the navigation route
-                // marks the row Modified (UPDATE → 0 rows → 500). EF fixup still
-                // appends it to target.Members, so the count below is post-add.
-                _db.GroupMembers.Add(new GroupMember { GroupId = target.Id, Name = cleanHost, UserId = userId, Confirmed = true, HasTicket = hasTicket, AfterActivities = SanitizeAfterActivities(req.AfterActivities) });
-                await _db.SaveChangesAsync();
-                return Ok(new { groupId = target.Id, joined = true, memberCount = target.Members.Count });
+                return await SeatInCrewAsync(target, userId, cleanHost, hasTicket, req.AfterActivities);
             }
 
             // Starting a crew with a concrete showing. A crew is always born
@@ -623,8 +625,8 @@ namespace Backend.Controllers
                 ?? CheckLength(showTime, GroupFieldLimits.ShortLabel, "The time label");
             if (dateErr != null) return BadRequest(new { error = dateErr });
             var when = ToUtc(req.ScreeningTime);
-            if (when <= DateTime.UtcNow)
-                return BadRequest(new { error = "That showing has already started — pick a later one." });
+            if (GroupRules.ScreeningTimeHasPassed(when!.Value, DateTime.UtcNow))
+                return BadRequest(new { error = GroupRules.ScreeningTimePassedMessage });
             if (req.TotalCostCents.HasValue && req.TotalCostCents.Value < 0)
                 return BadRequest(new { error = "Cost can't be negative." });
             // Compare and store the same (cleaned) string, or a venue that
@@ -642,11 +644,7 @@ namespace Backend.Controllers
                     && string.Equals(g.CinemaName, cleanCinema, StringComparison.OrdinalIgnoreCase)
                     && g.ScreeningTime == when);
                 if (twin != null)
-                {
-                    _db.GroupMembers.Add(new GroupMember { GroupId = twin.Id, Name = cleanHost, UserId = userId, Confirmed = true, HasTicket = hasTicket, AfterActivities = SanitizeAfterActivities(req.AfterActivities) });
-                    await _db.SaveChangesAsync();
-                    return Ok(new { groupId = twin.Id, joined = true, memberCount = twin.Members.Count });
-                }
+                    return await SeatInCrewAsync(twin, userId, cleanHost, hasTicket, req.AfterActivities);
             }
 
             var crew = new Group
@@ -679,6 +677,37 @@ namespace Backend.Controllers
             return Ok(new { groupId = crew.Id, created = true, memberCount = 1 });
         }
 
+        // Seats a signed-in user in an existing crew. The caller has already
+        // checked capacity against the crew it loaded, but two requests can
+        // both pass that read, so the real guard is here: the count and the
+        // insert run in one transaction and the count is re-done inside it,
+        // and the unique (GroupId, UserId) index turns a double-join into a
+        // DbUpdateException → 409 rather than a duplicate row.
+        //
+        // _db.GroupMembers.Add, not crew.Members.Add: crew is tracked and
+        // GroupMember.Id is client-generated, so the navigation route marks
+        // the row Modified (UPDATE → 0 rows → 500).
+        private async Task<IActionResult> SeatInCrewAsync(Group crew, string userId, string name, bool hasTicket, string[]? afterActivities)
+        {
+            await using var tx = await _db.Database.BeginTransactionAsync();
+            var seated = await _db.GroupMembers.CountAsync(m => m.GroupId == crew.Id);
+            if (seated >= crew.MaxCapacity)
+                return BadRequest(new { error = "That crew just filled up — pick another or start your own." });
+
+            _db.GroupMembers.Add(new GroupMember { GroupId = crew.Id, Name = name, UserId = userId, Confirmed = true, HasTicket = hasTicket, AfterActivities = SanitizeAfterActivities(afterActivities) });
+            try
+            {
+                await _db.SaveChangesAsync();
+                await tx.CommitAsync();
+            }
+            catch (DbUpdateException)
+            {
+                await tx.RollbackAsync();
+                return Conflict(new { error = "You're already in this crew.", groupId = crew.Id, alreadyIn = true });
+            }
+            return Ok(new { groupId = crew.Id, joined = true, memberCount = seated + 1 });
+        }
+
         // GET /api/group/community-spaces/discover?genres=Horror,Sci-Fi
         //
         // Browse-before-joining: onboarding shows these as preview cards and
@@ -696,16 +725,24 @@ namespace Backend.Controllers
                 .Split(',', StringSplitOptions.RemoveEmptyEntries | StringSplitOptions.TrimEntries)
                 .ToHashSet(StringComparer.OrdinalIgnoreCase);
 
-            // Filtered in memory, not in the query — see the same
+            // Projected, not Include(Members): a club can hold thousands of
+            // members and this only needs a count and a "me?" flag per club.
+            // Genre filtering happens in memory — see the same
             // OrdinalIgnoreCase/SQL-translation note on the join endpoint.
-            var allPublicClubs = await _db.Groups.Include(g => g.Members)
+            var allPublicClubs = await _db.Groups
+                .AsNoTracking()
                 // MatchMovieKey == null excludes Match-mode groups — they're
                 // IsPublic (for evergreen treatment) but aren't browsable clubs.
                 .Where(g => g.IsPublic && g.MatchMovieKey == null)
+                .Select(g => new ClubRow(
+                    g.Id, g.FilmName, g.SpaceCode, g.GenreCategory,
+                    g.Members.Count,
+                    g.Members.Any(m => m.UserId == userId)))
                 .ToListAsync();
             var clubs = requested.Count == 0
                 ? allPublicClubs
                 : allPublicClubs.Where(g => g.GenreCategory != null && requested.Contains(g.GenreCategory)).ToList();
+            var clubIds = clubs.Select(c => c.Id).ToList();
 
             // A representative poster per club: a real film from the club's
             // genre, so a club card shows movie art instead of a bare icon.
@@ -719,8 +756,15 @@ namespace Backend.Controllers
             var postersByGenre = new Dictionary<string, List<string>>(StringComparer.OrdinalIgnoreCase);
             if (neededGenres.Count > 0)
             {
+                // GenresJson is a JSON array in a text column, so the exact
+                // genre match has to happen here — but only rows that could
+                // match are loaded (a LIKE per needed genre), not the whole
+                // catalog.
+                var genreList = neededGenres.ToList();
                 var catalog = await _db.CineMindMovies
+                    .AsNoTracking()
                     .Where(m => m.PosterPath != null && m.PosterPath != "")
+                    .Where(m => genreList.Any(g => m.GenresJson.Contains(g)))
                     .Select(m => new { m.GenresJson, m.PosterPath })
                     .ToListAsync();
                 foreach (var m in catalog)
@@ -737,7 +781,7 @@ namespace Backend.Controllers
                     }
                 }
             }
-            string? PosterForClub(Group club)
+            string? PosterForClub(ClubRow club)
             {
                 if (club.GenreCategory != null
                     && postersByGenre.TryGetValue(club.GenreCategory, out var posters)
@@ -749,33 +793,30 @@ namespace Backend.Controllers
             }
 
             var today = DateOnly.FromDateTime(DateTime.UtcNow);
-            var allMemberIds = clubs
-                .SelectMany(c => c.Members.Select(m => m.UserId))
-                .Where(id => !string.IsNullOrEmpty(id))
-                .Distinct()
-                .ToList();
 
-            // One query across every club's members rather than one query per
-            // club — cheap either way at this scale (a handful of clubs), but
-            // free to avoid.
-            var todayScores = await _db.UserDailyProgress
-                .Where(p => p.PuzzleDate == today && allMemberIds.Contains(p.UserId))
-                .Select(p => new { p.UserId, p.Score })
+            // One query across every club: today's scores joined to the
+            // membership table in SQL, so member ids never round-trip to the
+            // app. A user in several clubs counts toward each.
+            var todayScores = await _db.GroupMembers
+                .AsNoTracking()
+                .Where(m => clubIds.Contains(m.GroupId) && m.UserId != "")
+                .Join(_db.UserDailyProgress.Where(p => p.PuzzleDate == today),
+                    m => m.UserId, p => p.UserId,
+                    (m, p) => new { m.GroupId, p.Score })
                 .ToListAsync();
-            var scoresByUser = todayScores.ToLookup(s => s.UserId, s => s.Score);
+            var scoresByClub = todayScores.ToLookup(s => s.GroupId, s => s.Score);
 
             var ranked = clubs
                 .Select(club =>
                 {
-                    var memberIds = club.Members.Select(m => m.UserId).Where(id => !string.IsNullOrEmpty(id));
-                    var clubScores = memberIds.SelectMany(id => scoresByUser[id]).ToList();
+                    var clubScores = scoresByClub[club.Id].ToList();
                     return new
                     {
                         club,
-                        memberCount = club.Members.Count,
+                        memberCount = club.MemberCount,
                         playedTodayCount = clubScores.Count,
                         todayAvgScore = clubScores.Count > 0 ? (int?)Math.Round(clubScores.Average()) : null,
-                        isJoined = club.Members.Any(m => m.UserId == userId),
+                        isJoined = club.IsJoined,
                     };
                 })
                 // Most active today first, then biggest — a quiet club with
@@ -786,7 +827,7 @@ namespace Backend.Controllers
                 .Select(r => new
                 {
                     id = r.club.Id,
-                    displayName = r.club.FilmName,
+                    displayName = r.club.DisplayName,
                     spaceCode = r.club.SpaceCode,
                     genreCategory = r.club.GenreCategory,
                     posterPath = PosterForClub(r.club),
@@ -1131,6 +1172,19 @@ namespace Backend.Controllers
             // above makes this a pure serialization redaction.
             foreach (var space in spaces) space.SpaceCode = null;
 
+            // Member/host account ids are only for signed-in callers, who use
+            // them to load attendee avatars (useProfiles). An anonymous caller
+            // gets names only — the client already tolerates a missing id
+            // (falls back to initials), so this degrades rather than breaks.
+            if (User.Identity?.IsAuthenticated != true)
+            {
+                foreach (var space in spaces)
+                {
+                    space.UserId = "";
+                    foreach (var m in space.Members) m.UserId = "";
+                }
+            }
+
             return Ok(spaces);
         }
 
@@ -1199,15 +1253,20 @@ namespace Backend.Controllers
             if (group.Status == "cancelled")
                 return BadRequest(new { error = "This Space has been cancelled." });
 
-            var memberCount = await _db.GroupMembers.CountAsync(m => m.GroupId == id);
-            if (memberCount >= group.MaxCapacity)
-                return BadRequest(new { error = "This Space is already full." });
-
             // Same cap the anonymous JoinGroupWeb path enforces — GroupMember.Name
             // is varchar(100), so without this an over-long name is a 500 rather
             // than a readable error.
             var tooLong = CheckLength(req.Name, GroupFieldLimits.Name, "Your name");
             if (tooLong != null) return BadRequest(new { error = tooLong });
+
+            // Count and insert in one transaction so two simultaneous joins
+            // can't both see "one seat left". The unique (GroupId, UserId)
+            // index is the backstop for the duplicate-join race the
+            // existing-member read above can't close on its own.
+            await using var tx = await _db.Database.BeginTransactionAsync();
+            var memberCount = await _db.GroupMembers.CountAsync(m => m.GroupId == id);
+            if (memberCount >= group.MaxCapacity)
+                return BadRequest(new { error = "This Space is already full." });
 
             var member = new GroupMember
             {
@@ -1218,7 +1277,21 @@ namespace Backend.Controllers
             };
 
             _db.GroupMembers.Add(member);
-            await _db.SaveChangesAsync();
+            try
+            {
+                await _db.SaveChangesAsync();
+                await tx.CommitAsync();
+            }
+            catch (DbUpdateException)
+            {
+                await tx.RollbackAsync();
+                _db.Entry(member).State = EntityState.Detached;
+                var already = await _db.GroupMembers
+                    .Where(m => m.GroupId == id && m.UserId == userId)
+                    .Select(m => (Guid?)m.Id)
+                    .FirstOrDefaultAsync();
+                return Conflict(new { error = "You're already a member of this Space.", memberId = already });
+            }
 
             return Ok(new { memberId = member.Id });
         }
@@ -1266,6 +1339,14 @@ namespace Backend.Controllers
             // Same capacity/status enforcement as the authenticated join path.
             if (group.Status == "cancelled")
                 return BadRequest(new { error = "This Space has been cancelled." });
+
+            // Movie Crews are seated by MatchForMovie for signed-in members
+            // only — every crew feature (tickets, after-activities, the
+            // one-crew-per-film rule) keys on a real UserId, and an
+            // accountless guest row would occupy one of a crew's few seats
+            // with nobody the app can reach.
+            if (group.MatchMovieKey != null)
+                return BadRequest(new { error = "Movie Crews can only be joined from the app." });
 
             // De-dupe on the browser's stable guest token when it sent one.
             // Name-based de-duping (the previous behaviour, kept only as a
@@ -1410,19 +1491,29 @@ namespace Backend.Controllers
             // joined member) may fan a "new message" push out to everyone else.
             // Otherwise any authenticated user could spam arbitrary sender names
             // and previews to every member of any group id they guess.
-            var group = await _db.Groups
-                .Include(g => g.Members)
-                .FirstOrDefaultAsync(g => g.Id == id);
+            if (string.IsNullOrEmpty(senderId)) return Unauthorized(new { error = "Unauthorized" });
+            var group = await _db.Groups.AsNoTracking().FirstOrDefaultAsync(g => g.Id == id);
             if (group == null) return NotFound();
-            var isMember = group.UserId == senderId || group.Members.Any(m => m.UserId == senderId);
-            if (!isMember) return Forbid();
+            var memberName = await _db.GroupMembers
+                .Where(m => m.GroupId == id && m.UserId == senderId)
+                .Select(m => m.Name)
+                .FirstOrDefaultAsync();
+            var isHost = group.UserId == senderId;
+            if (!isHost && memberName == null) return Forbid();
 
-            // Null-safe: both come straight off the request body, so a client
-            // omitting either shouldn't produce a 500.
-            var senderName = string.IsNullOrWhiteSpace(req.SenderName) ? "Someone" : req.SenderName;
+            // The name shown is the one this server already holds for the
+            // sender in this Space (their membership row, or HostName), not
+            // whatever the client put in the body — a member can't push under
+            // someone else's name. The request's SenderName is only a
+            // fallback for a host who was never given a member row, and is
+            // capped either way.
+            var senderName = PushRules.CapSenderName(memberName ?? (isHost ? group.HostName : null) ?? req.SenderName);
             var rawPreview = req.Preview ?? "";
             var preview = rawPreview.Length > 120 ? rawPreview.Substring(0, 120) + "…" : rawPreview;
-            await NotifyMembersAsync(id, $"💬 {senderName}", preview, excludeUserId: senderId);
+            await _pushNotificationService.NotifyMembersAsync(
+                _db, id, $"💬 {senderName}", preview,
+                excludeUserId: senderId,
+                data: PushRules.GroupMessageData(id));
             return Ok();
         }
 
@@ -1498,7 +1589,8 @@ namespace Backend.Controllers
             await NotifyMembersAsync(
                 id,
                 "🎉 Your Space is booked!",
-                $"{group.FilmName} at {group.CinemaName} — {group.ShowDate} at {group.ShowTime}."
+                $"{group.FilmName} at {group.CinemaName} — {group.ShowDate} at {group.ShowTime}.",
+                type: "group_booked"
             );
 
             return Ok();
@@ -1596,6 +1688,13 @@ namespace Backend.Controllers
             if (req.TotalCostCents.HasValue && req.TotalCostCents.Value < 0)
                 return BadRequest(new { error = "Cost can't be negative." });
 
+            // Same rule as MatchForMovie: a Space can't be rescheduled into
+            // the past (the open feed would hide it and the reminder would
+            // never fire, so the only effect would be confusion).
+            if (req.ScreeningTime.HasValue
+                && GroupRules.ScreeningTimeHasPassed(ToUtc(req.ScreeningTime)!.Value, DateTime.UtcNow))
+                return BadRequest(new { error = GroupRules.ScreeningTimePassedMessage });
+
             var tooLong = FirstFieldOverLimit(req);
             if (tooLong != null) return BadRequest(new { error = tooLong });
 
@@ -1666,7 +1765,8 @@ namespace Backend.Controllers
                     cinemaChanged
                         ? $"{editorName} moved {group.FilmName} to {group.CinemaName}, {group.ShowDate} at {group.ShowTime}."
                         : $"{editorName} updated {group.FilmName}'s date/time to {group.ShowDate} at {group.ShowTime}.",
-                    excludeUserId: userId
+                    excludeUserId: userId,
+                    type: "group_updated"
                 );
             }
 
@@ -1768,7 +1868,8 @@ namespace Backend.Controllers
             await NotifyMembersAsync(
                 id,
                 "❌ Space cancelled",
-                $"{group.HostName} cancelled {group.FilmName} at {group.CinemaName}."
+                $"{group.HostName} cancelled {group.FilmName} at {group.CinemaName}.",
+                type: "group_cancelled"
             );
 
             return Ok();
@@ -1869,6 +1970,10 @@ namespace Backend.Controllers
         long? TotalCostCents,
         string? HangoutNotes
     );
-    public record NotifyMessageRequest(string SenderName, string Preview);
+    public record NotifyMessageRequest(string? SenderName, string? Preview);
+
+    // Slim projection DiscoverCommunitySpaces reads instead of whole Groups
+    // with their member lists.
+    public record ClubRow(Guid Id, string DisplayName, string? SpaceCode, string? GenreCategory, int MemberCount, bool IsJoined);
     public record TransferOwnershipRequest(string NewHostUserId);
 }

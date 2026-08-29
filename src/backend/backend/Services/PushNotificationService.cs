@@ -24,7 +24,10 @@ namespace Backend.Services
         // tokens (member never opened the app / denied permission / no
         // native build with expo-notifications yet) are silently skipped —
         // this should never block the caller's own action.
-        public async Task NotifyMembersAsync(AppDbContext db, Guid groupId, string title, string body, string? excludeUserId = null)
+        //
+        // `data` is the routing payload the app reads on tap (see PushRules
+        // for the builders); null falls back to {type:"group"}.
+        public async Task NotifyMembersAsync(AppDbContext db, Guid groupId, string title, string body, string? excludeUserId = null, Dictionary<string, object>? data = null)
         {
             try
             {
@@ -43,7 +46,7 @@ namespace Backend.Services
 
                 if (tokens.Count == 0) return;
 
-                await SendExpoPushAsync(tokens, title, body);
+                await SendExpoPushAsync(db, tokens, title, body, data ?? PushRules.GroupData("group", groupId));
             }
             catch (Exception ex)
             {
@@ -54,7 +57,7 @@ namespace Backend.Services
         // Same best-effort push, but to a single user by id rather than every
         // member of a group — used for DM notifications, which have no group
         // to fan out to.
-        public async Task NotifyUserAsync(AppDbContext db, string userId, string title, string body)
+        public async Task NotifyUserAsync(AppDbContext db, string userId, string title, string body, Dictionary<string, object>? data = null)
         {
             try
             {
@@ -65,7 +68,7 @@ namespace Backend.Services
 
                 if (tokens.Count == 0) return;
 
-                await SendExpoPushAsync(tokens, title, body);
+                await SendExpoPushAsync(db, tokens, title, body, data ?? PushRules.TypeOnlyData("user"));
             }
             catch (Exception ex)
             {
@@ -76,7 +79,7 @@ namespace Backend.Services
         // Same best-effort push to an explicit set of users. Used by the daily
         // CineMind reminder, which fans out to everyone who plays rather than
         // to the members of one group.
-        public async Task<int> NotifyUsersAsync(AppDbContext db, List<string> userIds, string title, string body)
+        public async Task<int> NotifyUsersAsync(AppDbContext db, List<string> userIds, string title, string body, Dictionary<string, object>? data = null)
         {
             try
             {
@@ -89,7 +92,7 @@ namespace Backend.Services
 
                 if (tokens.Count == 0) return 0;
 
-                await SendExpoPushAsync(tokens, title, body);
+                await SendExpoPushAsync(db, tokens, title, body, data ?? PushRules.TypeOnlyData("broadcast"));
                 return tokens.Count;
             }
             catch (Exception ex)
@@ -104,7 +107,7 @@ namespace Backend.Services
         // never came close; a game-wide daily reminder does.
         private const int ExpoBatchSize = 100;
 
-        private async Task SendExpoPushAsync(List<string> tokens, string title, string body)
+        private async Task SendExpoPushAsync(AppDbContext db, List<string> tokens, string title, string body, Dictionary<string, object> data)
         {
             // Single choke point for every send path: one physical device gets
             // one push regardless of how many account rows resolved to its
@@ -113,18 +116,19 @@ namespace Backend.Services
             tokens = tokens.Distinct().ToList();
 
             var client = _httpClientFactory.CreateClient();
+            var deadTokens = new List<string>();
 
             for (var i = 0; i < tokens.Count; i += ExpoBatchSize)
             {
-                var messages = tokens
-                    .Skip(i)
-                    .Take(ExpoBatchSize)
+                var batch = tokens.Skip(i).Take(ExpoBatchSize).ToList();
+                var messages = batch
                     .Select(token => new
                     {
                         to = token,
                         sound = "default",
                         title,
                         body,
+                        data,
                     });
 
                 var request = new HttpRequestMessage(HttpMethod.Post, "https://exp.host/--/api/v2/push/send")
@@ -137,12 +141,76 @@ namespace Backend.Services
                 // send beats none.
                 try
                 {
-                    await client.SendAsync(request);
+                    using var response = await client.SendAsync(request);
+                    var responseBody = await response.Content.ReadAsStringAsync();
+                    if (!response.IsSuccessStatusCode)
+                    {
+                        _logger.LogWarning("Expo push batch starting at {Offset} returned {Status}.", i, (int)response.StatusCode);
+                        continue;
+                    }
+                    deadTokens.AddRange(ParseDeadTokens(responseBody, batch));
                 }
                 catch (Exception ex)
                 {
                     _logger.LogError(ex, "Expo push batch starting at {Offset} failed.", i);
                 }
+            }
+
+            if (deadTokens.Count > 0) await RemoveDeadTokensAsync(db, deadTokens);
+        }
+
+        // Expo answers a send with one ticket per message, in request order:
+        //   {"data":[{"status":"ok","id":"..."},
+        //            {"status":"error","message":"...","details":{"error":"DeviceNotRegistered"}}]}
+        // DeviceNotRegistered means the app was uninstalled or the token was
+        // revoked — Expo asks senders to stop using it, and every later
+        // fan-out to it is wasted. Returns the tokens in `batch` whose ticket
+        // says so. Internal so the parsing is unit-testable without HTTP.
+        internal static List<string> ParseDeadTokens(string responseBody, List<string> batch)
+        {
+            var dead = new List<string>();
+            try
+            {
+                using var doc = JsonDocument.Parse(responseBody);
+                if (!doc.RootElement.TryGetProperty("data", out var tickets) || tickets.ValueKind != JsonValueKind.Array)
+                    return dead;
+
+                var index = 0;
+                foreach (var ticket in tickets.EnumerateArray())
+                {
+                    if (index >= batch.Count) break;
+                    var token = batch[index++];
+                    if (ticket.ValueKind != JsonValueKind.Object) continue;
+                    if (!ticket.TryGetProperty("status", out var status) || status.GetString() != "error") continue;
+                    if (ticket.TryGetProperty("details", out var details)
+                        && details.ValueKind == JsonValueKind.Object
+                        && details.TryGetProperty("error", out var code)
+                        && code.GetString() == "DeviceNotRegistered")
+                    {
+                        dead.Add(token);
+                    }
+                }
+            }
+            catch (JsonException)
+            {
+                // A malformed body is Expo's problem, not a reason to drop
+                // anyone's token.
+            }
+            return dead;
+        }
+
+        private async Task RemoveDeadTokensAsync(AppDbContext db, List<string> deadTokens)
+        {
+            try
+            {
+                var removed = await db.PushTokens
+                    .Where(t => deadTokens.Contains(t.Token))
+                    .ExecuteDeleteAsync();
+                _logger.LogInformation("Removed {Count} push token(s) Expo reported as DeviceNotRegistered.", removed);
+            }
+            catch (Exception ex)
+            {
+                _logger.LogError(ex, "Failed to remove {Count} dead push token(s).", deadTokens.Count);
             }
         }
     }

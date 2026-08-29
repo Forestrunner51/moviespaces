@@ -1,0 +1,16 @@
+# Only the .NET backend is built in the image (see Dockerfile). Everything
+# else is mobile app / site / tooling that would just bloat the build
+# context and slow every Render deploy.
+node_modules
+ios
+android
+*.ipa
+website
+src/app
+src/frontend
+.git
+.expo
+assets
+supabase
+**/bin
+**/obj

@@ -70,7 +70,8 @@ namespace Backend.Services
                     db,
                     group.Id,
                     "🍿 Starting soon!",
-                    $"{group.FilmName} at {group.CinemaName} starts in about 2 hours."
+                    $"{group.FilmName} at {group.CinemaName} starts in about 2 hours.",
+                    data: PushRules.GroupData("group_reminder", group.Id)
                 );
 
                 group.ReminderSent = true;

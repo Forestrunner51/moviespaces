@@ -26,6 +26,13 @@ builder.WebHost.UseSentry(options =>
 });
 
 builder.Services.AddHttpClient();
+// Every outbound call (Expo push, Supabase REST, OMDb, Google Places, the
+// showtimes scrape) goes through the factory's default client. HttpClient's
+// own default is 100 seconds, which on a single Render instance means one
+// hung upstream can pin a request thread for nearly two minutes. 10s is
+// well above any of these APIs' normal latency.
+builder.Services.ConfigureHttpClientDefaults(http =>
+    http.ConfigureHttpClient(client => client.Timeout = TimeSpan.FromSeconds(10)));
 builder.Services.AddMemoryCache();
 builder.Services.AddSingleton<PushNotificationService>();
 builder.Services.AddSingleton<OmdbClient>();
@@ -119,8 +126,10 @@ builder.Services.Configure<ForwardedHeadersOptions>(options =>
 //   3. The instance itself — this runs as a single Render instance, so a
 //      modest flood is enough to make the app unavailable for everyone.
 //
-// Partitioned per authenticated user where possible, falling back to remote IP
-// for anonymous callers, so one abusive client can't consume everyone's budget.
+// The limiter runs BEFORE authentication (see the middleware order below), so
+// at partition time nobody has been authenticated yet and every caller is
+// keyed by remote IP — the user-id branches are kept so the key is right if
+// the order ever changes, but today the IP fallback is what applies.
 static string LimitPartitionKey(HttpContext http) =>
     http.User.FindFirstValue(ClaimTypes.NameIdentifier)
     ?? http.User.FindFirstValue("sub")
@@ -259,12 +268,14 @@ var app = builder.Build();
 app.UseForwardedHeaders();
 
 app.UseCors("AllowReactApp");
+// Before authentication on purpose: an unauthenticated flood is throttled
+// per IP before it costs a JWT signature check (and a possible JWKS refresh)
+// per request. The cost is that signed-in users behind one NAT share an IP
+// bucket — the global limit is generous enough (300/min) that this only
+// bites an actual flood.
+app.UseRateLimiter();
 app.UseAuthentication();
 app.UseAuthorization();
-// After authentication so the limiter can partition on the caller's user id
-// (see LimitPartitionKey) rather than lumping every signed-in user behind one
-// shared IP bucket.
-app.UseRateLimiter();
 app.MapControllers();
 
 // Anonymous, no database work — this exists to be pinged cheaply.
@@ -283,6 +294,11 @@ app.MapGet("/health", () => Results.Ok(new
 
 // Applies any migrations not yet recorded in __EFMigrationsHistory. The DB is
 // already fully migrated, so on a normal boot this is a single cheap check.
+//
+// A failure here is fatal on purpose: it's logged and then rethrown so the
+// process exits non-zero and Render marks the deploy failed (keeping the
+// previous healthy instance up). Swallowing it used to boot an app whose
+// schema didn't match its code, which then failed one request at a time.
 using (var scope = app.Services.CreateScope())
 {
     var services = scope.ServiceProvider;
@@ -295,7 +311,27 @@ using (var scope = app.Services.CreateScope())
     catch (Exception ex)
     {
         var logger = services.GetRequiredService<ILogger<Program>>();
-        logger.LogError(ex, "An error occurred executing database migrations.");
+        logger.LogCritical(ex, "Database migration failed; refusing to start.");
+        throw;
     }
 }
-app.Run("http://*:5123");
+
+// Render injects PORT and routes traffic to it; the Dockerfile sets nothing
+// else, so this is the single place the listening port is decided. Local
+// `dotnet run` gets the same fallback unless launchSettings' applicationUrl
+// (ASPNETCORE_URLS) is in play, which Kestrel honors ahead of an explicit
+// Run(url) only when we don't pass one — so only pass one when PORT is set.
+var port = Environment.GetEnvironmentVariable("PORT");
+if (!string.IsNullOrWhiteSpace(port))
+{
+    app.Run($"http://*:{port}");
+}
+else if (string.IsNullOrWhiteSpace(Environment.GetEnvironmentVariable("ASPNETCORE_URLS"))
+    && app.Configuration["urls"] == null)
+{
+    app.Run("http://*:10000");
+}
+else
+{
+    app.Run();
+}
