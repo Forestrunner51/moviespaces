@@ -18,7 +18,12 @@ import { supabase } from "@/frontend/config/supabase";
 import { authFetch } from "@/frontend/services/api";
 import { Starfield } from "@/frontend/components/starfield";
 import { SpaceStyles, Palette, Type, Display, Radius } from "@/frontend/constants/theme";
-import { areNotificationsEnabled, setNotificationsEnabled } from "@/frontend/services/push-notifications";
+import {
+  areNotificationsEnabled,
+  setNotificationsEnabled,
+  unregisterPushToken,
+} from "@/frontend/services/push-notifications";
+import { clearOnboardingFlag } from "@/frontend/services/onboarding";
 import { useToast } from "@/frontend/components/toast";
 import { useSafeAreaInsets } from "react-native-safe-area-context";
 
@@ -149,7 +154,17 @@ export default function SettingsScreen() {
         text: "Sign Out",
         style: "destructive",
         onPress: async () => {
-          await supabase.auth.signOut();
+          // Token first, while the session that authorizes the DELETE still
+          // exists — after signOut there's no bearer token to send.
+          await unregisterPushToken();
+          const { error } = await supabase.auth.signOut();
+          if (error) {
+            // Offline: the local session is still in place and nothing
+            // navigated, so say so rather than leaving the tap a no-op.
+            showToast("Couldn't sign out — check your connection and try again.");
+            return;
+          }
+          await clearOnboardingFlag();
         },
       },
     ]);
@@ -183,6 +198,7 @@ export default function SettingsScreen() {
                         const body = await res.json().catch(() => ({}));
                         throw new Error(body.error || "Please try again.");
                       }
+                      await clearOnboardingFlag();
                       await supabase.auth.signOut();
                       router.replace("/auth");
                     } catch (err: any) {

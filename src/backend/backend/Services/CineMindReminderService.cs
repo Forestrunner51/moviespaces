@@ -125,7 +125,8 @@ namespace Backend.Services
                 db,
                 recipients,
                 "🧠 Today's CineMind is ready",
-                "Three challenges, one shot. Keep your streak alive.");
+                "Three challenges, one shot. Keep your streak alive.",
+                PushRules.TypeOnlyData("cinemind_reminder"));
 
             log.RecipientCount = sent;
             await db.SaveChangesAsync(stoppingToken);

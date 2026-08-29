@@ -1,6 +1,11 @@
-import { useState, useEffect, useRef } from "react";
+import { createContext, createElement, useCallback, useContext, useState, useEffect, useRef } from "react";
+import type { ReactNode } from "react";
 import { supabase } from "@/frontend/config/supabase";
+import { authFetch } from "@/frontend/services/api";
+import { loadBlockedIds } from "@/frontend/services/moderation";
 import { useForegroundPoll } from "@/frontend/hooks/use-foreground-poll";
+import { useUnreadCounts } from "@/frontend/hooks/use-unread-counts";
+import { useDmUnreadCounts } from "@/frontend/hooks/use-dm-unread-counts";
 
 export interface Profile {
   id: string;
@@ -23,7 +28,33 @@ export interface Friend extends Profile {
   friendshipId: string;
 }
 
-export function useFriends() {
+export interface FriendsApi {
+  currentUserId: string | null;
+  friends: Friend[];
+  pendingRequests: PendingRequest[];
+  sentRequests: SentRequest[];
+  loading: boolean;
+  refresh: () => Promise<void>;
+  sendFriendRequest: (targetUserId: string) => Promise<{ success: boolean; error?: string }>;
+  acceptFriendRequest: (friendshipId: string) => Promise<{ success: boolean; error?: string }>;
+  declineFriendRequest: (friendshipId: string) => Promise<{ success: boolean; error?: string }>;
+  cancelFriendRequest: (friendshipId: string) => Promise<{ success: boolean; error?: string }>;
+  removeFriend: (friendshipId: string) => Promise<{ success: boolean; error?: string }>;
+  searchUsers: (query: string) => Promise<Profile[]>;
+  // Unread group-chat messages per Space id (every Space the user is in) and
+  // unread DMs per friend id — owned here so the Spaces list, the Friends
+  // panel and the tab badge read one poll instead of each running their own.
+  unreadCounts: Record<string, number>;
+  dmUnreadCounts: Record<string, number>;
+}
+
+// One poller for the whole app. Every screen that called useFriends() used to
+// run its own copy of this — five 15s pollers (six Supabase queries each)
+// stacked whenever the Spaces tab, Profile tab, a Space and its chat were
+// all mounted. FriendsProvider (root layout) runs exactly one; useFriends()
+// reads from it. The `enabled` flag exists only so a useFriends() call
+// outside the provider still works standalone.
+function useFriendsSource(enabled: boolean): FriendsApi {
   const [currentUserId, setCurrentUserId] = useState<string | null>(null);
   const [friends, setFriends] = useState<Friend[]>([]);
   const [pendingRequests, setPendingRequests] = useState<PendingRequest[]>([]);
@@ -35,19 +66,45 @@ export function useFriends() {
   // a user with no friends yet.
   const hasLoadedFriendsOnce = useRef(false);
 
-  // Get current user id
+  // Track the signed-in user across sign-in/sign-out, not just at mount —
+  // the provider outlives the session, so a one-shot getUser() would leave
+  // it stuck on whoever (or nobody) was signed in at app launch.
+  // Every Space the user belongs to, for the unread-count poll (see below).
+  const [groupIds, setGroupIds] = useState<string[]>([]);
+
   useEffect(() => {
-    supabase.auth.getUser().then(({ data: { user } }) => {
-      if (user) {
-        setCurrentUserId(user.id);
-      }
+    if (!enabled) return;
+    const applyUser = (id: string | null) => {
+      setCurrentUserId(id);
+      if (id) return;
+      // Sign-out: clear per-user state so the next account doesn't briefly
+      // see the previous one's friends or badge counts.
+      setFriends([]);
+      setPendingRequests([]);
+      setSentRequests([]);
+      setGroupIds([]);
+      hasLoadedFriendsOnce.current = false;
+    };
+    supabase.auth.getSession().then(({ data: { session } }) => {
+      applyUser(session?.user?.id ?? null);
     });
-  }, []);
+    const {
+      data: { subscription },
+    } = supabase.auth.onAuthStateChange((_event, session) => {
+      applyUser(session?.user?.id ?? null);
+    });
+    return () => subscription.unsubscribe();
+  }, [enabled]);
 
   const fetchFriendsAndRequests = async () => {
     if (!currentUserId) return;
     if (!hasLoadedFriendsOnce.current) setLoading(true);
     try {
+      // Requests to or from someone you've blocked never surface — the
+      // block table is client-enforced, so without this a blocked user
+      // could keep re-sending requests that show up as pending.
+      const blocked = await loadBlockedIds().catch(() => new Set<string>());
+
       // 1. Fetch friendships (accepted)
       const { data: friendshipsData, error: fError } = await supabase
         .from("friendships")
@@ -82,13 +139,14 @@ export function useFriends() {
       setFriends(friendsProfiles);
 
       // 2. Fetch pending requests (where current user is the receiver)
-      const { data: pendingData, error: rError } = await supabase
+      const { data: pendingRaw, error: rError } = await supabase
         .from("friendships")
         .select("id, requester_id")
         .eq("receiver_id", currentUserId)
         .eq("status", "pending");
 
       if (rError) throw rError;
+      const pendingData = (pendingRaw || []).filter((p) => !blocked.has(p.requester_id));
 
       const requesterIds = (pendingData || []).map((p) => p.requester_id);
       let pendingList: PendingRequest[] = [];
@@ -112,13 +170,14 @@ export function useFriends() {
 
       // 3. Fetch requests the current user sent that are still pending, so
       // "Requested" in the UI can be un-sent instead of being a dead end.
-      const { data: sentData, error: sError } = await supabase
+      const { data: sentRaw, error: sError } = await supabase
         .from("friendships")
         .select("id, receiver_id")
         .eq("requester_id", currentUserId)
         .eq("status", "pending");
 
       if (sError) throw sError;
+      const sentData = (sentRaw || []).filter((s) => !blocked.has(s.receiver_id));
 
       const receiverIds = (sentData || []).map((s) => s.receiver_id);
       let sentList: SentRequest[] = [];
@@ -149,11 +208,40 @@ export function useFriends() {
 
   // Poll instead of using Supabase Realtime — foreground-only, so friend
   // requests stop being polled the moment the app is backgrounded.
-  useForegroundPoll(fetchFriendsAndRequests, 15000, Boolean(currentUserId), currentUserId ?? "");
+  useForegroundPoll(
+    fetchFriendsAndRequests,
+    15000,
+    enabled && Boolean(currentUserId),
+    currentUserId ?? "",
+  );
+
+  // Group-id poll: 30s — the membership list changes rarely; the counts
+  // themselves poll at 15s.
+  const loadGroupIds = useCallback(async () => {
+    try {
+      const res = await authFetch(`${process.env.EXPO_PUBLIC_API_URL}/api/group/mine`);
+      if (!res.ok) return;
+      const data: { id: string }[] = await res.json();
+      setGroupIds((prev) => {
+        const next = (data || []).map((g) => g.id);
+        return prev.join(",") === next.join(",") ? prev : next;
+      });
+    } catch {
+      /* keep the previous ids — a blip shouldn't clear the badge */
+    }
+  }, []);
+  useForegroundPoll(loadGroupIds, 30000, enabled && Boolean(currentUserId), currentUserId ?? "");
+
+  const unreadCounts = useUnreadCounts(enabled ? groupIds : []);
+  const dmUnreadCounts = useDmUnreadCounts(enabled ? friends.map((f) => f.id) : []);
 
   const sendFriendRequest = async (targetUserId: string) => {
     if (!currentUserId) return { success: false, error: "Not authenticated" };
     try {
+      const blocked = await loadBlockedIds().catch(() => new Set<string>());
+      if (blocked.has(targetUserId)) {
+        return { success: false, error: "You've blocked this person. Unblock them first to send a request." };
+      }
       const { data: existing, error: lookupError } = await supabase
         .from("friendships")
         .select("id")
@@ -265,5 +353,23 @@ export function useFriends() {
     cancelFriendRequest: deleteFriendship,
     removeFriend: deleteFriendship,
     searchUsers,
+    unreadCounts,
+    dmUnreadCounts,
   };
+}
+
+const FriendsContext = createContext<FriendsApi | null>(null);
+
+export function FriendsProvider({ children }: { children: ReactNode }) {
+  const value = useFriendsSource(true);
+  return createElement(FriendsContext.Provider, { value }, children);
+}
+
+// Reads the shared poll from FriendsProvider. Falls back to a private poller
+// only when rendered outside the provider (which nothing in the app does —
+// the provider wraps the root layout).
+export function useFriends(): FriendsApi {
+  const shared = useContext(FriendsContext);
+  const local = useFriendsSource(shared === null);
+  return shared ?? local;
 }

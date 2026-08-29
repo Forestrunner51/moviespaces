@@ -13,7 +13,6 @@ import { Ionicons } from "@expo/vector-icons";
 import { Avatar } from "@/frontend/components/avatar";
 import { SpaceTheme, SpaceStyles, Palette, Type, Radius, Display } from "@/frontend/constants/theme";
 import { useFriends, Profile } from "@/frontend/hooks/use-friends";
-import { useDmUnreadCounts } from "@/frontend/hooks/use-dm-unread-counts";
 import { blockUser } from "@/frontend/services/moderation";
 import { useToast } from "@/frontend/components/toast";
 
@@ -30,13 +29,13 @@ export function FriendsPanel() {
     cancelFriendRequest,
     removeFriend,
     searchUsers,
+    dmUnreadCounts: unreadCounts,
   } = useFriends();
 
   const [query, setQuery] = useState("");
   const [results, setResults] = useState<Profile[]>([]);
   const [searching, setSearching] = useState(false);
 
-  const unreadCounts = useDmUnreadCounts(friends.map((f) => f.id));
   const friendIds = new Set(friends.map((f) => f.id));
   const sentRequestByUserId = new Map(sentRequests.map((r) => [r.receiver.id, r.id]));
 

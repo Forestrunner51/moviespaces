@@ -107,7 +107,7 @@ Run each end-to-end, signed-in as a real user:
 - [ ] Screenshots: 6.7" (required) + 6.5" + iPad if you support it — at least a few polished ones (home, explore, a Space, chat)
 - [ ] App icon (1024×1024, no alpha)
 - [ ] Support URL + Marketing URL (a simple landing page or even a Notion page works)
-- [ ] Privacy Policy URL (must be publicly hosted, not just in-app)
+- [x] Support URL + Privacy Policy URL — **already live**: `https://moviespaces.onrender.com/legal/privacy`, `/legal/terms`, `/support` (LegalController). Nicer URLs: deploy `website/` to Cloudflare Pages (website/README.md) → `moviespaces.org/privacy` etc. Add `support@moviespaces.org` in Cloudflare Email Routing — the pages name it.
 - [ ] **App Privacy "nutrition labels"** — disclose everything you collect: email, name, photos, **precise location**, user content (messages/spaces), usage data (Sentry). Apple checks this against actual behavior.
 - [ ] Age rating questionnaire (UGC + social → likely 12+/17+; be honest about user-generated content)
 - [ ] Export compliance: `ITSAppUsesNonExemptEncryption: false` is already set in app.json ✓

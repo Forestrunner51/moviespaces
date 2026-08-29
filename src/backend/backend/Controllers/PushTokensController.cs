@@ -44,11 +44,11 @@ namespace Backend.Controllers
         public async Task<IActionResult> RegisterToken([FromBody] RegisterPushTokenRequest req)
         {
             if (string.IsNullOrWhiteSpace(req.Token)) return BadRequest(new { error = "Token is required." });
-            // Real Expo push tokens ("ExponentPushToken[...]") are well under
-            // 100 chars. The column is unbounded text and this token gets
-            // POSTed back to Expo on every fan-out, so without a cap any user
+            // Only a real Expo token shape ("ExponentPushToken[...]") is
+            // accepted. The column is unbounded text and this token gets
+            // POSTed back to Expo on every fan-out, so without this any user
             // could store a request-body-sized blob as their "token".
-            if (req.Token.Length > 512) return BadRequest(new { error = "Token is not a valid push token." });
+            if (!PushRules.IsValidExpoPushToken(req.Token)) return BadRequest(new { error = "Token is not a valid push token." });
 
             var userId = GetUserId();
 
@@ -136,12 +136,17 @@ namespace Backend.Controllers
             var isFriend = await AreFriendsAsync(senderId, recipientUserId);
             if (!isFriend) return Forbid();
 
-            // Null-safe: both fields come straight off the request body, so a
-            // client omitting them shouldn't produce a 500.
-            var senderName = string.IsNullOrWhiteSpace(req.SenderName) ? "Someone" : req.SenderName;
+            // The sender's display name lives in Supabase (profiles), which
+            // this DB can't see — so it comes from the client, capped to the
+            // same ceiling as every other name so it can't be used to ship a
+            // request-sized blob into someone's notification tray. Preview
+            // is null-safe for the same reason (both come off the body).
+            var senderName = PushRules.CapSenderName(req.SenderName);
             var rawPreview = req.Preview ?? "";
             var preview = rawPreview.Length > 120 ? rawPreview.Substring(0, 120) + "…" : rawPreview;
-            await _pushNotificationService.NotifyUserAsync(_db, recipientUserId, $"💬 {senderName}", preview);
+            await _pushNotificationService.NotifyUserAsync(
+                _db, recipientUserId, $"💬 {senderName}", preview,
+                PushRules.DirectMessageData(senderId));
             return Ok();
         }
 

@@ -1,4 +1,4 @@
-import { useRef, useState } from "react";
+import { memo, useCallback, useRef, useState } from "react";
 import {
   View,
   FlatList,
@@ -7,6 +7,8 @@ import {
   KeyboardAvoidingView,
   Platform,
   ActivityIndicator,
+  type NativeScrollEvent,
+  type NativeSyntheticEvent,
 } from "react-native";
 import { Text, TextInput } from "@/frontend/components/scaled-text";
 import { useLocalSearchParams, Stack } from "expo-router";
@@ -16,6 +18,44 @@ import { Starfield } from "@/frontend/components/starfield";
 import { SpaceTheme, Palette, Type, Radius } from "@/frontend/constants/theme";
 import { useChat, Message } from "@/frontend/hooks/use-chat";
 import { useToast } from "@/frontend/components/toast";
+
+// How close to the bottom (px) still counts as "reading the latest" — new
+// messages auto-scroll only then, so someone scrolled up reading history
+// isn't yanked to the end every poll.
+const NEAR_BOTTOM_PX = 80;
+
+// Memoized so the 4s poll (which replaces the messages array only when
+// something was appended) re-renders just the new rows, not every bubble.
+const MessageRow = memo(function MessageRow({
+  item,
+  isMe,
+  onRetry,
+}: {
+  item: Message;
+  isMe: boolean;
+  onRetry: (m: Message) => void;
+}) {
+  return (
+    <View style={[styles.msgWrap, { alignSelf: isMe ? "flex-end" : "flex-start" }]}>
+      <View
+        style={[
+          styles.bubble,
+          isMe ? styles.bubbleMe : styles.bubbleThem,
+          item.failed && styles.bubbleFailed,
+          item.pending && styles.bubblePending,
+        ]}
+      >
+        <Text style={[styles.bubbleText, isMe && styles.bubbleTextMe]}>{item.content}</Text>
+      </View>
+      {item.failed && (
+        <TouchableOpacity onPress={() => onRetry(item)} style={styles.retryRow} activeOpacity={0.7}>
+          <Ionicons name="alert-circle" size={13} color={Palette.danger} />
+          <Text style={styles.retryText}>Not sent · Tap to retry</Text>
+        </TouchableOpacity>
+      )}
+    </View>
+  );
+});
 
 export default function ChatScreen() {
   const { showToast } = useToast();
@@ -36,6 +76,17 @@ export default function ChatScreen() {
   // stale on the second tap and the same message (and its push) goes out
   // twice. A ref updates synchronously, so the second tap sees it in time.
   const sendingRef = useRef(false);
+  // Scroll-position tracking for the auto-scroll rule above. Starts true so
+  // the initial load lands at the newest message.
+  const nearBottomRef = useRef(true);
+  const onScroll = useCallback((e: NativeSyntheticEvent<NativeScrollEvent>) => {
+    const { contentOffset, contentSize, layoutMeasurement } = e.nativeEvent;
+    const distance = contentSize.height - layoutMeasurement.height - contentOffset.y;
+    nearBottomRef.current = distance < NEAR_BOTTOM_PX;
+  }, []);
+  const onContentSizeChange = useCallback(() => {
+    if (nearBottomRef.current) listRef.current?.scrollToEnd({ animated: false });
+  }, []);
 
   const handleSend = async () => {
     const content = text.trim();
@@ -51,32 +102,16 @@ export default function ChatScreen() {
       showToast("Not sent — you can only message people you're friends with.");
       return;
     }
+    nearBottomRef.current = true;
     listRef.current?.scrollToEnd({ animated: true });
   };
 
-  const renderItem = ({ item }: { item: Message }) => {
-    const isMe = item.sender_id === currentUserId;
-    return (
-      <View style={[styles.msgWrap, { alignSelf: isMe ? "flex-end" : "flex-start" }]}>
-        <View
-          style={[
-            styles.bubble,
-            isMe ? styles.bubbleMe : styles.bubbleThem,
-            item.failed && styles.bubbleFailed,
-            item.pending && styles.bubblePending,
-          ]}
-        >
-          <Text style={[styles.bubbleText, isMe && styles.bubbleTextMe]}>{item.content}</Text>
-        </View>
-        {item.failed && (
-          <TouchableOpacity onPress={() => retryMessage(item)} style={styles.retryRow} activeOpacity={0.7}>
-            <Ionicons name="alert-circle" size={13} color={Palette.danger} />
-            <Text style={styles.retryText}>Not sent · Tap to retry</Text>
-          </TouchableOpacity>
-        )}
-      </View>
-    );
-  };
+  const renderItem = useCallback(
+    ({ item }: { item: Message }) => (
+      <MessageRow item={item} isMe={item.sender_id === currentUserId} onRetry={retryMessage} />
+    ),
+    [currentUserId, retryMessage],
+  );
 
   return (
     <Starfield>
@@ -102,7 +137,9 @@ export default function ChatScreen() {
             ListEmptyComponent={
               <Text style={styles.emptyText}>No messages yet — say hi.</Text>
             }
-            onContentSizeChange={() => listRef.current?.scrollToEnd({ animated: false })}
+            onScroll={onScroll}
+            scrollEventThrottle={100}
+            onContentSizeChange={onContentSizeChange}
           />
         )}
         <View style={styles.inputRow}>

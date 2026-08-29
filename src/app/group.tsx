@@ -30,6 +30,7 @@ import { SpaceTheme, SpaceStyles, Palette, Type, Radius, Display, Font } from "@
 import { buildTicketUrl } from "@/frontend/services/ticket-links";
 import { POST_ACTIVITIES } from "@/frontend/constants/activities";
 import { useFriends } from "@/frontend/hooks/use-friends";
+import { LoadError } from "@/frontend/components/load-error";
 import { CineMindLeaderboard } from "@/frontend/components/cinemind-leaderboard";
 import { EVENT_CATEGORIES, eventCategoryOf } from "@/frontend/constants/event-categories";
 import { reportContent } from "@/frontend/services/moderation";
@@ -37,7 +38,7 @@ import { Avatar, AvatarStack } from "@/frontend/components/avatar";
 import { useProfiles } from "@/frontend/hooks/use-profiles";
 import { useForegroundPoll } from "@/frontend/hooks/use-foreground-poll";
 import { ShowtimePicker, ShowtimeSelection } from "@/frontend/components/showtime-picker";
-import { formatEventDate } from "@/frontend/utils/event-date";
+import { formatEventDate, isPastDateTime } from "@/frontend/utils/event-date";
 import { membershipLabel } from "@/frontend/constants/theater-memberships";
 import { useToast } from "@/frontend/components/toast";
 
@@ -120,6 +121,9 @@ export default function GroupScreen() {
   // on arrival from a join, dismissible, gone on the next visit.
   const [celebrate, setCelebrate] = useState(matched === "created" || matched === "joined");
   const [loading, setLoading] = useState(true);
+  // Why `group` is null after the first load: a 404 (gone/never existed) vs
+  // a network or server failure worth retrying. Cleared on any success.
+  const [loadFailure, setLoadFailure] = useState<"notFound" | "failed" | null>(null);
   const [currentUserId, setCurrentUserId] = useState<string | null>(null);
 
   // Friend requests straight from the member list — see who you're watching
@@ -162,9 +166,13 @@ export default function GroupScreen() {
       // `group` with the error body — otherwise an error object is truthy,
       // slips past the "Group not found" guard, and the screen renders with
       // undefined fields. An initial failure leaves group null → not-found.
-      if (!res.ok) return;
+      if (!res.ok) {
+        setLoadFailure(res.status === 404 ? "notFound" : "failed");
+        return;
+      }
       const data = await res.json();
       setGroup(data);
+      setLoadFailure(null);
     } catch (err: any) {
       // Expected, not a bug: fires when the 5s poll has a request in flight
       // right as you navigate away — the OS cancels it mid-request. Logging
@@ -172,6 +180,7 @@ export default function GroupScreen() {
       // screen is already gone), so only real failures get logged.
       if (!/cancel/i.test(err?.message ?? "")) {
         console.error("Failed to fetch group data:", err);
+        setLoadFailure("failed");
       }
     } finally {
       setLoading(false);
@@ -486,6 +495,9 @@ export default function GroupScreen() {
   // still "happening" at its original time.
   const [editDateValue, setEditDateValue] = useState<Date | null>(null);
   const [editTimeValue, setEditTimeValue] = useState<Date | null>(null);
+  // Inline "in the past" warning for the edit form — the date picker can't
+  // catch "today, but an hour ago" on its own.
+  const editWhenInPast = isPastDateTime(editDateValue, editTimeValue);
   const [editDatePickerVisible, setEditDatePickerVisible] = useState(false);
   const [editTimePickerVisible, setEditTimePickerVisible] = useState(false);
   // Theater crews edit by picking a real showing (theater → day → time of
@@ -604,6 +616,10 @@ export default function GroupScreen() {
       }
       const [y, mo, d] = editShowtime.date.split("-").map(Number);
       const at = new Date(y, mo - 1, d, Math.floor(editShowtime.minutes / 60), editShowtime.minutes % 60, 0, 0);
+      if (at.getTime() <= Date.now()) {
+        showToast("That showing has already started — pick a later one.");
+        return;
+      }
       setSaving(true);
       const okCrew = await runGroupAction("/edit", {
         body: JSON.stringify({
@@ -647,6 +663,10 @@ export default function GroupScreen() {
     // the day and the time picker the clock time, merged into one instant.
     const combined = new Date(editDateValue);
     combined.setHours(editTimeValue.getHours(), editTimeValue.getMinutes(), 0, 0);
+    if (isPastDateTime(editDateValue, editTimeValue)) {
+      showToast("That time has already passed — pick a later one.");
+      return;
+    }
 
     setSaving(true);
     const ok = await runGroupAction("/edit", {
@@ -822,12 +842,22 @@ export default function GroupScreen() {
     );
   }
 
-  // 2. Missing Group Guard
+  // 2. Missing Group Guard — a real 404 says so; anything else (offline,
+  // 500) offers a retry instead of claiming the Space doesn't exist.
   if (!group) {
     return (
       <Starfield>
         <View style={styles.center}>
-          <Text style={styles.notFoundText}>Group not found</Text>
+          {loadFailure === "notFound" ? (
+            <Text style={styles.notFoundText}>This Space no longer exists.</Text>
+          ) : (
+            <LoadError
+              onRetry={() => {
+                setLoading(true);
+                fetchGroup();
+              }}
+            />
+          )}
         </View>
       </Starfield>
     );
@@ -1653,6 +1683,9 @@ export default function GroupScreen() {
                 onDismiss={() => setEditTimePickerVisible(false)}
               />
             )}
+            {editWhenInPast && (
+              <Text style={styles.modalPastHint}>That time has already passed — pick a later one.</Text>
+            )}
             </>
             )}
             {!isCrew && (
@@ -1798,6 +1831,7 @@ const styles = StyleSheet.create({
   },
   center: { flex: 1, justifyContent: "center", alignItems: "center" },
   notFoundText: { color: SpaceTheme.mutedOrbit, ...Type.body },
+  modalPastHint: { ...Type.caption, color: Palette.danger, marginTop: 6, marginBottom: 4 },
   hero: { flexDirection: "row", gap: 14, marginBottom: 20, alignItems: "flex-start" },
   editButton: { padding: 4 },
   heroInfo: { flex: 1, justifyContent: "center" },

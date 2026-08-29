@@ -30,7 +30,7 @@ Feature-complete for v1. Typecheck clean, lint 0 errors, **52 backend tests pass
 | System | Owns | Access |
 |---|---|---|
 | **Supabase** (`hzkpqfitsxnxcdefkqwt`) | Auth (email + Google/Apple), `profiles`, `friendships`, `messages` (DMs), `group_messages`, `group_message_reads`, `reports`, `blocks`, avatar storage | Client → supabase-js directly, gated by RLS |
-| **.NET 10 API on Render** (`moviespaces.onrender.com`, separate Postgres via EF Core) | `Groups` (= "Spaces"), `GroupMembers`, `PushTokens`, CineMind tables (`CineMindMovies`, `CineMindTvShows`, `DailyPuzzles`, `UserDailyProgress`, `RouletteSpinHistory`) | Client → REST, JWT validated against Supabase JWKS |
+| **.NET 10 API on Render** (`moviespaces.onrender.com`, EF Core tables in the **same** Supabase Postgres, RLS-locked so PostgREST can't read them) | `Groups` (= "Spaces"), `GroupMembers`, `PushTokens`, CineMind tables (`CineMindMovies`, `CineMindTvShows`, `DailyPuzzles`, `UserDailyProgress`, `RouletteSpinHistory`) | Client → REST, JWT validated against Supabase JWKS |
 
 **Key coupling:** a Space lives in the .NET DB, its chat lives in Supabase, linked by Supabase user id. Group-chat membership is enforced by a Supabase RLS function reading the **EF-owned** tables. Both DBs must point at the same logical data — the part most likely to bite if they ever drift.
 

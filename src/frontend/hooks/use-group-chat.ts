@@ -2,6 +2,11 @@ import { useState, useEffect, useRef } from "react";
 import { supabase } from "@/frontend/config/supabase";
 import { authFetch } from "@/frontend/services/api";
 import { useForegroundPoll } from "@/frontend/hooks/use-foreground-poll";
+import { mergeMessages } from "@/frontend/hooks/use-chat";
+
+// Newest rows loaded on open; later polls fetch only what's newer. See
+// use-chat.ts for the same scheme.
+const INITIAL_PAGE = 100;
 
 // Only "group" is ever written now — the "crowdfund" group_type value in the
 // DB check constraint is a leftover from the removed Stripe-based feature,
@@ -39,6 +44,16 @@ export function useGroupChat(groupType: GroupChatType, groupId: string) {
   // Tracks whether fetchHistory has completed at least once — see the
   // comment inside fetchHistory for why this gates the loading spinner.
   const hasLoadedOnceRef = useRef(false);
+  // created_at of the newest server row seen — subsequent polls ask only
+  // for rows after it.
+  // Keyed by chat: switching Spaces starts over (replace, not append).
+  const newestSeenRef = useRef<{ key: string; at: string | null }>({ key: "", at: null });
+  // Which chat is on screen right now — a poll response for a Space the user
+  // has already left must not be merged into the new one.
+  const activeKeyRef = useRef(`${groupType}:${groupId}`);
+  useEffect(() => {
+    activeKeyRef.current = `${groupType}:${groupId}`;
+  }, [groupType, groupId]);
 
   useEffect(() => {
     supabase.auth.getUser().then(({ data: { user } }) => {
@@ -86,26 +101,40 @@ export function useGroupChat(groupType: GroupChatType, groupId: string) {
     // ActivityIndicator and back), showing up as the message list — and for
     // an empty chat, the "No messages yet" text — flickering every few
     // seconds.
+    const chatKey = `${groupType}:${groupId}`;
+    const switched = newestSeenRef.current.key !== chatKey;
+    if (switched) hasLoadedOnceRef.current = false;
     if (!hasLoadedOnceRef.current) setLoading(true);
+    const since = switched ? null : newestSeenRef.current.at;
     try {
-      const { data, error } = await supabase
+      let query = supabase
         .from("group_messages")
         .select("id, sender_id, content, created_at")
         .eq("group_type", groupType)
-        .eq("group_id", groupId)
-        .order("created_at", { ascending: true });
-
+        .eq("group_id", groupId);
+      if (since) {
+        query = query.gt("created_at", since).order("created_at", { ascending: true });
+      } else {
+        query = query.order("created_at", { ascending: false }).limit(INITIAL_PAGE);
+      }
+      const { data, error } = await query;
       if (error) throw error;
-      const fetched = await withSenderInfo(data || []);
-      // Preserve any optimistic message still in flight (sendMessage hasn't
-      // replaced its temp_ id with the confirmed row yet) — otherwise a poll
-      // landing mid-send wipes it from view until the *next* poll picks the
-      // now-persisted row back up, which reads as "the message didn't send".
+      if (chatKey !== activeKeyRef.current) return;
+
+      const rows = since ? data || [] : [...(data || [])].reverse();
+      newestSeenRef.current = {
+        key: chatKey,
+        at: rows.length > 0 ? rows[rows.length - 1].created_at : since,
+      };
+      const fetched = await withSenderInfo(rows);
+      // Append, deduping by id. Optimistic temp_ bubbles survive every poll
+      // (a failed send stays as its red "not sent" bubble until retried —
+      // the old content+sender match wrongly dropped it whenever any row
+      // shared its text); the confirmed row replaces the temp by id in
+      // sendMessage.
       setMessages((prev) => {
-        const pending = prev.filter(
-          (m) => m.id.startsWith("temp_") && !fetched.some((f) => f.content === m.content && f.sender_id === m.sender_id),
-        );
-        return [...fetched, ...pending];
+        if (switched) return fetched;
+        return mergeMessages(since ? prev : prev.filter((m) => m.id.startsWith("temp_")), fetched);
       });
     } catch (err) {
       console.error("Error fetching group chat history:", err);
@@ -192,7 +221,13 @@ export function useGroupChat(groupType: GroupChatType, groupId: string) {
 
       if (data && data.length > 0) {
         const [sent] = await withSenderInfo(data as GroupMessage[]);
-        setMessages((prev) => prev.map((m) => (m.id === tempId ? sent : m)));
+        // If a poll already appended this row, drop the temp bubble instead
+        // of producing a duplicate.
+        setMessages((prev) =>
+          prev.some((m) => m.id === sent.id)
+            ? prev.filter((m) => m.id !== tempId)
+            : prev.map((m) => (m.id === tempId ? sent : m)),
+        );
 
         // Best-effort — group chat lives in Supabase, not the EF backend, so
         // there's no server-side trigger to hook a push notification off of.

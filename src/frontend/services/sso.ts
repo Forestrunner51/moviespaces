@@ -17,6 +17,12 @@ const OAUTH_REDIRECT_URL = "moviespaces://auth/callback";
 // got (Supabase-level rejections land in the query, provider-level ones can
 // land in the fragment), and React Native's URL implementation only exposes
 // the query — so parse the raw string rather than relying on URL.searchParams.
+// The callback URL carries the one-time auth code (and possibly tokens in
+// the fragment) — log only the scheme/host/path, never the query or fragment.
+function redactCallbackUrl(url: string): string {
+  return url.split(/[?#]/)[0];
+}
+
 function parseCallbackParams(url: string): Record<string, string> {
   const params: Record<string, string> = {};
   for (const marker of ["?", "#"]) {
@@ -61,7 +67,7 @@ export async function signInWithGoogle(): Promise<SsoResult> {
     // isn't enabled/keyed in Supabase, or this redirect URL isn't allow-listed
     // — both make Supabase redirect back with an error instead of a code.
     if (params.error || params.error_description) {
-      console.error("Google OAuth callback error:", result.url);
+      console.error("Google OAuth callback error:", redactCallbackUrl(result.url), params.error);
       return {
         success: false,
         error: params.error_description || params.error,
@@ -70,7 +76,7 @@ export async function signInWithGoogle(): Promise<SsoResult> {
 
     const code = params.code;
     if (!code) {
-      console.error("Google OAuth callback had no code:", result.url);
+      console.error("Google OAuth callback had no code:", redactCallbackUrl(result.url));
       return {
         success: false,
         error:

@@ -12,6 +12,7 @@ import { Text, TextInput } from "@/frontend/components/scaled-text";
 import { router, useFocusEffect } from "expo-router";
 import { Ionicons } from "@expo/vector-icons";
 import { Starfield } from "@/frontend/components/starfield";
+import { authFetch } from "@/frontend/services/api";
 import { SpaceTheme, SpaceStyles, Palette, Type, Radius, Display } from "@/frontend/constants/theme";
 import { AvatarStack } from "@/frontend/components/avatar";
 import { useProfiles } from "@/frontend/hooks/use-profiles";
@@ -133,7 +134,9 @@ export default function ExploreScreen() {
 
   const fetchOpenSpaces = async () => {
     try {
-      const res = await fetch(`${process.env.EXPO_PUBLIC_API_URL}/api/group/open`);
+      // authFetch: the API blanks member userIds (→ avatars fall back to
+      // initials) for unauthenticated callers; it still works with no session.
+      const res = await authFetch(`${process.env.EXPO_PUBLIC_API_URL}/api/group/open`);
       if (res.ok) {
         const data = await res.json();
         setOpenSpaces(data || []);

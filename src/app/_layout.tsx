@@ -1,8 +1,10 @@
 // Must load before supabase-js constructs its client. See the module itself
 // for why this is guarded rather than an unconditional polyfill import.
-import "@/frontend/services/random-values-polyfill";
+import { hasRandomValuesNativeModule } from "@/frontend/services/random-values-polyfill";
 import { DarkTheme, ThemeProvider, Stack, router, usePathname } from "expo-router";
+import type { ErrorBoundaryProps } from "expo-router";
 import { useEffect, useRef, useState } from "react";
+import { StyleSheet, TouchableOpacity, View } from "react-native";
 import * as Sentry from "@sentry/react-native";
 import { useFonts, BebasNeue_400Regular } from "@expo-google-fonts/bebas-neue";
 import {
@@ -15,10 +17,29 @@ import {
 import "@/frontend/services/sentry";
 import { AnimatedSplashOverlay } from "@/frontend/components/animated-icon";
 import { supabase } from "@/frontend/config/supabase";
-import { SpaceTheme, Palette } from "@/frontend/constants/theme";
+import { Text } from "@/frontend/components/scaled-text";
+import { SpaceTheme, Palette, Type, Radius } from "@/frontend/constants/theme";
 import { registerForPushNotifications } from "@/frontend/services/push-notifications";
+import {
+  configureNotificationHandler,
+  startNotificationRouting,
+} from "@/frontend/services/notification-routing";
+import { FriendsProvider } from "@/frontend/hooks/use-friends";
+import { resetBlockedIds } from "@/frontend/services/moderation";
 import { setPendingRedirect } from "@/frontend/services/pending-redirect";
 import { ToastProvider } from "@/frontend/components/toast";
+
+// Module scope, once per cold start. Foreground pushes are invisible on iOS
+// without a handler registered before the first one arrives.
+configureNotificationHandler();
+
+// The polyfill silently skips installing when its native module isn't linked
+// (see the module) — supabase-js then falls back to Math.random() for PKCE
+// verifiers. That's tolerable in an old dev build but must not ship, so a
+// TestFlight build without it shows up in Sentry.
+if (!hasRandomValuesNativeModule) {
+  Sentry.captureMessage("random-values native module missing; PKCE using insecure fallback", "warning");
+}
 
 // Font-scaling cap lives in @/frontend/components/scaled-text (a wrapper
 // Text/TextInput every screen imports) — the old Text.defaultProps
@@ -45,7 +66,7 @@ function Layout() {
   const [loading, setLoading] = useState(true);
   // Display font for the wordmark/titles. Rendering waits for it so titles
   // don't flash in the system font first, then snap to Bebas Neue.
-  const [fontsLoaded] = useFonts({
+  const [fontsLoaded, fontError] = useFonts({
     BebasNeue_400Regular,
     Karla_400Regular,
     // Two screens set fontStyle: "italic" on a Type token; without a loaded
@@ -55,6 +76,7 @@ function Layout() {
     Karla_600SemiBold,
     Karla_700Bold,
   });
+  const fontsReady = fontsLoaded || !!fontError;
   const pathname = usePathname();
   // Read via ref (not the `pathname` closure) inside the callbacks below —
   // those are registered once by a mount-only effect, so a plain closure
@@ -89,6 +111,8 @@ function Layout() {
     } = supabase.auth.onAuthStateChange((_event, session) => {
       setSession(session);
       if (!session) {
+        // The next account must not inherit this one's cached block list.
+        resetBlockedIds();
         stashDeepLinkAndRedirectToAuth();
       }
     });
@@ -112,9 +136,19 @@ function Layout() {
     }
   }, [session]);
 
+  // Tap-to-open routing for pushes (and the tap that cold-started the app).
+  // Waits for a session and a mounted navigator so router.push has somewhere
+  // to go; the auth redirect above wins for a signed-out user.
+  useEffect(() => {
+    if (!session || !fontsReady) return;
+    return startNotificationRouting();
+  }, [session, fontsReady]);
+
   // Hold on the animated splash until the display font is ready (keeps titles
   // from flashing in the system font). The overlay covers the blank frame.
-  if (!fontsLoaded) {
+  // A font load *failure* also proceeds — otherwise the app sits on the
+  // splash forever with the system font available the whole time.
+  if (!fontsReady) {
     return <AnimatedSplashOverlay />;
   }
 
@@ -162,9 +196,49 @@ function Layout() {
 function RootLayout() {
   return (
     <ToastProvider>
-      <Layout />
+      <FriendsProvider>
+        <Layout />
+      </FriendsProvider>
     </ToastProvider>
   );
 }
+
+// Production error boundary: expo-router renders this instead of a white
+// screen (or a dev red box) when a screen throws. Deliberately plain — no
+// hooks that could themselves throw, no fonts assumed, just the app's dark
+// palette and a way back.
+export function ErrorBoundary({ error, retry }: ErrorBoundaryProps) {
+  useEffect(() => {
+    Sentry.captureException(error);
+  }, [error]);
+  return (
+    <View style={errorStyles.screen}>
+      <Text style={errorStyles.title}>Something went wrong</Text>
+      <Text style={errorStyles.message}>{error?.message || "An unexpected error occurred."}</Text>
+      <TouchableOpacity activeOpacity={0.8} style={errorStyles.button} onPress={() => retry()}>
+        <Text style={errorStyles.buttonText}>Try again</Text>
+      </TouchableOpacity>
+    </View>
+  );
+}
+
+const errorStyles = StyleSheet.create({
+  screen: {
+    flex: 1,
+    backgroundColor: SpaceTheme.backgroundVoid,
+    alignItems: "center",
+    justifyContent: "center",
+    padding: 32,
+  },
+  title: { ...Type.body, color: SpaceTheme.starWhite, fontWeight: "700", marginBottom: 8 },
+  message: { ...Type.small, color: SpaceTheme.mutedOrbit, textAlign: "center", marginBottom: 24 },
+  button: {
+    backgroundColor: Palette.accent,
+    borderRadius: Radius.pill,
+    paddingHorizontal: 24,
+    paddingVertical: 12,
+  },
+  buttonText: { ...Type.small, color: Palette.base, fontWeight: "700" },
+});
 
 export default Sentry.wrap(RootLayout);

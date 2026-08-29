@@ -60,6 +60,26 @@ public class AppDbContext : DbContext
             .HasIndex(g => g.SpaceCode)
             .IsUnique();
 
+        // One membership row per signed-in user per Space, enforced by the
+        // database. JoinGroup and MatchForMovie both do a "already a member?"
+        // read before inserting, and two concurrent requests can both pass
+        // that read — the second insert now fails (caught as a
+        // DbUpdateException → 409) instead of double-seating someone and
+        // overshooting a crew's capacity. Filtered to real accounts: web
+        // guests are stored with UserId == "" (see JoinGroupWeb) and many of
+        // them legitimately share that empty value in one Space.
+        builder.Entity<GroupMember>()
+            .HasIndex(m => new { m.GroupId, m.UserId })
+            .IsUnique()
+            .HasFilter("\"user_id\" <> ''");
+
+        // Kept explicitly: the FK index EF created by convention would
+        // otherwise be dropped as "covered" by the composite above — but that
+        // one is partial, so the guest rows it excludes would lose their
+        // GroupId index (the member-list and count queries every join does).
+        builder.Entity<GroupMember>()
+            .HasIndex(m => m.GroupId);
+
         // ── CineMind ───────────────────────────────────────────────────────
 
         // One catalog row per film; the seed is idempotent and re-runs upsert

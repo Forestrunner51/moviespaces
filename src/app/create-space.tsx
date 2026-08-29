@@ -259,14 +259,20 @@ export default function CreateSpaceScreen() {
         data: { user },
       } = await supabase.auth.getUser();
       if (!user) return;
+      // maybeSingle: a brand-new account may have no profiles row yet, and
+      // .single() turns that into an error rather than a null.
       const { data: profile } = await supabase
         .from("profiles")
         .select("display_name")
         .eq("id", user.id)
-        .single();
+        .maybeSingle();
       const name = profile?.display_name || (user.user_metadata?.full_name as string) || "";
       if (name) setHostName(name);
-    })();
+    })().catch((err) => {
+      // Prefilling the host name is a convenience — never an unhandled
+      // rejection on screen open.
+      console.warn("Couldn't prefill host name:", err);
+    });
   }, []);
 
   useEffect(() => {

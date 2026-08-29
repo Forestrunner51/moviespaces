@@ -23,6 +23,7 @@
     "expo-font": "~56.0.7",
     "expo-glass-effect": "~56.0.4",
     "expo-image": "~56.0.11",
+    "expo-image-manipulator": "~56.0.26",
     "expo-image-picker": "~56.0.21",
     "expo-linking": "~56.0.14",
     "expo-location": "~56.0.18",
@@ -54,7 +55,6 @@
   "scripts": {
     "start": "NODE_OPTIONS=--dns-result-order=ipv4first expo start --localhost",
     "start:phone": "EXPO_PACKAGER_HOSTNAME=$(ipconfig getifaddr en0) npx expo start --clear",
-    "reset-project": "node ./scripts/reset-project.js",
     "android": "expo run:android",
     "ios": "EXPO_PACKAGER_HOSTNAME=127.0.0.1 REACT_NATIVE_PACKAGER_HOSTNAME=127.0.0.1 NODE_OPTIONS=--dns-result-order=ipv4first expo run:ios",
     "web": "expo start --web",

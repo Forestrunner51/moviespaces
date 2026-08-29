@@ -24,14 +24,46 @@ export interface Coordinates {
 // location can't be resolved — callers should show a manual-entry fallback
 // instead of a hard error, same pattern as the old "no nearby theaters found"
 // empty state.
+//
+// Bounded: getCurrentPositionAsync can hang for a very long time indoors or
+// with location services degraded, and every caller awaits it before showing
+// anything. The last known fix (usually milliseconds old, from the OS cache)
+// is tried first; a fresh fix races a timeout, after which the caller gets
+// null and its no-location path — the same as a denied permission.
+const LOCATION_TIMEOUT_MS = 6000;
+
+function withTimeout<T>(promise: Promise<T>, ms: number): Promise<T> {
+  return new Promise<T>((resolve, reject) => {
+    const timer = setTimeout(() => reject(new Error("Location timed out")), ms);
+    promise.then(
+      (v) => {
+        clearTimeout(timer);
+        resolve(v);
+      },
+      (e) => {
+        clearTimeout(timer);
+        reject(e);
+      },
+    );
+  });
+}
+
 export async function getDeviceLocation(): Promise<Coordinates | null> {
   try {
     const { status } = await Location.requestForegroundPermissionsAsync();
     if (status !== "granted") return null;
 
-    const position = await Location.getCurrentPositionAsync({
-      accuracy: Location.Accuracy.Balanced,
-    });
+    const lastKnown = await Location.getLastKnownPositionAsync({
+      maxAge: 5 * 60 * 1000,
+    }).catch(() => null);
+    if (lastKnown) {
+      return { latitude: lastKnown.coords.latitude, longitude: lastKnown.coords.longitude };
+    }
+
+    const position = await withTimeout(
+      Location.getCurrentPositionAsync({ accuracy: Location.Accuracy.Balanced }),
+      LOCATION_TIMEOUT_MS,
+    );
     return { latitude: position.coords.latitude, longitude: position.coords.longitude };
   } catch (err) {
     console.warn("Failed to get device location:", err);

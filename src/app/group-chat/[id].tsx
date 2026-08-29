@@ -1,4 +1,4 @@
-import { useEffect, useRef, useState } from "react";
+import { memo, useCallback, useEffect, useMemo, useRef, useState } from "react";
 import {
   View,
   FlatList,
@@ -8,6 +8,8 @@ import {
   Platform,
   ActivityIndicator,
   Alert,
+  type NativeScrollEvent,
+  type NativeSyntheticEvent,
 } from "react-native";
 import { Text, TextInput } from "@/frontend/components/scaled-text";
 import { useLocalSearchParams, Stack } from "expo-router";
@@ -17,9 +19,67 @@ import { Starfield } from "@/frontend/components/starfield";
 import { SpaceTheme, Palette, Type, Radius } from "@/frontend/constants/theme";
 import { Avatar } from "@/frontend/components/avatar";
 import { useGroupChat, GroupMessage, GroupChatType } from "@/frontend/hooks/use-group-chat";
-import { reportContent, blockUser, getBlockedUserIds } from "@/frontend/services/moderation";
+import { reportContent, blockUser } from "@/frontend/services/moderation";
+import { useBlockedIds } from "@/frontend/hooks/use-blocked-ids";
 import { useFriends } from "@/frontend/hooks/use-friends";
 import { useToast } from "@/frontend/components/toast";
+
+// See chat/[userId].tsx — auto-scroll on new content only when already
+// reading the latest messages.
+const NEAR_BOTTOM_PX = 80;
+
+// Memoized row: the 4s poll re-renders only rows that actually changed.
+const MessageRow = memo(function MessageRow({
+  item,
+  isMe,
+  onRetry,
+  onLongPress,
+}: {
+  item: GroupMessage;
+  isMe: boolean;
+  onRetry: (m: GroupMessage) => void;
+  onLongPress: (m: GroupMessage) => void;
+}) {
+  if (isMe) {
+    return (
+      <View style={styles.myMsgWrap}>
+        <View
+          style={[
+            styles.bubble,
+            styles.bubbleMe,
+            { maxWidth: "100%", marginBottom: 0 },
+            item.failed && styles.bubbleFailed,
+            item.pending && styles.bubblePending,
+          ]}
+        >
+          <Text style={[styles.bubbleText, styles.bubbleTextMe]}>{item.content}</Text>
+        </View>
+        {item.failed && (
+          <TouchableOpacity onPress={() => onRetry(item)} style={styles.retryRow} activeOpacity={0.7}>
+            <Ionicons name="alert-circle" size={13} color={Palette.danger} />
+            <Text style={styles.retryText}>Not sent · Tap to retry</Text>
+          </TouchableOpacity>
+        )}
+      </View>
+    );
+  }
+  return (
+    <TouchableOpacity activeOpacity={0.9} onLongPress={() => onLongPress(item)} style={styles.rowThem}>
+      <Avatar uri={item.sender_avatar_url} name={item.sender_name} size={28} />
+      <View style={{ flex: 1 }}>
+        <Text style={styles.senderName}>
+          {item.sender_name || "Someone"}
+          {item.sender_username ? (
+            <Text style={styles.senderUsername}> @{item.sender_username}</Text>
+          ) : null}
+        </Text>
+        <View style={[styles.bubble, styles.bubbleThem, { alignSelf: "flex-start", marginBottom: 0 }]}>
+          <Text style={styles.bubbleText}>{item.content}</Text>
+        </View>
+      </View>
+    </TouchableOpacity>
+  );
+});
 
 export default function GroupChatScreen() {
   const { showToast } = useToast();
@@ -50,16 +110,22 @@ export default function GroupChatScreen() {
   const { friends, sendFriendRequest } = useFriends();
   const [text, setText] = useState("");
   const listRef = useRef<FlatList>(null);
-  const [blockedIds, setBlockedIds] = useState<string[]>([]);
+  // Shared, cached block list — updated in place by blockUser below.
+  const blockedIds = useBlockedIds();
   // A ref, not state: a fast double-tap fires both handleSend calls before
   // React re-renders with the cleared input, so a state-based guard reads
   // stale on the second tap and the same message (and its push to every
   // other member) goes out twice. A ref updates synchronously, so the
   // second tap sees it in time.
   const sendingRef = useRef(false);
-
-  useEffect(() => {
-    getBlockedUserIds().then(setBlockedIds);
+  const nearBottomRef = useRef(true);
+  const onScroll = useCallback((e: NativeSyntheticEvent<NativeScrollEvent>) => {
+    const { contentOffset, contentSize, layoutMeasurement } = e.nativeEvent;
+    const distance = contentSize.height - layoutMeasurement.height - contentOffset.y;
+    nearBottomRef.current = distance < NEAR_BOTTOM_PX;
+  }, []);
+  const onContentSizeChange = useCallback(() => {
+    if (nearBottomRef.current) listRef.current?.scrollToEnd({ animated: false });
   }, []);
 
   const handleAddFriend = async (userId: string, name: string) => {
@@ -87,6 +153,7 @@ export default function GroupChatScreen() {
       showToast(result.error || "Message not sent — tap it to retry.");
       return;
     }
+    nearBottomRef.current = true;
     listRef.current?.scrollToEnd({ animated: true });
   };
 
@@ -119,9 +186,7 @@ export default function GroupChatScreen() {
         style: "destructive",
         onPress: async () => {
           const result = await blockUser(item.sender_id);
-          if (result.success) {
-            setBlockedIds((prev) => [...prev, item.sender_id]);
-          } else {
+          if (!result.success) {
             showToast(result.error || "Couldn't block that person. Please try again.");
           }
         },
@@ -129,54 +194,31 @@ export default function GroupChatScreen() {
     ]);
   };
 
-  const renderItem = ({ item }: { item: GroupMessage }) => {
-    const isMe = item.sender_id === currentUserId;
-    if (isMe) {
-      return (
-        <View style={styles.myMsgWrap}>
-          <View
-            style={[
-              styles.bubble,
-              styles.bubbleMe,
-              { maxWidth: "100%", marginBottom: 0 },
-              item.failed && styles.bubbleFailed,
-              item.pending && styles.bubblePending,
-            ]}
-          >
-            <Text style={[styles.bubbleText, styles.bubbleTextMe]}>{item.content}</Text>
-          </View>
-          {item.failed && (
-            <TouchableOpacity onPress={() => retryMessage(item)} style={styles.retryRow} activeOpacity={0.7}>
-              <Ionicons name="alert-circle" size={13} color={Palette.danger} />
-              <Text style={styles.retryText}>Not sent · Tap to retry</Text>
-            </TouchableOpacity>
-          )}
-        </View>
-      );
-    }
-    return (
-      <TouchableOpacity
-        activeOpacity={0.9}
-        onLongPress={() => handleLongPressMessage(item)}
-        style={styles.rowThem}
-      >
-        <Avatar uri={item.sender_avatar_url} name={item.sender_name} size={28} />
-        <View style={{ flex: 1 }}>
-          <Text style={styles.senderName}>
-            {item.sender_name || "Someone"}
-            {item.sender_username ? (
-              <Text style={styles.senderUsername}> @{item.sender_username}</Text>
-            ) : null}
-          </Text>
-          <View style={[styles.bubble, styles.bubbleThem, { alignSelf: "flex-start", marginBottom: 0 }]}>
-            <Text style={styles.bubbleText}>{item.content}</Text>
-          </View>
-        </View>
-      </TouchableOpacity>
-    );
-  };
+  // Latest long-press handler behind a stable identity, so renderItem (and
+  // every memoized row) doesn't rebuild whenever the friends list polls.
+  const longPressRef = useRef(handleLongPressMessage);
+  useEffect(() => {
+    longPressRef.current = handleLongPressMessage;
+  });
+  const onLongPress = useCallback((m: GroupMessage) => longPressRef.current(m), []);
 
-  const visibleMessages = messages.filter((m) => !blockedIds.includes(m.sender_id));
+  const renderItem = useCallback(
+    ({ item }: { item: GroupMessage }) => (
+      <MessageRow
+        item={item}
+        isMe={item.sender_id === currentUserId}
+        onRetry={retryMessage}
+        onLongPress={onLongPress}
+      />
+    ),
+    [currentUserId, retryMessage, onLongPress],
+  );
+
+  const visibleMessages = useMemo(
+    () => messages.filter((m) => !blockedIds.has(m.sender_id)),
+    [messages, blockedIds],
+  );
+
 
   return (
     <Starfield>
@@ -203,7 +245,9 @@ export default function GroupChatScreen() {
             keyExtractor={(item) => item.id}
             renderItem={renderItem}
             contentContainerStyle={styles.list}
-            onContentSizeChange={() => listRef.current?.scrollToEnd({ animated: false })}
+            onScroll={onScroll}
+            scrollEventThrottle={100}
+            onContentSizeChange={onContentSizeChange}
             ListEmptyComponent={
               <Text style={styles.emptyText}>
                 No messages yet — say hi to the group.
