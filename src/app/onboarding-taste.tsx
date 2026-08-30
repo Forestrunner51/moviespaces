@@ -1,5 +1,13 @@
 import { useRef, useState } from "react";
-import { View, TouchableOpacity, StyleSheet, ActivityIndicator, ScrollView } from "react-native";
+import {
+  View,
+  TouchableOpacity,
+  StyleSheet,
+  ActivityIndicator,
+  ScrollView,
+  KeyboardAvoidingView,
+  Platform,
+} from "react-native";
 import { Text, TextInput } from "@/frontend/components/scaled-text";
 import { router, useLocalSearchParams } from "expo-router";
 import { Ionicons } from "@expo/vector-icons";
@@ -21,15 +29,21 @@ function TastePicker({
   hint,
   picks,
   onChange,
+  onSearchFocus,
 }: {
   title: string;
   hint: string;
   picks: Pick[];
   onChange: (next: Pick[]) => void;
+  onSearchFocus: (y: number) => void;
 }) {
   const [query, setQuery] = useState("");
   const [results, setResults] = useState<Movie[]>([]);
   const [searching, setSearching] = useState(false);
+  // Where this section sits in the scroll content — so a focused search box
+  // can be brought above the keyboard (the second section is otherwise
+  // covered by it, results and all).
+  const sectionY = useRef(0);
   const timer = useRef<ReturnType<typeof setTimeout> | null>(null);
   const seq = useRef(0);
 
@@ -66,7 +80,7 @@ function TastePicker({
   };
 
   return (
-    <View style={styles.section}>
+    <View style={styles.section} onLayout={(e) => (sectionY.current = e.nativeEvent.layout.y)}>
       <Text style={styles.sectionTitle}>{title}</Text>
       <Text style={styles.sectionHint}>{hint}</Text>
       <View style={styles.slotRow}>
@@ -105,6 +119,7 @@ function TastePicker({
               onChangeText={handleSearch}
               autoCapitalize="none"
               autoCorrect={false}
+              onFocus={() => onSearchFocus(sectionY.current)}
             />
             {searching && <ActivityIndicator size="small" color={Palette.accent} />}
           </View>
@@ -169,9 +184,21 @@ export default function OnboardingTasteScreen() {
 
   const hasAny = loves.length > 0 || hates.length > 0;
 
+  const scrollRef = useRef<ScrollView>(null);
+  const scrollSectionUp = (y: number) =>
+    scrollRef.current?.scrollTo({ y: Math.max(0, y - 12), animated: true });
+
   return (
     <Starfield>
-      <ScrollView contentContainerStyle={styles.container} keyboardShouldPersistTaps="handled">
+      <KeyboardAvoidingView
+        style={styles.flex}
+        behavior={Platform.OS === "ios" ? "padding" : undefined}
+      >
+      <ScrollView
+        ref={scrollRef}
+        contentContainerStyle={styles.container}
+        keyboardShouldPersistTaps="handled"
+      >
         <Text style={styles.title}>Your taste, in six movies</Text>
         <Text style={styles.subtitle}>
           Shows on your profile so a crew knows who they&apos;re watching with. Totally optional.
@@ -182,12 +209,14 @@ export default function OnboardingTasteScreen() {
           hint="The ones you make people watch."
           picks={loves}
           onChange={setLoves}
+          onSearchFocus={scrollSectionUp}
         />
         <TastePicker
           title="Three you couldn't stand"
           hint="Great taste is also knowing what you hate."
           picks={hates}
           onChange={setHates}
+          onSearchFocus={scrollSectionUp}
         />
 
         <TouchableOpacity
@@ -207,11 +236,13 @@ export default function OnboardingTasteScreen() {
           <Text style={styles.skipText}>Skip</Text>
         </TouchableOpacity>
       </ScrollView>
+      </KeyboardAvoidingView>
     </Starfield>
   );
 }
 
 const styles = StyleSheet.create({
+  flex: { flex: 1 },
   container: { padding: 24, paddingTop: 80, paddingBottom: 60 },
   title: { ...Type.title, fontFamily: Font.bold, color: Palette.text, textAlign: "center" },
   subtitle: { ...Type.small, color: Palette.textMuted, textAlign: "center", marginTop: 6, marginBottom: 26 },
