@@ -1,4 +1,4 @@
-import { useCallback, useEffect, useState } from "react";
+import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import {
   View,
   StyleSheet,
@@ -6,7 +6,7 @@ import {
   TouchableOpacity,
   ActivityIndicator,
 } from "react-native";
-import { Text } from "@/frontend/components/scaled-text";
+import { Text, TextInput } from "@/frontend/components/scaled-text";
 import { useLocalSearchParams, router } from "expo-router";
 import { Ionicons } from "@expo/vector-icons";
 import { Starfield } from "@/frontend/components/starfield";
@@ -14,7 +14,10 @@ import { MoviePoster } from "@/frontend/components/movie-poster";
 import { SpaceStyles, Palette, Type, Display, Radius } from "@/frontend/constants/theme";
 import { useToast } from "@/frontend/components/toast";
 import { authFetch } from "@/frontend/services/api";
+import { formatEventDate } from "@/frontend/utils/event-date";
 import { completeOnboarding } from "@/frontend/services/onboarding";
+import { getDeviceLocation, type Coordinates } from "@/frontend/services/nearby-theaters";
+import { distanceMiles, formatMilesAway } from "@/frontend/utils/distance";
 
 interface DiscoverSpace {
   id: string;
@@ -26,6 +29,57 @@ interface DiscoverSpace {
   playedTodayCount: number;
   todayAvgScore: number | null;
   isJoined: boolean;
+  isMine: boolean;
+  latitude: number | null;
+  longitude: number | null;
+}
+
+// One haversine per row, computed once then sorted — not per comparison.
+function milesFrom(
+  coords: Coordinates,
+  lat: number | null,
+  lng: number | null,
+): number | null {
+  return lat != null && lng != null
+    ? distanceMiles(coords.latitude, coords.longitude, lat, lng)
+    : null;
+}
+function sortByDistance<T>(list: T[], miles: (item: T) => number | null): T[] {
+  return list
+    .map((item) => ({ item, d: miles(item) ?? Number.POSITIVE_INFINITY }))
+    .sort((a, b) => a.d - b.d)
+    .map((x) => x.item);
+}
+
+// Browse filters. "Near me" needs a device fix; clubs without a pin sort
+// after the pinned ones rather than disappearing (a global club is still
+// joinable from anywhere — location is a boost, not a gate).
+type ClubFilter = "all" | "crews" | "near" | "joined" | "mine";
+const FILTERS: { key: ClubFilter; label: string }[] = [
+  { key: "all", label: "All" },
+  { key: "crews", label: "Crews" },
+  { key: "near", label: "Near me" },
+  { key: "joined", label: "Joined" },
+  { key: "mine", label: "Mine" },
+];
+
+// Shape returned by GET /api/group/crews/open — a live Movie Crew still
+// taking members. Listed here so clubs and crews share one searchable pool
+// instead of crews being reachable only through the match flow.
+interface OpenCrew {
+  id: string;
+  filmName: string;
+  posterPath: string | null;
+  spaceType: string;
+  cinemaName: string | null;
+  showDate: string | null;
+  showTime: string | null;
+  screeningTime: string | null;
+  theaterLatitude: number | null;
+  theaterLongitude: number | null;
+  memberCount: number;
+  maxCapacity: number;
+  alreadyIn: boolean;
 }
 
 // Icons rather than emoji — see event-categories.ts for the reasoning.
@@ -58,10 +112,85 @@ export default function SpaceDiscoveryScreen() {
   // this flag, so everywhere else gets a back button instead of "Continue".
   const isOnboarding = onboarding === "1";
   const [spaces, setSpaces] = useState<DiscoverSpace[]>([]);
+  const [crews, setCrews] = useState<OpenCrew[]>([]);
   const [loading, setLoading] = useState(true);
   const [errorText, setErrorText] = useState<string | null>(null);
   const [joiningId, setJoiningId] = useState<string | null>(null);
   const [finishing, setFinishing] = useState(false);
+  const [search, setSearch] = useState("");
+  const [filter, setFilter] = useState<ClubFilter>("all");
+  const [coords, setCoords] = useState<Coordinates | null>(null);
+  const [locating, setLocating] = useState(false);
+  const [locationFailed, setLocationFailed] = useState(false);
+
+  // Guards the async location fetch: bouncing off and back onto "Near me"
+  // while a slow fix is pending must not let the first request's failure
+  // stomp the second one's status.
+  const locateSeq = useRef(0);
+  const pickFilter = useCallback(async (next: ClubFilter) => {
+    setFilter(next);
+    if (next !== "near" || coords) return;
+    const seq = ++locateSeq.current;
+    setLocating(true);
+    setLocationFailed(false);
+    const loc = await getDeviceLocation();
+    if (seq !== locateSeq.current) return;
+    setCoords(loc);
+    setLocationFailed(!loc);
+    setLocating(false);
+  }, [coords]);
+
+  const visibleSpaces = useMemo(() => {
+    const q = search.trim().toLowerCase();
+    let list = spaces;
+    if (q) {
+      list = list.filter(
+        (s) =>
+          s.displayName.toLowerCase().includes(q) ||
+          (s.genreCategory ?? "").toLowerCase().includes(q),
+      );
+    }
+    if (filter === "crews") return []; // crews-only view — the crews section carries it
+    if (filter === "joined") list = list.filter((s) => s.isJoined);
+    if (filter === "mine") list = list.filter((s) => s.isMine);
+    if (filter === "near" && coords) {
+      list = sortByDistance(list, (s) => milesFrom(coords, s.latitude, s.longitude));
+    }
+    return list;
+  }, [spaces, search, filter, coords]);
+
+  const visibleCrews = useMemo(() => {
+    if (filter === "mine") return []; // creator isn't tracked on the row
+    const q = search.trim().toLowerCase();
+    let list = crews;
+    if (q) {
+      list = list.filter(
+        (c) =>
+          c.filmName.toLowerCase().includes(q) ||
+          (c.cinemaName ?? "").toLowerCase().includes(q),
+      );
+    }
+    if (filter === "joined") list = list.filter((c) => c.alreadyIn);
+    if (filter === "near" && coords) {
+      list = sortByDistance(list, (c) => milesFrom(coords, c.theaterLatitude, c.theaterLongitude));
+    }
+    return list;
+  }, [crews, search, filter, coords]);
+
+  const crewMilesAway = useCallback(
+    (c: OpenCrew): string | null =>
+      coords ? formatMilesAway(milesFrom(coords, c.theaterLatitude, c.theaterLongitude)) : null,
+    [coords],
+  );
+
+  const milesAway = useCallback(
+    (space: DiscoverSpace): string | null => {
+      if (!coords) return null;
+      const label = formatMilesAway(milesFrom(coords, space.latitude, space.longitude));
+      return label ? `${label} away` : null;
+    },
+    [coords],
+  );
 
   const load = useCallback(async () => {
     setLoading(true);
@@ -74,6 +203,16 @@ export default function SpaceDiscoveryScreen() {
       if (!res.ok) throw new Error(`Couldn't load Spaces (${res.status}).`);
       const data = await res.json();
       setSpaces(data.spaces ?? []);
+      // Crews are additive to this screen — if the endpoint fails the club
+      // browse still works, so it never throws the whole page into an error.
+      try {
+        const crewRes = await authFetch(
+          `${process.env.EXPO_PUBLIC_API_URL}/api/group/crews/open`,
+        );
+        setCrews(crewRes.ok ? await crewRes.json() : []);
+      } catch {
+        setCrews([]);
+      }
     } catch (err: any) {
       setErrorText(err?.message || "Couldn't load Community Spaces.");
     } finally {
@@ -125,10 +264,45 @@ export default function SpaceDiscoveryScreen() {
             <Text style={styles.backButtonText}>Back</Text>
           </TouchableOpacity>
         )}
-        <Text style={styles.title}>Discover Your Cinema Clubs</Text>
+        <Text style={styles.title}>Clubs &amp; Crews</Text>
         <Text style={styles.subtitle}>
-          {genres ? "Matching your picks" : "Every public Community Space"} — join any that look good.
+          {genres
+            ? "Matching your picks — join any that look good."
+            : "Clubs are where you find your people. Crews are real plans — pick one and go."}
         </Text>
+
+        <TextInput
+          style={styles.searchInput}
+          placeholder="Search clubs by name or genre"
+          placeholderTextColor={Palette.textMuted}
+          value={search}
+          onChangeText={setSearch}
+          autoCorrect={false}
+          returnKeyType="search"
+          accessibilityLabel="Search clubs"
+        />
+        <View style={styles.filterRow}>
+          {FILTERS.map((f) => (
+            <TouchableOpacity
+              key={f.key}
+              activeOpacity={0.85}
+              style={[styles.filterChip, filter === f.key && styles.filterChipActive]}
+              onPress={() => pickFilter(f.key)}
+            >
+              <Text style={[styles.filterChipText, filter === f.key && styles.filterChipTextActive]}>
+                {f.label}
+              </Text>
+            </TouchableOpacity>
+          ))}
+        </View>
+        {filter === "near" && locating && (
+          <Text style={styles.locationNote}>Finding clubs near you…</Text>
+        )}
+        {filter === "near" && locationFailed && (
+          <Text style={styles.locationNote}>
+            Couldn&apos;t get your location — showing every club instead.
+          </Text>
+        )}
 
         {loading && <ActivityIndicator color={Palette.accent} style={styles.loading} />}
 
@@ -141,14 +315,84 @@ export default function SpaceDiscoveryScreen() {
           </View>
         )}
 
-        {!loading && !errorText && spaces.length === 0 && (
+        {!loading && !errorText && visibleSpaces.length === 0 && visibleCrews.length === 0 && (
           <View style={styles.card}>
-            <Text style={styles.emptyText}>No Community Spaces matched — try different genres.</Text>
+            <Text style={styles.emptyText}>
+              {spaces.length === 0
+                ? "No Community Spaces matched — try different genres."
+                : filter === "joined"
+                  ? "You haven't joined a club yet."
+                  : filter === "mine"
+                    ? "You haven't created a club yet."
+                    : filter === "crews"
+                      ? "No crews forming right now."
+                      : "No clubs match that search."}
+            </Text>
+            {filter === "crews" && (
+              <TouchableOpacity
+                activeOpacity={0.85}
+                style={styles.emptyCrewButton}
+                onPress={() => router.push("/match")}
+                accessibilityRole="button"
+              >
+                <Text style={styles.emptyCrewButtonText}>Start one — find a crew</Text>
+              </TouchableOpacity>
+            )}
           </View>
         )}
 
+        {!loading && visibleCrews.length > 0 && filter !== "mine" && (
+          <>
+            <View style={styles.groupHeaderRow}>
+              <Text style={styles.groupHeader}>CREWS FORMING</Text>
+              <TouchableOpacity
+                activeOpacity={0.8}
+                onPress={() => router.push("/match")}
+                hitSlop={8}
+                accessibilityRole="button"
+                accessibilityLabel="Find a crew"
+              >
+                <Text style={styles.findCrewLink}>+ Find a crew</Text>
+              </TouchableOpacity>
+            </View>
+            {visibleCrews.map((crew) => {
+              const when = formatEventDate(crew.screeningTime, crew.showDate ?? "", crew.showTime ?? "");
+              const dist = crewMilesAway(crew);
+              return (
+                <TouchableOpacity
+                  key={crew.id}
+                  activeOpacity={0.85}
+                  style={styles.card}
+                  onPress={() => router.push({ pathname: "/group", params: { groupId: crew.id } })}
+                  accessibilityRole="button"
+                  accessibilityLabel={`View crew for ${crew.filmName}`}
+                >
+                  <View style={styles.cardHeader}>
+                    <MoviePoster uri={crew.posterPath} width={44} fallbackIcon="film-outline" />
+                    <View style={{ flex: 1 }}>
+                      <Text style={styles.cardTitle}>{crew.filmName}</Text>
+                      <Text style={styles.crewMeta} numberOfLines={1}>
+                        {crew.spaceType === "private_rental" ? "Watch party" : crew.cinemaName || "Theater TBD"}
+                        {when.date ? ` · ${when.date}` : ""}
+                        {when.time ? ` ${when.time}` : ""}
+                        {dist ? ` · ${dist}` : ""}
+                      </Text>
+                    </View>
+                    <View style={styles.crewSeatsPill}>
+                      <Text style={styles.crewSeatsPillText}>
+                        {crew.alreadyIn ? "You're in" : `${crew.memberCount} of ${crew.maxCapacity}`}
+                      </Text>
+                    </View>
+                  </View>
+                </TouchableOpacity>
+              );
+            })}
+            {visibleSpaces.length > 0 && <Text style={styles.groupHeader}>COMMUNITY CLUBS</Text>}
+          </>
+        )}
+
         {!loading &&
-          spaces.map((space) => (
+          visibleSpaces.map((space) => (
             <View key={space.id} style={styles.card}>
               <View style={styles.cardHeader}>
                 <MoviePoster
@@ -159,6 +403,7 @@ export default function SpaceDiscoveryScreen() {
                 <View style={{ flex: 1 }}>
                   <Text style={styles.cardTitle}>{space.displayName}</Text>
                   {!!space.genreCategory && <Text style={styles.genreBadge}>{space.genreCategory}</Text>}
+                  {!!milesAway(space) && <Text style={styles.distanceText}>{milesAway(space)}</Text>}
                 </View>
               </View>
 
@@ -232,6 +477,53 @@ const styles = StyleSheet.create({
     marginBottom: 24,
   },
   loading: { marginVertical: 24 },
+  searchInput: { ...SpaceStyles.field, ...Type.body, color: Palette.text, marginBottom: 12 },
+  filterRow: { flexDirection: "row", flexWrap: "wrap", gap: 8, marginBottom: 16 },
+  filterChip: {
+    borderWidth: 1,
+    borderColor: Palette.border,
+    borderRadius: 999,
+    paddingVertical: 7,
+    paddingHorizontal: 14,
+  },
+  filterChipActive: { backgroundColor: Palette.accentDim, borderColor: Palette.accentBorder },
+  filterChipText: { ...Type.small, color: Palette.textMuted },
+  filterChipTextActive: { color: Palette.accent, fontWeight: "600" },
+  locationNote: { ...Type.caption, color: Palette.textMuted, marginBottom: 12 },
+  distanceText: { ...Type.caption, color: Palette.textMuted, marginTop: 2 },
+  groupHeaderRow: {
+    flexDirection: "row",
+    alignItems: "baseline",
+    justifyContent: "space-between",
+  },
+  findCrewLink: { ...Type.caption, color: Palette.accent, fontWeight: "700" },
+  emptyCrewButton: {
+    alignSelf: "center",
+    marginTop: 12,
+    backgroundColor: Palette.accent,
+    borderRadius: 999,
+    paddingVertical: 10,
+    paddingHorizontal: 18,
+  },
+  emptyCrewButtonText: { ...Type.small, color: Palette.base, fontWeight: "700" },
+  groupHeader: {
+    ...Type.caption,
+    fontWeight: "700",
+    letterSpacing: 1,
+    color: Palette.textFaint,
+    marginBottom: 10,
+    marginTop: 4,
+  },
+  crewMeta: { ...Type.caption, color: Palette.textMuted, marginTop: 2 },
+  crewSeatsPill: {
+    borderWidth: 1,
+    borderColor: Palette.accentBorder,
+    backgroundColor: Palette.accentDim,
+    borderRadius: 999,
+    paddingVertical: 5,
+    paddingHorizontal: 10,
+  },
+  crewSeatsPillText: { ...Type.caption, color: Palette.accent, fontWeight: "700" },
   card: { ...SpaceStyles.glassCard, padding: 16, marginBottom: 14 },
   cardHeader: { flexDirection: "row", alignItems: "center", gap: 12, marginBottom: 12 },
   cardTitle: { ...Type.body, fontWeight: "700", color: Palette.text },

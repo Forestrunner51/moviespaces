@@ -47,6 +47,11 @@ interface NearbySpace {
   spaceType: string;
   eventCategory: string | null;
   members: SpaceMember[];
+  // Non-null = this is a Movie Crew (small cap, everyone's a peer) rather
+  // than a hosted Space — the card leads with "started a crew" and shows
+  // seats against the cap.
+  matchMovieKey: string | null;
+  maxCapacity: number;
 }
 
 // Shape returned by GET /api/group/mine — Home only needs ids (to keep the
@@ -67,6 +72,7 @@ function FeedCard({ space }: { space: NearbySpace }) {
   const eventDate = formatEventDate(space.screeningTime, space.showDate, space.showTime);
   const [joining, setJoining] = useState(false);
   const isWatchParty = space.spaceType === "private_rental";
+  const isCrew = !!space.matchMovieKey;
   const others = members.filter((m) => m.userId !== space.userId);
 
   const imIn = async () => {
@@ -104,13 +110,16 @@ function FeedCard({ space }: { space: NearbySpace }) {
         <View style={{ flex: 1 }}>
           <Text style={styles.feedLead} numberOfLines={2}>
             <Text style={styles.feedName}>{space.hostName}</Text>
-            {isWatchParty ? " is hosting " : " is seeing "}
+            {isCrew ? " started a crew for " : isWatchParty ? " is hosting " : " is seeing "}
             <Text style={styles.feedName}>{space.filmName}</Text>
           </Text>
           <Text style={styles.feedWhenLine} numberOfLines={1}>
             {eventDate.date}
             {eventDate.time ? ` · ${eventDate.time}` : ""}
             {space.cinemaName ? ` · ${space.cinemaName}` : ""}
+            {isCrew
+              ? ` · ${members.filter((m) => m.confirmed).length} of ${space.maxCapacity} seats`
+              : ""}
           </Text>
         </View>
         {!!eventDate.relative && (

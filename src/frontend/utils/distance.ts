@@ -15,3 +15,12 @@ export function distanceMiles(
   const c = 2 * Math.atan2(Math.sqrt(a), Math.sqrt(1 - a));
   return R * c;
 }
+
+// Human label for a haversine distance, shared by every "N mi away" caption
+// so the cutoff and copy can't drift between call sites. Null when unknown
+// or when the distance is far enough to read as noise (a pin on another
+// coast) rather than information.
+export function formatMilesAway(mi: number | null): string | null {
+  if (mi == null || mi > 500) return null;
+  return mi < 1 ? "under a mile" : `~${Math.round(mi)} mi`;
+}

@@ -409,6 +409,10 @@ namespace Backend.Controllers
         // and guarded because it's user-generated content — name is profanity-
         // filtered, genre is allow-listed, and one account is capped so it can't
         // spam the public directory.
+        private static bool ValidClubCoords(double? lat, double? lng) =>
+            lat.HasValue && lng.HasValue && Math.Abs(lat.Value) <= 90 && Math.Abs(lng.Value) <= 180
+            && !(lat.Value == 0 && lng.Value == 0);
+
         [HttpPost("community-clubs")]
         [EnableRateLimiting("write-heavy")]
         public async Task<IActionResult> CreateCommunityClub([FromBody] CreateClubRequest req)
@@ -449,6 +453,11 @@ namespace Backend.Controllers
                 SpaceType = "public_gathering",
                 MaxCapacity = 5000,
                 ScreeningTime = null,
+                // Optional "local club" pin: both coords or neither, and only
+                // plausible ones. Reuses the theater coordinate columns —
+                // clubs never have a theater, so there's no collision.
+                TheaterLatitude = ValidClubCoords(req.Latitude, req.Longitude) ? req.Latitude : null,
+                TheaterLongitude = ValidClubCoords(req.Latitude, req.Longitude) ? req.Longitude : null,
             };
             club.Members.Add(new GroupMember { GroupId = club.Id, Name = cleanHost, UserId = userId, Confirmed = true });
             _db.Groups.Add(club);
@@ -491,6 +500,48 @@ namespace Backend.Controllers
                     && g.Status != "cancelled"
                     && (g.ScreeningTime == null || g.ScreeningTime > now))
                 .ToListAsync();
+        }
+
+        // GET /api/group/crews/open — every live, joinable crew, film-agnostic.
+        // match/open answers "who's forming for THIS film"; this answers the
+        // browse question ("what crews are forming at all"), so Discover can
+        // list crews next to Community Clubs instead of crews being reachable
+        // only by re-picking the exact film in the match flow.
+        [HttpGet("crews/open")]
+        public async Task<IActionResult> OpenCrews()
+        {
+            var userId = GetUserId();
+            if (string.IsNullOrEmpty(userId)) return Unauthorized(new { error = "Unauthorized" });
+            var now = DateTime.UtcNow;
+            // Joinability is part of the WHERE, not applied after Take(100) —
+            // otherwise full crews eat the row budget and joinable ones past
+            // it vanish. Counts are projected in SQL; member rows never load.
+            var crews = await _db.Groups
+                .AsNoTracking()
+                .Where(g => g.MatchMovieKey != null
+                    && g.Status != "cancelled"
+                    && (g.ScreeningTime == null || g.ScreeningTime > now)
+                    && (g.Members.Count < g.MaxCapacity || g.Members.Any(m => m.UserId == userId)))
+                .OrderBy(g => g.ScreeningTime ?? DateTime.MaxValue)
+                .Take(100)
+                .Select(g => new
+                {
+                    id = g.Id,
+                    filmName = g.FilmName,
+                    posterPath = g.PosterPath,
+                    spaceType = g.SpaceType,
+                    cinemaName = g.CinemaName,
+                    showDate = g.ShowDate,
+                    showTime = g.ShowTime,
+                    screeningTime = g.ScreeningTime,
+                    theaterLatitude = g.TheaterLatitude,
+                    theaterLongitude = g.TheaterLongitude,
+                    memberCount = g.Members.Count,
+                    maxCapacity = g.MaxCapacity,
+                    alreadyIn = g.Members.Any(m => m.UserId == userId),
+                })
+                .ToListAsync();
+            return Ok(crews);
         }
 
         // GET /api/group/match/open?kind=theater&imdbId=tt123&title=...
@@ -745,7 +796,9 @@ namespace Backend.Controllers
                 .Select(g => new ClubRow(
                     g.Id, g.FilmName, g.SpaceCode, g.GenreCategory,
                     g.Members.Count,
-                    g.Members.Any(m => m.UserId == userId)))
+                    g.Members.Any(m => m.UserId == userId),
+                    g.UserId == userId,
+                    g.TheaterLatitude, g.TheaterLongitude))
                 .ToListAsync();
             var clubs = requested.Count == 0
                 ? allPublicClubs
@@ -843,6 +896,9 @@ namespace Backend.Controllers
                     playedTodayCount = r.playedTodayCount,
                     todayAvgScore = r.todayAvgScore,
                     isJoined = r.isJoined,
+                    isMine = r.club.IsMine,
+                    latitude = r.club.Latitude,
+                    longitude = r.club.Longitude,
                 })
                 .ToList();
 
@@ -1151,12 +1207,18 @@ namespace Backend.Controllers
                 // event does). They have their own discovery path instead:
                 // GET community-spaces/discover, surfaced via Home's "My
                 // Community Clubs" and Explore's "Browse Community Clubs".
+                // Movie Crews are the exception: they're IsPublic (evergreen
+                // until their showtime) but they ARE a real time/place plan,
+                // and "Bob's crew for Dune 3 · Sat 7:30" is exactly what this
+                // person-led feed exists to show. The ScreeningTime filter
+                // below keeps still-forming crews with no showing set out of
+                // the feed (they'd have no when/where to render).
                 //
                 // create-space.tsx (the only creation path for a real Space)
                 // always sets ScreeningTime now, so a null one here means this
                 // row predates that column and is guaranteed stale — hidden
                 // rather than showing an already-past Space forever.
-                .Where(g => !g.IsPublic)
+                .Where(g => !g.IsPublic || g.MatchMovieKey != null)
                 .Where(g => g.ScreeningTime != null && g.ScreeningTime >= DateTime.UtcNow)
                 // Capacity guard — don't surface a Space nobody can actually
                 // join anymore. MaxCapacity always has a value (defaults to
@@ -1282,7 +1344,12 @@ namespace Backend.Controllers
                 GroupId = id,
                 Name = _profanityFilter.CleanOrFallback(req.Name, "A Movie Fan"),
                 UserId = userId,
-                Confirmed = false
+                // Taking a crew seat IS the commitment — SeatInCrewAsync and
+                // the open feed's Confirmed-count capacity guard both treat it
+                // that way, so an unconfirmed crew member would let a "full"
+                // crew keep passing the guard (and Home show 7 of 6 seats).
+                // Hosted Spaces keep the explicit confirm step.
+                Confirmed = group.MatchMovieKey != null
             };
 
             _db.GroupMembers.Add(member);
@@ -1929,7 +1996,7 @@ namespace Backend.Controllers
 
     // Anyone-can-create community club: just a name + genre. HostName is the
     // creator's display name for the "created by" label (falls back if blank).
-    public record CreateClubRequest(string Name, string? GenreCategory, string? HostName);
+    public record CreateClubRequest(string Name, string? GenreCategory, string? HostName, double? Latitude, double? Longitude);
 
     // Match mode: the movie you want to see. ImdbId when picked from search
     // (exact match key), PosterPath for the group card, HostName for membership.
@@ -1983,6 +2050,6 @@ namespace Backend.Controllers
 
     // Slim projection DiscoverCommunitySpaces reads instead of whole Groups
     // with their member lists.
-    public record ClubRow(Guid Id, string DisplayName, string? SpaceCode, string? GenreCategory, int MemberCount, bool IsJoined);
+    public record ClubRow(Guid Id, string DisplayName, string? SpaceCode, string? GenreCategory, int MemberCount, bool IsJoined, bool IsMine, double? Latitude, double? Longitude);
     public record TransferOwnershipRequest(string NewHostUserId);
 }
