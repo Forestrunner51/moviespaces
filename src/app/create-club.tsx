@@ -14,6 +14,7 @@ import { SpaceStyles, Palette, Type, Display, Radius } from "@/frontend/constant
 import { useToast } from "@/frontend/components/toast";
 import { authFetch } from "@/frontend/services/api";
 import { resolveDisplayName } from "@/frontend/services/display-name";
+import { getDeviceLocation } from "@/frontend/services/nearby-theaters";
 
 // Kept in sync with the backend's allow-list in CreateCommunityClub — anything
 // else collapses to "General" server-side.
@@ -38,6 +39,9 @@ export default function CreateClubScreen() {
   const [name, setName] = useState("");
   const [genre, setGenre] = useState("General");
   const [creating, setCreating] = useState(false);
+  // Pin the club to the creator's rough location so "Near me" in Discover can
+  // surface it. Off by default — a club about a genre isn't inherently local.
+  const [localClub, setLocalClub] = useState(false);
 
   const handleCreate = async () => {
     const trimmed = name.trim();
@@ -49,9 +53,18 @@ export default function CreateClubScreen() {
     setCreating(true);
     try {
       const hostName = await resolveDisplayName();
+      // Best-effort: a denied permission or slow fix just creates the club
+      // without a pin (getDeviceLocation already races a timeout).
+      const loc = localClub ? await getDeviceLocation() : null;
       const res = await authFetch(`${process.env.EXPO_PUBLIC_API_URL}/api/group/community-clubs`, {
         method: "POST",
-        body: JSON.stringify({ Name: trimmed, GenreCategory: genre, HostName: hostName }),
+        body: JSON.stringify({
+          Name: trimmed,
+          GenreCategory: genre,
+          HostName: hostName,
+          Latitude: loc?.latitude ?? null,
+          Longitude: loc?.longitude ?? null,
+        }),
       });
       const body = await res.json().catch(() => null);
       if (!res.ok) {
@@ -110,6 +123,32 @@ export default function CreateClubScreen() {
 
         <TouchableOpacity
           activeOpacity={0.85}
+          style={[styles.localRow, localClub && styles.localRowActive]}
+          onPress={() => setLocalClub((v) => !v)}
+          accessibilityRole="switch"
+          accessibilityState={{ checked: localClub }}
+          accessibilityLabel="Local club"
+        >
+          <Ionicons
+            name={localClub ? "location" : "location-outline"}
+            size={18}
+            color={localClub ? Palette.accent : Palette.textMuted}
+          />
+          <View style={{ flex: 1 }}>
+            <Text style={[styles.localTitle, localClub && styles.localTitleActive]}>Local club</Text>
+            <Text style={styles.localSub}>
+              Attach your rough location so people nearby find it under &quot;Near me&quot;.
+            </Text>
+          </View>
+          <Ionicons
+            name={localClub ? "checkbox" : "square-outline"}
+            size={20}
+            color={localClub ? Palette.accent : Palette.textMuted}
+          />
+        </TouchableOpacity>
+
+        <TouchableOpacity
+          activeOpacity={0.85}
           style={[styles.createButton, creating && styles.createButtonDisabled]}
           onPress={handleCreate}
           disabled={creating}
@@ -149,6 +188,17 @@ const styles = StyleSheet.create({
   genreChipActive: { backgroundColor: Palette.accentDim, borderColor: Palette.accentBorder },
   genreChipText: { ...Type.small, color: Palette.textMuted },
   genreChipTextActive: { color: Palette.accent, fontWeight: "600" },
+  localRow: {
+    ...SpaceStyles.field,
+    flexDirection: "row",
+    alignItems: "center",
+    gap: 10,
+    marginBottom: 20,
+  },
+  localRowActive: { borderColor: Palette.accentBorder },
+  localTitle: { ...Type.small, color: Palette.text, fontWeight: "700" },
+  localTitleActive: { color: Palette.accent },
+  localSub: { ...Type.caption, color: Palette.textMuted, marginTop: 1 },
   createButton: {
     backgroundColor: Palette.accent,
     padding: 16,

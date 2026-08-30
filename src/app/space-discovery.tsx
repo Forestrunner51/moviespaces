@@ -1,4 +1,4 @@
-import { useCallback, useEffect, useState } from "react";
+import { useCallback, useEffect, useMemo, useState } from "react";
 import {
   View,
   StyleSheet,
@@ -6,7 +6,7 @@ import {
   TouchableOpacity,
   ActivityIndicator,
 } from "react-native";
-import { Text } from "@/frontend/components/scaled-text";
+import { Text, TextInput } from "@/frontend/components/scaled-text";
 import { useLocalSearchParams, router } from "expo-router";
 import { Ionicons } from "@expo/vector-icons";
 import { Starfield } from "@/frontend/components/starfield";
@@ -15,6 +15,8 @@ import { SpaceStyles, Palette, Type, Display, Radius } from "@/frontend/constant
 import { useToast } from "@/frontend/components/toast";
 import { authFetch } from "@/frontend/services/api";
 import { completeOnboarding } from "@/frontend/services/onboarding";
+import { getDeviceLocation, type Coordinates } from "@/frontend/services/nearby-theaters";
+import { distanceMiles } from "@/frontend/utils/distance";
 
 interface DiscoverSpace {
   id: string;
@@ -26,7 +28,21 @@ interface DiscoverSpace {
   playedTodayCount: number;
   todayAvgScore: number | null;
   isJoined: boolean;
+  isMine: boolean;
+  latitude: number | null;
+  longitude: number | null;
 }
+
+// Browse filters. "Near me" needs a device fix; clubs without a pin sort
+// after the pinned ones rather than disappearing (a global club is still
+// joinable from anywhere — location is a boost, not a gate).
+type ClubFilter = "all" | "near" | "joined" | "mine";
+const FILTERS: { key: ClubFilter; label: string }[] = [
+  { key: "all", label: "All" },
+  { key: "near", label: "Near me" },
+  { key: "joined", label: "Joined" },
+  { key: "mine", label: "Mine" },
+];
 
 // Icons rather than emoji — see event-categories.ts for the reasoning.
 const ICON_BY_GENRE: Record<string, keyof typeof Ionicons.glyphMap> = {
@@ -62,6 +78,54 @@ export default function SpaceDiscoveryScreen() {
   const [errorText, setErrorText] = useState<string | null>(null);
   const [joiningId, setJoiningId] = useState<string | null>(null);
   const [finishing, setFinishing] = useState(false);
+  const [search, setSearch] = useState("");
+  const [filter, setFilter] = useState<ClubFilter>("all");
+  const [coords, setCoords] = useState<Coordinates | null>(null);
+  const [locating, setLocating] = useState(false);
+  const [locationFailed, setLocationFailed] = useState(false);
+
+  const pickFilter = useCallback(async (next: ClubFilter) => {
+    setFilter(next);
+    if (next !== "near" || coords) return;
+    setLocating(true);
+    setLocationFailed(false);
+    const loc = await getDeviceLocation();
+    setCoords(loc);
+    setLocationFailed(!loc);
+    setLocating(false);
+  }, [coords]);
+
+  const visibleSpaces = useMemo(() => {
+    const q = search.trim().toLowerCase();
+    let list = spaces;
+    if (q) {
+      list = list.filter(
+        (s) =>
+          s.displayName.toLowerCase().includes(q) ||
+          (s.genreCategory ?? "").toLowerCase().includes(q),
+      );
+    }
+    if (filter === "joined") list = list.filter((s) => s.isJoined);
+    if (filter === "mine") list = list.filter((s) => s.isMine);
+    if (filter === "near" && coords) {
+      const dist = (s: DiscoverSpace) =>
+        s.latitude != null && s.longitude != null
+          ? distanceMiles(coords.latitude, coords.longitude, s.latitude, s.longitude)
+          : Number.POSITIVE_INFINITY;
+      list = [...list].sort((a, b) => dist(a) - dist(b));
+    }
+    return list;
+  }, [spaces, search, filter, coords]);
+
+  const milesAway = useCallback(
+    (space: DiscoverSpace): string | null => {
+      if (!coords || space.latitude == null || space.longitude == null) return null;
+      const mi = distanceMiles(coords.latitude, coords.longitude, space.latitude, space.longitude);
+      if (mi > 500) return null; // a pin on another coast reads as noise
+      return mi < 1 ? "under a mile away" : `~${Math.round(mi)} mi away`;
+    },
+    [coords],
+  );
 
   const load = useCallback(async () => {
     setLoading(true);
@@ -130,6 +194,39 @@ export default function SpaceDiscoveryScreen() {
           {genres ? "Matching your picks" : "Every public Community Space"} — join any that look good.
         </Text>
 
+        <TextInput
+          style={styles.searchInput}
+          placeholder="Search clubs by name or genre"
+          placeholderTextColor={Palette.textMuted}
+          value={search}
+          onChangeText={setSearch}
+          autoCorrect={false}
+          returnKeyType="search"
+          accessibilityLabel="Search clubs"
+        />
+        <View style={styles.filterRow}>
+          {FILTERS.map((f) => (
+            <TouchableOpacity
+              key={f.key}
+              activeOpacity={0.85}
+              style={[styles.filterChip, filter === f.key && styles.filterChipActive]}
+              onPress={() => pickFilter(f.key)}
+            >
+              <Text style={[styles.filterChipText, filter === f.key && styles.filterChipTextActive]}>
+                {f.label}
+              </Text>
+            </TouchableOpacity>
+          ))}
+        </View>
+        {filter === "near" && locating && (
+          <Text style={styles.locationNote}>Finding clubs near you…</Text>
+        )}
+        {filter === "near" && locationFailed && (
+          <Text style={styles.locationNote}>
+            Couldn&apos;t get your location — showing every club instead.
+          </Text>
+        )}
+
         {loading && <ActivityIndicator color={Palette.accent} style={styles.loading} />}
 
         {errorText && !loading && (
@@ -141,14 +238,22 @@ export default function SpaceDiscoveryScreen() {
           </View>
         )}
 
-        {!loading && !errorText && spaces.length === 0 && (
+        {!loading && !errorText && visibleSpaces.length === 0 && (
           <View style={styles.card}>
-            <Text style={styles.emptyText}>No Community Spaces matched — try different genres.</Text>
+            <Text style={styles.emptyText}>
+              {spaces.length === 0
+                ? "No Community Spaces matched — try different genres."
+                : filter === "joined"
+                  ? "You haven't joined a club yet."
+                  : filter === "mine"
+                    ? "You haven't created a club yet."
+                    : "No clubs match that search."}
+            </Text>
           </View>
         )}
 
         {!loading &&
-          spaces.map((space) => (
+          visibleSpaces.map((space) => (
             <View key={space.id} style={styles.card}>
               <View style={styles.cardHeader}>
                 <MoviePoster
@@ -159,6 +264,7 @@ export default function SpaceDiscoveryScreen() {
                 <View style={{ flex: 1 }}>
                   <Text style={styles.cardTitle}>{space.displayName}</Text>
                   {!!space.genreCategory && <Text style={styles.genreBadge}>{space.genreCategory}</Text>}
+                  {!!milesAway(space) && <Text style={styles.distanceText}>{milesAway(space)}</Text>}
                 </View>
               </View>
 
@@ -232,6 +338,20 @@ const styles = StyleSheet.create({
     marginBottom: 24,
   },
   loading: { marginVertical: 24 },
+  searchInput: { ...SpaceStyles.field, ...Type.body, color: Palette.text, marginBottom: 12 },
+  filterRow: { flexDirection: "row", flexWrap: "wrap", gap: 8, marginBottom: 16 },
+  filterChip: {
+    borderWidth: 1,
+    borderColor: Palette.border,
+    borderRadius: 999,
+    paddingVertical: 7,
+    paddingHorizontal: 14,
+  },
+  filterChipActive: { backgroundColor: Palette.accentDim, borderColor: Palette.accentBorder },
+  filterChipText: { ...Type.small, color: Palette.textMuted },
+  filterChipTextActive: { color: Palette.accent, fontWeight: "600" },
+  locationNote: { ...Type.caption, color: Palette.textMuted, marginBottom: 12 },
+  distanceText: { ...Type.caption, color: Palette.textMuted, marginTop: 2 },
   card: { ...SpaceStyles.glassCard, padding: 16, marginBottom: 14 },
   cardHeader: { flexDirection: "row", alignItems: "center", gap: 12, marginBottom: 12 },
   cardTitle: { ...Type.body, fontWeight: "700", color: Palette.text },

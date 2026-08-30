@@ -409,6 +409,10 @@ namespace Backend.Controllers
         // and guarded because it's user-generated content — name is profanity-
         // filtered, genre is allow-listed, and one account is capped so it can't
         // spam the public directory.
+        private static bool ValidClubCoords(double? lat, double? lng) =>
+            lat.HasValue && lng.HasValue && Math.Abs(lat.Value) <= 90 && Math.Abs(lng.Value) <= 180
+            && !(lat.Value == 0 && lng.Value == 0);
+
         [HttpPost("community-clubs")]
         [EnableRateLimiting("write-heavy")]
         public async Task<IActionResult> CreateCommunityClub([FromBody] CreateClubRequest req)
@@ -449,6 +453,11 @@ namespace Backend.Controllers
                 SpaceType = "public_gathering",
                 MaxCapacity = 5000,
                 ScreeningTime = null,
+                // Optional "local club" pin: both coords or neither, and only
+                // plausible ones. Reuses the theater coordinate columns —
+                // clubs never have a theater, so there's no collision.
+                TheaterLatitude = ValidClubCoords(req.Latitude, req.Longitude) ? req.Latitude : null,
+                TheaterLongitude = ValidClubCoords(req.Latitude, req.Longitude) ? req.Longitude : null,
             };
             club.Members.Add(new GroupMember { GroupId = club.Id, Name = cleanHost, UserId = userId, Confirmed = true });
             _db.Groups.Add(club);
@@ -745,7 +754,9 @@ namespace Backend.Controllers
                 .Select(g => new ClubRow(
                     g.Id, g.FilmName, g.SpaceCode, g.GenreCategory,
                     g.Members.Count,
-                    g.Members.Any(m => m.UserId == userId)))
+                    g.Members.Any(m => m.UserId == userId),
+                    g.UserId == userId,
+                    g.TheaterLatitude, g.TheaterLongitude))
                 .ToListAsync();
             var clubs = requested.Count == 0
                 ? allPublicClubs
@@ -843,6 +854,9 @@ namespace Backend.Controllers
                     playedTodayCount = r.playedTodayCount,
                     todayAvgScore = r.todayAvgScore,
                     isJoined = r.isJoined,
+                    isMine = r.club.IsMine,
+                    latitude = r.club.Latitude,
+                    longitude = r.club.Longitude,
                 })
                 .ToList();
 
@@ -1929,7 +1943,7 @@ namespace Backend.Controllers
 
     // Anyone-can-create community club: just a name + genre. HostName is the
     // creator's display name for the "created by" label (falls back if blank).
-    public record CreateClubRequest(string Name, string? GenreCategory, string? HostName);
+    public record CreateClubRequest(string Name, string? GenreCategory, string? HostName, double? Latitude, double? Longitude);
 
     // Match mode: the movie you want to see. ImdbId when picked from search
     // (exact match key), PosterPath for the group card, HostName for membership.
@@ -1983,6 +1997,6 @@ namespace Backend.Controllers
 
     // Slim projection DiscoverCommunitySpaces reads instead of whole Groups
     // with their member lists.
-    public record ClubRow(Guid Id, string DisplayName, string? SpaceCode, string? GenreCategory, int MemberCount, bool IsJoined);
+    public record ClubRow(Guid Id, string DisplayName, string? SpaceCode, string? GenreCategory, int MemberCount, bool IsJoined, bool IsMine, double? Latitude, double? Longitude);
     public record TransferOwnershipRequest(string NewHostUserId);
 }
