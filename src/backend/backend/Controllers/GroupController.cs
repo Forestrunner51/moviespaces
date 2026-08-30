@@ -1205,12 +1205,18 @@ namespace Backend.Controllers
                 // event does). They have their own discovery path instead:
                 // GET community-spaces/discover, surfaced via Home's "My
                 // Community Clubs" and Explore's "Browse Community Clubs".
+                // Movie Crews are the exception: they're IsPublic (evergreen
+                // until their showtime) but they ARE a real time/place plan,
+                // and "Bob's crew for Dune 3 · Sat 7:30" is exactly what this
+                // person-led feed exists to show. The ScreeningTime filter
+                // below keeps still-forming crews with no showing set out of
+                // the feed (they'd have no when/where to render).
                 //
                 // create-space.tsx (the only creation path for a real Space)
                 // always sets ScreeningTime now, so a null one here means this
                 // row predates that column and is guaranteed stale — hidden
                 // rather than showing an already-past Space forever.
-                .Where(g => !g.IsPublic)
+                .Where(g => !g.IsPublic || g.MatchMovieKey != null)
                 .Where(g => g.ScreeningTime != null && g.ScreeningTime >= DateTime.UtcNow)
                 // Capacity guard — don't surface a Space nobody can actually
                 // join anymore. MaxCapacity always has a value (defaults to
