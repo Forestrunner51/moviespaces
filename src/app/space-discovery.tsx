@@ -1,4 +1,4 @@
-import { useCallback, useEffect, useMemo, useState } from "react";
+import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import {
   View,
   StyleSheet,
@@ -17,7 +17,7 @@ import { authFetch } from "@/frontend/services/api";
 import { formatEventDate } from "@/frontend/utils/event-date";
 import { completeOnboarding } from "@/frontend/services/onboarding";
 import { getDeviceLocation, type Coordinates } from "@/frontend/services/nearby-theaters";
-import { distanceMiles } from "@/frontend/utils/distance";
+import { distanceMiles, formatMilesAway } from "@/frontend/utils/distance";
 
 interface DiscoverSpace {
   id: string;
@@ -32,6 +32,23 @@ interface DiscoverSpace {
   isMine: boolean;
   latitude: number | null;
   longitude: number | null;
+}
+
+// One haversine per row, computed once then sorted — not per comparison.
+function milesFrom(
+  coords: Coordinates,
+  lat: number | null,
+  lng: number | null,
+): number | null {
+  return lat != null && lng != null
+    ? distanceMiles(coords.latitude, coords.longitude, lat, lng)
+    : null;
+}
+function sortByDistance<T>(list: T[], miles: (item: T) => number | null): T[] {
+  return list
+    .map((item) => ({ item, d: miles(item) ?? Number.POSITIVE_INFINITY }))
+    .sort((a, b) => a.d - b.d)
+    .map((x) => x.item);
 }
 
 // Browse filters. "Near me" needs a device fix; clubs without a pin sort
@@ -106,12 +123,18 @@ export default function SpaceDiscoveryScreen() {
   const [locating, setLocating] = useState(false);
   const [locationFailed, setLocationFailed] = useState(false);
 
+  // Guards the async location fetch: bouncing off and back onto "Near me"
+  // while a slow fix is pending must not let the first request's failure
+  // stomp the second one's status.
+  const locateSeq = useRef(0);
   const pickFilter = useCallback(async (next: ClubFilter) => {
     setFilter(next);
     if (next !== "near" || coords) return;
+    const seq = ++locateSeq.current;
     setLocating(true);
     setLocationFailed(false);
     const loc = await getDeviceLocation();
+    if (seq !== locateSeq.current) return;
     setCoords(loc);
     setLocationFailed(!loc);
     setLocating(false);
@@ -127,14 +150,11 @@ export default function SpaceDiscoveryScreen() {
           (s.genreCategory ?? "").toLowerCase().includes(q),
       );
     }
+    if (filter === "crews") return []; // crews-only view — the crews section carries it
     if (filter === "joined") list = list.filter((s) => s.isJoined);
     if (filter === "mine") list = list.filter((s) => s.isMine);
     if (filter === "near" && coords) {
-      const dist = (s: DiscoverSpace) =>
-        s.latitude != null && s.longitude != null
-          ? distanceMiles(coords.latitude, coords.longitude, s.latitude, s.longitude)
-          : Number.POSITIVE_INFINITY;
-      list = [...list].sort((a, b) => dist(a) - dist(b));
+      list = sortByDistance(list, (s) => milesFrom(coords, s.latitude, s.longitude));
     }
     return list;
   }, [spaces, search, filter, coords]);
@@ -152,31 +172,22 @@ export default function SpaceDiscoveryScreen() {
     }
     if (filter === "joined") list = list.filter((c) => c.alreadyIn);
     if (filter === "near" && coords) {
-      const dist = (c: OpenCrew) =>
-        c.theaterLatitude != null && c.theaterLongitude != null
-          ? distanceMiles(coords.latitude, coords.longitude, c.theaterLatitude, c.theaterLongitude)
-          : Number.POSITIVE_INFINITY;
-      list = [...list].sort((a, b) => dist(a) - dist(b));
+      list = sortByDistance(list, (c) => milesFrom(coords, c.theaterLatitude, c.theaterLongitude));
     }
     return list;
   }, [crews, search, filter, coords]);
 
   const crewMilesAway = useCallback(
-    (c: OpenCrew): string | null => {
-      if (!coords || c.theaterLatitude == null || c.theaterLongitude == null) return null;
-      const mi = distanceMiles(coords.latitude, coords.longitude, c.theaterLatitude, c.theaterLongitude);
-      if (mi > 500) return null;
-      return mi < 1 ? "under a mile" : `~${Math.round(mi)} mi`;
-    },
+    (c: OpenCrew): string | null =>
+      coords ? formatMilesAway(milesFrom(coords, c.theaterLatitude, c.theaterLongitude)) : null,
     [coords],
   );
 
   const milesAway = useCallback(
     (space: DiscoverSpace): string | null => {
-      if (!coords || space.latitude == null || space.longitude == null) return null;
-      const mi = distanceMiles(coords.latitude, coords.longitude, space.latitude, space.longitude);
-      if (mi > 500) return null; // a pin on another coast reads as noise
-      return mi < 1 ? "under a mile away" : `~${Math.round(mi)} mi away`;
+      if (!coords) return null;
+      const label = formatMilesAway(milesFrom(coords, space.latitude, space.longitude));
+      return label ? `${label} away` : null;
     },
     [coords],
   );

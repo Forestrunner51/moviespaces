@@ -117,7 +117,9 @@ function FeedCard({ space }: { space: NearbySpace }) {
             {eventDate.date}
             {eventDate.time ? ` · ${eventDate.time}` : ""}
             {space.cinemaName ? ` · ${space.cinemaName}` : ""}
-            {isCrew ? ` · ${members.length} of ${space.maxCapacity} seats` : ""}
+            {isCrew
+              ? ` · ${members.filter((m) => m.confirmed).length} of ${space.maxCapacity} seats`
+              : ""}
           </Text>
         </View>
         {!!eventDate.relative && (

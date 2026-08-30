@@ -513,17 +513,17 @@ namespace Backend.Controllers
             var userId = GetUserId();
             if (string.IsNullOrEmpty(userId)) return Unauthorized(new { error = "Unauthorized" });
             var now = DateTime.UtcNow;
+            // Joinability is part of the WHERE, not applied after Take(100) —
+            // otherwise full crews eat the row budget and joinable ones past
+            // it vanish. Counts are projected in SQL; member rows never load.
             var crews = await _db.Groups
                 .AsNoTracking()
-                .Include(g => g.Members)
                 .Where(g => g.MatchMovieKey != null
                     && g.Status != "cancelled"
-                    && (g.ScreeningTime == null || g.ScreeningTime > now))
+                    && (g.ScreeningTime == null || g.ScreeningTime > now)
+                    && (g.Members.Count < g.MaxCapacity || g.Members.Any(m => m.UserId == userId)))
                 .OrderBy(g => g.ScreeningTime ?? DateTime.MaxValue)
                 .Take(100)
-                .ToListAsync();
-            return Ok(crews
-                .Where(g => g.Members.Count < g.MaxCapacity || g.Members.Any(m => m.UserId == userId))
                 .Select(g => new
                 {
                     id = g.Id,
@@ -539,7 +539,9 @@ namespace Backend.Controllers
                     memberCount = g.Members.Count,
                     maxCapacity = g.MaxCapacity,
                     alreadyIn = g.Members.Any(m => m.UserId == userId),
-                }));
+                })
+                .ToListAsync();
+            return Ok(crews);
         }
 
         // GET /api/group/match/open?kind=theater&imdbId=tt123&title=...
@@ -1342,7 +1344,12 @@ namespace Backend.Controllers
                 GroupId = id,
                 Name = _profanityFilter.CleanOrFallback(req.Name, "A Movie Fan"),
                 UserId = userId,
-                Confirmed = false
+                // Taking a crew seat IS the commitment — SeatInCrewAsync and
+                // the open feed's Confirmed-count capacity guard both treat it
+                // that way, so an unconfirmed crew member would let a "full"
+                // crew keep passing the guard (and Home show 7 of 6 seats).
+                // Hosted Spaces keep the explicit confirm step.
+                Confirmed = group.MatchMovieKey != null
             };
 
             _db.GroupMembers.Add(member);

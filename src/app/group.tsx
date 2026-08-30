@@ -636,6 +636,24 @@ export default function GroupScreen() {
       setSaving(false);
       return;
     }
+    // Clubs render a name-only edit form — the venue/date/capacity
+    // validation below would demand fields a club neither has nor shows.
+    if (isClub) {
+      if (!editFilmName.trim()) {
+        showToast("The club needs a name.");
+        return;
+      }
+      setSaving(true);
+      const okClub = await runGroupAction("/edit", {
+        body: JSON.stringify({ filmName: editFilmName.trim() }),
+      });
+      if (okClub) {
+        await fetchGroup();
+        setEditModalVisible(false);
+      }
+      setSaving(false);
+      return;
+    }
     if ((!isCrew && !editFilmName.trim()) || !editCinemaName.trim()) {
       showToast(isCrew ? "Venue can't be blank." : "Title and venue can't be blank.");
       return;
