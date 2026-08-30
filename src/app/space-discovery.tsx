@@ -14,6 +14,7 @@ import { MoviePoster } from "@/frontend/components/movie-poster";
 import { SpaceStyles, Palette, Type, Display, Radius } from "@/frontend/constants/theme";
 import { useToast } from "@/frontend/components/toast";
 import { authFetch } from "@/frontend/services/api";
+import { formatEventDate } from "@/frontend/utils/event-date";
 import { completeOnboarding } from "@/frontend/services/onboarding";
 import { getDeviceLocation, type Coordinates } from "@/frontend/services/nearby-theaters";
 import { distanceMiles } from "@/frontend/utils/distance";
@@ -36,13 +37,33 @@ interface DiscoverSpace {
 // Browse filters. "Near me" needs a device fix; clubs without a pin sort
 // after the pinned ones rather than disappearing (a global club is still
 // joinable from anywhere — location is a boost, not a gate).
-type ClubFilter = "all" | "near" | "joined" | "mine";
+type ClubFilter = "all" | "crews" | "near" | "joined" | "mine";
 const FILTERS: { key: ClubFilter; label: string }[] = [
   { key: "all", label: "All" },
+  { key: "crews", label: "Crews" },
   { key: "near", label: "Near me" },
   { key: "joined", label: "Joined" },
   { key: "mine", label: "Mine" },
 ];
+
+// Shape returned by GET /api/group/crews/open — a live Movie Crew still
+// taking members. Listed here so clubs and crews share one searchable pool
+// instead of crews being reachable only through the match flow.
+interface OpenCrew {
+  id: string;
+  filmName: string;
+  posterPath: string | null;
+  spaceType: string;
+  cinemaName: string | null;
+  showDate: string | null;
+  showTime: string | null;
+  screeningTime: string | null;
+  theaterLatitude: number | null;
+  theaterLongitude: number | null;
+  memberCount: number;
+  maxCapacity: number;
+  alreadyIn: boolean;
+}
 
 // Icons rather than emoji — see event-categories.ts for the reasoning.
 const ICON_BY_GENRE: Record<string, keyof typeof Ionicons.glyphMap> = {
@@ -74,6 +95,7 @@ export default function SpaceDiscoveryScreen() {
   // this flag, so everywhere else gets a back button instead of "Continue".
   const isOnboarding = onboarding === "1";
   const [spaces, setSpaces] = useState<DiscoverSpace[]>([]);
+  const [crews, setCrews] = useState<OpenCrew[]>([]);
   const [loading, setLoading] = useState(true);
   const [errorText, setErrorText] = useState<string | null>(null);
   const [joiningId, setJoiningId] = useState<string | null>(null);
@@ -117,6 +139,38 @@ export default function SpaceDiscoveryScreen() {
     return list;
   }, [spaces, search, filter, coords]);
 
+  const visibleCrews = useMemo(() => {
+    if (filter === "mine") return []; // creator isn't tracked on the row
+    const q = search.trim().toLowerCase();
+    let list = crews;
+    if (q) {
+      list = list.filter(
+        (c) =>
+          c.filmName.toLowerCase().includes(q) ||
+          (c.cinemaName ?? "").toLowerCase().includes(q),
+      );
+    }
+    if (filter === "joined") list = list.filter((c) => c.alreadyIn);
+    if (filter === "near" && coords) {
+      const dist = (c: OpenCrew) =>
+        c.theaterLatitude != null && c.theaterLongitude != null
+          ? distanceMiles(coords.latitude, coords.longitude, c.theaterLatitude, c.theaterLongitude)
+          : Number.POSITIVE_INFINITY;
+      list = [...list].sort((a, b) => dist(a) - dist(b));
+    }
+    return list;
+  }, [crews, search, filter, coords]);
+
+  const crewMilesAway = useCallback(
+    (c: OpenCrew): string | null => {
+      if (!coords || c.theaterLatitude == null || c.theaterLongitude == null) return null;
+      const mi = distanceMiles(coords.latitude, coords.longitude, c.theaterLatitude, c.theaterLongitude);
+      if (mi > 500) return null;
+      return mi < 1 ? "under a mile" : `~${Math.round(mi)} mi`;
+    },
+    [coords],
+  );
+
   const milesAway = useCallback(
     (space: DiscoverSpace): string | null => {
       if (!coords || space.latitude == null || space.longitude == null) return null;
@@ -138,6 +192,16 @@ export default function SpaceDiscoveryScreen() {
       if (!res.ok) throw new Error(`Couldn't load Spaces (${res.status}).`);
       const data = await res.json();
       setSpaces(data.spaces ?? []);
+      // Crews are additive to this screen — if the endpoint fails the club
+      // browse still works, so it never throws the whole page into an error.
+      try {
+        const crewRes = await authFetch(
+          `${process.env.EXPO_PUBLIC_API_URL}/api/group/crews/open`,
+        );
+        setCrews(crewRes.ok ? await crewRes.json() : []);
+      } catch {
+        setCrews([]);
+      }
     } catch (err: any) {
       setErrorText(err?.message || "Couldn't load Community Spaces.");
     } finally {
@@ -238,7 +302,7 @@ export default function SpaceDiscoveryScreen() {
           </View>
         )}
 
-        {!loading && !errorText && visibleSpaces.length === 0 && (
+        {!loading && !errorText && visibleSpaces.length === 0 && visibleCrews.length === 0 && (
           <View style={styles.card}>
             <Text style={styles.emptyText}>
               {spaces.length === 0
@@ -250,6 +314,45 @@ export default function SpaceDiscoveryScreen() {
                     : "No clubs match that search."}
             </Text>
           </View>
+        )}
+
+        {!loading && visibleCrews.length > 0 && filter !== "mine" && (
+          <>
+            <Text style={styles.groupHeader}>CREWS FORMING</Text>
+            {visibleCrews.map((crew) => {
+              const when = formatEventDate(crew.screeningTime, crew.showDate ?? "", crew.showTime ?? "");
+              const dist = crewMilesAway(crew);
+              return (
+                <TouchableOpacity
+                  key={crew.id}
+                  activeOpacity={0.85}
+                  style={styles.card}
+                  onPress={() => router.push({ pathname: "/group", params: { groupId: crew.id } })}
+                  accessibilityRole="button"
+                  accessibilityLabel={`View crew for ${crew.filmName}`}
+                >
+                  <View style={styles.cardHeader}>
+                    <MoviePoster uri={crew.posterPath} width={44} fallbackIcon="film-outline" />
+                    <View style={{ flex: 1 }}>
+                      <Text style={styles.cardTitle}>{crew.filmName}</Text>
+                      <Text style={styles.crewMeta} numberOfLines={1}>
+                        {crew.spaceType === "private_rental" ? "Watch party" : crew.cinemaName || "Theater TBD"}
+                        {when.date ? ` · ${when.date}` : ""}
+                        {when.time ? ` ${when.time}` : ""}
+                        {dist ? ` · ${dist}` : ""}
+                      </Text>
+                    </View>
+                    <View style={styles.crewSeatsPill}>
+                      <Text style={styles.crewSeatsPillText}>
+                        {crew.alreadyIn ? "You're in" : `${crew.memberCount} of ${crew.maxCapacity}`}
+                      </Text>
+                    </View>
+                  </View>
+                </TouchableOpacity>
+              );
+            })}
+            {visibleSpaces.length > 0 && <Text style={styles.groupHeader}>COMMUNITY CLUBS</Text>}
+          </>
         )}
 
         {!loading &&
@@ -352,6 +455,24 @@ const styles = StyleSheet.create({
   filterChipTextActive: { color: Palette.accent, fontWeight: "600" },
   locationNote: { ...Type.caption, color: Palette.textMuted, marginBottom: 12 },
   distanceText: { ...Type.caption, color: Palette.textMuted, marginTop: 2 },
+  groupHeader: {
+    ...Type.caption,
+    fontWeight: "700",
+    letterSpacing: 1,
+    color: Palette.textFaint,
+    marginBottom: 10,
+    marginTop: 4,
+  },
+  crewMeta: { ...Type.caption, color: Palette.textMuted, marginTop: 2 },
+  crewSeatsPill: {
+    borderWidth: 1,
+    borderColor: Palette.accentBorder,
+    backgroundColor: Palette.accentDim,
+    borderRadius: 999,
+    paddingVertical: 5,
+    paddingHorizontal: 10,
+  },
+  crewSeatsPillText: { ...Type.caption, color: Palette.accent, fontWeight: "700" },
   card: { ...SpaceStyles.glassCard, padding: 16, marginBottom: 14 },
   cardHeader: { flexDirection: "row", alignItems: "center", gap: 12, marginBottom: 12 },
   cardTitle: { ...Type.body, fontWeight: "700", color: Palette.text },

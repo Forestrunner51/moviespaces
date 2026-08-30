@@ -502,6 +502,46 @@ namespace Backend.Controllers
                 .ToListAsync();
         }
 
+        // GET /api/group/crews/open — every live, joinable crew, film-agnostic.
+        // match/open answers "who's forming for THIS film"; this answers the
+        // browse question ("what crews are forming at all"), so Discover can
+        // list crews next to Community Clubs instead of crews being reachable
+        // only by re-picking the exact film in the match flow.
+        [HttpGet("crews/open")]
+        public async Task<IActionResult> OpenCrews()
+        {
+            var userId = GetUserId();
+            if (string.IsNullOrEmpty(userId)) return Unauthorized(new { error = "Unauthorized" });
+            var now = DateTime.UtcNow;
+            var crews = await _db.Groups
+                .AsNoTracking()
+                .Include(g => g.Members)
+                .Where(g => g.MatchMovieKey != null
+                    && g.Status != "cancelled"
+                    && (g.ScreeningTime == null || g.ScreeningTime > now))
+                .OrderBy(g => g.ScreeningTime ?? DateTime.MaxValue)
+                .Take(100)
+                .ToListAsync();
+            return Ok(crews
+                .Where(g => g.Members.Count < g.MaxCapacity || g.Members.Any(m => m.UserId == userId))
+                .Select(g => new
+                {
+                    id = g.Id,
+                    filmName = g.FilmName,
+                    posterPath = g.PosterPath,
+                    spaceType = g.SpaceType,
+                    cinemaName = g.CinemaName,
+                    showDate = g.ShowDate,
+                    showTime = g.ShowTime,
+                    screeningTime = g.ScreeningTime,
+                    theaterLatitude = g.TheaterLatitude,
+                    theaterLongitude = g.TheaterLongitude,
+                    memberCount = g.Members.Count,
+                    maxCapacity = g.MaxCapacity,
+                    alreadyIn = g.Members.Any(m => m.UserId == userId),
+                }));
+        }
+
         // GET /api/group/match/open?kind=theater&imdbId=tt123&title=...
         // Crews already forming for a film, so the match screen can offer
         // "join this one" before asking someone to pick their own showing.
