@@ -883,6 +883,11 @@ export default function GroupScreen() {
   // A crew has no real host — whoever tapped first — so any seated member
   // can set the where/when (the backend's EditGroup allows the same).
   const isCrew = !!group.matchMovieKey;
+  // A Community Club (seeded genre club or user-created): evergreen, public,
+  // carries a genre, never a showing. It's a place to find people — so the
+  // event furniture (showtime, tickets, calendar, hangout-after, booking)
+  // stays off and the screen is members + chat + invite.
+  const isClub = group.isPublic && !group.matchMovieKey && !!group.genreCategory;
   const canEdit = isHost || (isCrew && isMember);
   const crewHasPlan = !!group.screeningTime || !!group.cinemaName;
   // Legacy Spaces predate the screeningTime column and have no exact event
@@ -1042,7 +1047,7 @@ export default function GroupScreen() {
         {/* Everyone buys their own ticket at a theater event, hosted or
             crew — same self-reported flag either way. The crew card has its
             own copy of this; hosted Spaces get it here. */}
-        {!isCrew && isMember && group.spaceType === "public_gathering" && !hasPassed && (
+        {!isCrew && !isClub && isMember && group.spaceType === "public_gathering" && !hasPassed && (
           <TouchableOpacity
             activeOpacity={0.8}
             style={[styles.ticketToggle, styles.ticketToggleStandalone, myMember?.hasTicket && styles.ticketToggleOn]}
@@ -1168,7 +1173,7 @@ export default function GroupScreen() {
         {/* When/where, given the weight it deserves. This is an events app —
             the date used to render at 13px underneath the venue, smaller than
             the venue name itself. */}
-        {!(isCrew && !crewHasPlan) && (
+        {!isClub && !(isCrew && !crewHasPlan) && (
           <View style={styles.whenWhere}>
             {/* Date, time and the relative label share one baseline so they read
                 as a single fact. Previously they were three stacked lines at
@@ -1191,7 +1196,7 @@ export default function GroupScreen() {
           </View>
         )}
 
-        {!(isCrew && !crewHasPlan) && (
+        {!isClub && !(isCrew && !crewHasPlan) && (
         <View style={styles.manualRow}>
           <Text style={styles.manualBadge}>
             {isCrew ? "Showtime set by the crew" : "Showtime set by the host"}
@@ -1210,7 +1215,7 @@ export default function GroupScreen() {
           )}
         </View>
         )}
-        {group.showtimeReportCount > 0 && (
+        {!isClub && group.showtimeReportCount > 0 && (
           <Text style={styles.reportCountText}>
             Flagged by {group.showtimeReportCount} member
             {group.showtimeReportCount === 1 ? "" : "s"} as possibly outdated
@@ -1229,7 +1234,8 @@ export default function GroupScreen() {
             votes (CreateGroup), so this replaced the old host-declared
             badge list with the same chips everywhere: counts for everyone,
             your own picks highlighted, tap to toggle if you're a member. */}
-        {(isMember || groupMembers.some((m) => myAfterSet(m).size > 0) || !!group.hangoutNotes) &&
+        {!isClub &&
+          (isMember || groupMembers.some((m) => myAfterSet(m).size > 0) || !!group.hangoutNotes) &&
           group.status !== "cancelled" && (
             <View style={styles.hangoutCapsule}>
               <View style={styles.hangoutCapsuleHeader}>
@@ -1521,11 +1527,11 @@ export default function GroupScreen() {
             />
           )}
 
-          {(isHost || isMember) && group.spaceType === "public_gathering" && !hasPassed && (
+          {(isHost || isMember) && !isClub && group.spaceType === "public_gathering" && !hasPassed && (
             <QuickAction icon="ticket-outline" label="Tickets" onPress={handleGetTickets} />
           )}
 
-          {(isHost || isMember) && !hasPassed && (
+          {(isHost || isMember) && !isClub && !hasPassed && (
             <QuickAction
               icon="calendar-outline"
               label="Calendar"
@@ -1541,7 +1547,7 @@ export default function GroupScreen() {
 
         {/* Crews: everyone buys their own ticket, so there's no group
             booking to mark — the ticket toggle is the signal. */}
-        {isHost && !isCrew && group.status !== "booked" && !hasPassed && (
+        {isHost && !isCrew && !isClub && group.status !== "booked" && !hasPassed && (
           <ActionButton
             icon={allConfirmed ? "checkmark-circle-outline" : "hourglass-outline"}
             label={
@@ -1556,7 +1562,7 @@ export default function GroupScreen() {
           />
         )}
 
-        {isHost && !isCrew && group.status === "booked" && !hasPassed && (
+        {isHost && !isCrew && !isClub && group.status === "booked" && !hasPassed && (
           <ActionButton
             icon="arrow-undo-outline"
             label="Unbook (Revert to Pending)"
@@ -1610,7 +1616,7 @@ export default function GroupScreen() {
                 maxLength={200}
               />
             )}
-            {isTheaterCrewOf(group) ? (
+            {isClub ? null : isTheaterCrewOf(group) ? (
               // The crew's showing is real data: show the picker landed on
               // its theater and day with this film's times, not a venue
               // text box. Everyone is pushed when it changes (EditGroup).

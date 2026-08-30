@@ -33,6 +33,7 @@ interface ProfileData {
   joinedAt: string | null;
   theaterMemberships: string[];
   favoriteMovies: { imdbId: string; title: string; posterPath: string | null }[];
+  leastFavoriteMovies: { imdbId: string; title: string; posterPath: string | null }[];
 }
 
 interface MySpace {
@@ -106,7 +107,7 @@ export default function ProfileScreen() {
 
     const { data: row } = await supabase
       .from("profiles")
-      .select("display_name, avatar_url, created_at, theater_memberships, username, favorite_movies")
+      .select("display_name, avatar_url, created_at, theater_memberships, username, favorite_movies, least_favorite_movies")
       .eq("id", user.id)
       .maybeSingle();
 
@@ -120,6 +121,7 @@ export default function ProfileScreen() {
       displayName,
       username: row?.username ?? null,
       favoriteMovies: Array.isArray(row?.favorite_movies) ? row.favorite_movies : [],
+      leastFavoriteMovies: Array.isArray(row?.least_favorite_movies) ? row.least_favorite_movies : [],
       avatarUrl: row?.avatar_url ?? null,
       email: user.email ?? null,
       joinedAt: row?.created_at || user.created_at || null,
@@ -478,6 +480,18 @@ export default function ProfileScreen() {
           </View>
         )}
 
+        {/* The other half of the taste step — "three you couldn't stand".
+            Same row treatment: hating Morbius is as much identity as loving
+            Heat. */}
+        {!editing && profile && profile.leastFavoriteMovies.length > 0 && (
+          <View style={styles.topThreeRow}>
+            <Text style={[styles.topThreeLabel, styles.bottomThreeLabel]}>BOTTOM 3</Text>
+            {profile.leastFavoriteMovies.slice(0, 3).map((m) => (
+              <MoviePoster key={m.imdbId} uri={m.posterPath} width={52} />
+            ))}
+          </View>
+        )}
+
         {/* Identity in numbers — what Strava's totals and Kaya's send count do
             for a profile. Films seen = Spaces that have passed; crews = Movie
             Crews joined; streak = CineMind. */}
@@ -583,6 +597,7 @@ const styles = StyleSheet.create({
     marginBottom: 12,
   },
   topThreeLabel: { ...Display.section, fontSize: 14, lineHeight: 17, color: Palette.textFaint, marginRight: 4 },
+  bottomThreeLabel: { color: Palette.danger },
   statRow: {
     ...SpaceStyles.glassCard,
     flexDirection: "row",
