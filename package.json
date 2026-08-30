@@ -61,7 +61,8 @@
     "lint": "expo lint",
     "test": "dotnet test src/backend/Moviespaces.slnx",
     "check": "npx tsc --noEmit && npm run lint && npm test",
-    "dev": "expo start --clear --tunnel --port 8082"
+    "dev": "expo start --clear --tunnel --port 8082",
+    "ship": "eas build --platform ios --profile production --local --output ./build-local.ipa && eas submit --platform ios --path ./build-local.ipa"
   },
   "private": true
 }
