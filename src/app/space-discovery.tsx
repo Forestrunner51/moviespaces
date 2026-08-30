@@ -311,14 +311,37 @@ export default function SpaceDiscoveryScreen() {
                   ? "You haven't joined a club yet."
                   : filter === "mine"
                     ? "You haven't created a club yet."
-                    : "No clubs match that search."}
+                    : filter === "crews"
+                      ? "No crews forming right now."
+                      : "No clubs match that search."}
             </Text>
+            {filter === "crews" && (
+              <TouchableOpacity
+                activeOpacity={0.85}
+                style={styles.emptyCrewButton}
+                onPress={() => router.push("/match")}
+                accessibilityRole="button"
+              >
+                <Text style={styles.emptyCrewButtonText}>Start one — find a crew</Text>
+              </TouchableOpacity>
+            )}
           </View>
         )}
 
         {!loading && visibleCrews.length > 0 && filter !== "mine" && (
           <>
-            <Text style={styles.groupHeader}>CREWS FORMING</Text>
+            <View style={styles.groupHeaderRow}>
+              <Text style={styles.groupHeader}>CREWS FORMING</Text>
+              <TouchableOpacity
+                activeOpacity={0.8}
+                onPress={() => router.push("/match")}
+                hitSlop={8}
+                accessibilityRole="button"
+                accessibilityLabel="Find a crew"
+              >
+                <Text style={styles.findCrewLink}>+ Find a crew</Text>
+              </TouchableOpacity>
+            </View>
             {visibleCrews.map((crew) => {
               const when = formatEventDate(crew.screeningTime, crew.showDate ?? "", crew.showTime ?? "");
               const dist = crewMilesAway(crew);
@@ -455,6 +478,21 @@ const styles = StyleSheet.create({
   filterChipTextActive: { color: Palette.accent, fontWeight: "600" },
   locationNote: { ...Type.caption, color: Palette.textMuted, marginBottom: 12 },
   distanceText: { ...Type.caption, color: Palette.textMuted, marginTop: 2 },
+  groupHeaderRow: {
+    flexDirection: "row",
+    alignItems: "baseline",
+    justifyContent: "space-between",
+  },
+  findCrewLink: { ...Type.caption, color: Palette.accent, fontWeight: "700" },
+  emptyCrewButton: {
+    alignSelf: "center",
+    marginTop: 12,
+    backgroundColor: Palette.accent,
+    borderRadius: 999,
+    paddingVertical: 10,
+    paddingHorizontal: 18,
+  },
+  emptyCrewButtonText: { ...Type.small, color: Palette.base, fontWeight: "700" },
   groupHeader: {
     ...Type.caption,
     fontWeight: "700",

@@ -1498,6 +1498,19 @@ export default function GroupScreen() {
           </TouchableOpacity>
         )}
 
+        {/* The club's whole job is routing people into real plans — so the
+            match flow gets a first-class button here, not just the FAB. */}
+        {isClub && (
+          <ActionButton
+            icon="people-outline"
+            label="Find a Movie Crew"
+            onPress={() => router.push("/match")}
+            style={styles.joinButton}
+            textStyle={styles.buttonText}
+            iconColor={SpaceTheme.backgroundVoid}
+          />
+        )}
+
         <View style={styles.quickActionsRow}>
           {!hasPassed && (
             <QuickAction icon="share-social-outline" label="Invite" onPress={shareLink} />
