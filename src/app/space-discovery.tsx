@@ -253,9 +253,11 @@ export default function SpaceDiscoveryScreen() {
             <Text style={styles.backButtonText}>Back</Text>
           </TouchableOpacity>
         )}
-        <Text style={styles.title}>Discover Your Cinema Clubs</Text>
+        <Text style={styles.title}>Clubs &amp; Crews</Text>
         <Text style={styles.subtitle}>
-          {genres ? "Matching your picks" : "Every public Community Space"} — join any that look good.
+          {genres
+            ? "Matching your picks — join any that look good."
+            : "Clubs are where you find your people. Crews are real plans — pick one and go."}
         </Text>
 
         <TextInput
