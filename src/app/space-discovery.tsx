@@ -477,7 +477,7 @@ const styles = StyleSheet.create({
     marginBottom: 24,
   },
   loading: { marginVertical: 24 },
-  searchInput: { ...SpaceStyles.field, ...Type.body, color: Palette.text, marginBottom: 12 },
+  searchInput: { ...SpaceStyles.field, ...Type.body, color: Palette.text, padding: 14, marginBottom: 12 },
   filterRow: { flexDirection: "row", flexWrap: "wrap", gap: 8, marginBottom: 16 },
   filterChip: {
     borderWidth: 1,

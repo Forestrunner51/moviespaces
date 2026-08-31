@@ -518,9 +518,15 @@ namespace Backend.Controllers
             // it vanish. Counts are projected in SQL; member rows never load.
             var crews = await _db.Groups
                 .AsNoTracking()
+                // ScreeningTime > now, with NO null allowance: every crew is
+                // created WITH a plan (match flow requires a showing), so a
+                // null ScreeningTime is a stale pre-showing-first row. The
+                // null carve-out made those show in Discover forever while
+                // Home/Explore (which require a real future time) hid them —
+                // ghost crews visible in exactly one place.
                 .Where(g => g.MatchMovieKey != null
                     && g.Status != "cancelled"
-                    && (g.ScreeningTime == null || g.ScreeningTime > now)
+                    && g.ScreeningTime > now
                     && (g.Members.Count < g.MaxCapacity || g.Members.Any(m => m.UserId == userId)))
                 .OrderBy(g => g.ScreeningTime ?? DateTime.MaxValue)
                 .Take(100)
