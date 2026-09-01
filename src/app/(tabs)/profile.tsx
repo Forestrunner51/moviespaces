@@ -596,7 +596,10 @@ const styles = StyleSheet.create({
     padding: 12,
     marginBottom: 12,
   },
-  topThreeLabel: { ...Display.section, fontSize: 14, lineHeight: 17, color: Palette.textFaint, marginRight: 4 },
+  // Fixed width so the poster columns line up between the TOP 3 and
+  // BOTTOM 3 rows — the two labels differ in length, and without this the
+  // posters started at different x positions.
+  topThreeLabel: { ...Display.section, fontSize: 14, lineHeight: 17, color: Palette.textFaint, width: 62 },
   bottomThreeLabel: { color: Palette.danger },
   statRow: {
     ...SpaceStyles.glassCard,

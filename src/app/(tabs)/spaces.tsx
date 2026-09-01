@@ -70,6 +70,9 @@ function SpaceCard({
   past: boolean;
 }) {
   const profiles = useProfiles((item.members ?? []).map((m) => m.userId));
+  // Community Club: evergreen room, not a dated plan — the card leads with
+  // what it IS instead of a blank date/venue that reads like a broken event.
+  const isClub = item.isPublic && !item.matchMovieKey;
   // Relative labels ("Tonight", "In 3 days") read the real current time.
   const eventDate = formatEventDate(item.screeningTime, item.showDate, item.showTime);
 
@@ -88,10 +91,16 @@ function SpaceCard({
         {/* Date leads. On an events list, when it happens is the thing being
             scanned for — it used to sit third, at 12px, under the venue. */}
         <View style={styles.dateRow}>
-          <Text style={styles.dateText}>{eventDate.date}</Text>
-          <Text style={styles.timeText}>{eventDate.time}</Text>
-          {!!eventDate.relative && !past && (
-            <Text style={styles.relativeText}>{eventDate.relative}</Text>
+          {isClub ? (
+            <Text style={styles.clubLead}>COMMUNITY CLUB</Text>
+          ) : (
+            <>
+              <Text style={styles.dateText}>{eventDate.date}</Text>
+              <Text style={styles.timeText}>{eventDate.time}</Text>
+              {!!eventDate.relative && !past && (
+                <Text style={styles.relativeText}>{eventDate.relative}</Text>
+              )}
+            </>
           )}
         </View>
 
@@ -107,7 +116,7 @@ function SpaceCard({
         </View>
 
         <Text style={styles.details} numberOfLines={1}>
-          {item.cinemaName}
+          {isClub ? `${(item.members ?? []).length} members · always open` : item.cinemaName}
         </Text>
 
         <View style={styles.badgeRow}>
@@ -546,6 +555,12 @@ const styles = StyleSheet.create({
   },
   unreadBadgeText: { color: Palette.base, ...Type.caption, fontWeight: "800" },
   badgeRow: { flexDirection: "row", flexWrap: "wrap", gap: 6, marginBottom: 4 },
+  clubLead: {
+    ...Type.caption,
+    fontWeight: "700",
+    letterSpacing: 1.2,
+    color: Palette.accent,
+  },
   categoryBadge: {
     alignSelf: "flex-start",
     paddingHorizontal: 8,

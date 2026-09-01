@@ -30,7 +30,13 @@ export interface Coordinates {
 // anything. The last known fix (usually milliseconds old, from the OS cache)
 // is tried first; a fresh fix races a timeout, after which the caller gets
 // null and its no-location path — the same as a denied permission.
-const LOCATION_TIMEOUT_MS = 6000;
+const LOCATION_TIMEOUT_MS = 10000;
+
+// Last coordinates any call in this session resolved. A cold GPS fix that
+// times out shouldn't strand the user with "no location" when we knew where
+// they were twenty minutes ago — for a 60-mile theater radius and distance
+// sorting, a stale metro-area fix beats null every time.
+let lastGoodCoords: Coordinates | null = null;
 
 function withTimeout<T>(promise: Promise<T>, ms: number): Promise<T> {
   return new Promise<T>((resolve, reject) => {
@@ -53,21 +59,41 @@ export async function getDeviceLocation(): Promise<Coordinates | null> {
     const { status } = await Location.requestForegroundPermissionsAsync();
     if (status !== "granted") return null;
 
+    // Fresh OS-cached fix: instant, and the common case after the first
+    // successful fix of the day.
     const lastKnown = await Location.getLastKnownPositionAsync({
       maxAge: 5 * 60 * 1000,
     }).catch(() => null);
     if (lastKnown) {
-      return { latitude: lastKnown.coords.latitude, longitude: lastKnown.coords.longitude };
+      lastGoodCoords = { latitude: lastKnown.coords.latitude, longitude: lastKnown.coords.longitude };
+      return lastGoodCoords;
     }
 
-    const position = await withTimeout(
-      Location.getCurrentPositionAsync({ accuracy: Location.Accuracy.Balanced }),
-      LOCATION_TIMEOUT_MS,
-    );
-    return { latitude: position.coords.latitude, longitude: position.coords.longitude };
+    try {
+      const position = await withTimeout(
+        Location.getCurrentPositionAsync({ accuracy: Location.Accuracy.Balanced }),
+        LOCATION_TIMEOUT_MS,
+      );
+      lastGoodCoords = { latitude: position.coords.latitude, longitude: position.coords.longitude };
+      return lastGoodCoords;
+    } catch (err) {
+      // Cold fix timed out (typical indoors on the first open of the day).
+      // Degrade through progressively staler-but-real positions instead of
+      // giving up: any OS-cached fix from the last day, then whatever this
+      // session already resolved.
+      console.warn("Fresh location fix failed, falling back to stale:", err);
+      const stale = await Location.getLastKnownPositionAsync({
+        maxAge: 24 * 60 * 60 * 1000,
+      }).catch(() => null);
+      if (stale) {
+        lastGoodCoords = { latitude: stale.coords.latitude, longitude: stale.coords.longitude };
+        return lastGoodCoords;
+      }
+      return lastGoodCoords;
+    }
   } catch (err) {
     console.warn("Failed to get device location:", err);
-    return null;
+    return lastGoodCoords;
   }
 }
 
