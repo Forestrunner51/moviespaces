@@ -1,5 +1,5 @@
 import { useEffect, useRef, useState } from "react";
-import { View, ActivityIndicator, StyleSheet, TouchableOpacity } from "react-native";
+import { View, StyleSheet, TouchableOpacity } from "react-native";
 import { Text } from "@/frontend/components/scaled-text";
 import { FilmLoader } from "@/frontend/components/film-loader";
 import { useLocalSearchParams, router } from "expo-router";

@@ -6,7 +6,6 @@ import {
   TouchableOpacity,
   KeyboardAvoidingView,
   Platform,
-  ActivityIndicator,
   type NativeScrollEvent,
   type NativeSyntheticEvent,
 } from "react-native";
