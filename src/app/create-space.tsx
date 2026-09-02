@@ -27,7 +27,7 @@ import { SpaceStyles, Palette, Type } from "@/frontend/constants/theme";
 import { POST_ACTIVITIES } from "@/frontend/constants/activities";
 import { useFriends } from "@/frontend/hooks/use-friends";
 import { useToast } from "@/frontend/components/toast";
-import { searchMovies, searchTvShows, getNowPlaying, Movie } from "@/frontend/services/movies";
+import { searchMovies, searchTvShows, getNowPlaying, Movie, pickFilmForShowing } from "@/frontend/services/movies";
 import { ShowtimePicker, ShowtimeSelection } from "@/frontend/components/showtime-picker";
 import { useSafeAreaInsets } from "react-native-safe-area-context";
 import {
@@ -512,20 +512,12 @@ export default function CreateSpaceScreen() {
 
     // The scraped showtime gives only a raw title (no IMDb id/year), so resolve
     // the poster by searching OMDb for it. Don't just take the first hit with
-    // art: for a title shared with a more famous film (e.g. "One Night" vs an
-    // Adele concert film) OMDb ranks the famous one first. A film currently in
-    // theaters is a *recent* release, so prefer an exact title match and, among
-    // those, the newest year — which lands on the real theatrical film. Fall
-    // back to the old "first with a poster" only when nothing matches exactly.
+    // art: shared-title and re-release handling lives in pickFilmForShowing
+    // (movies.ts) — see its comment for the ranking rules.
     setPosterPath(null);
     searchMovies(sel.movieTitle)
       .then((outcome) => {
-        const wanted = sel.movieTitle.trim().toLowerCase();
-        const withPoster = outcome.results.filter((r) => r.posterPath);
-        const exact = withPoster.filter((r) => r.title.trim().toLowerCase() === wanted);
-        const pick = (exact.length ? exact : withPoster)
-          .slice()
-          .sort((a, b) => (b.releaseYear ?? 0) - (a.releaseYear ?? 0))[0];
+        const pick = pickFilmForShowing(outcome.results, sel.movieTitle);
         if (pick?.posterPath) setPosterPath(pick.posterPath);
       })
       .catch(() => {});

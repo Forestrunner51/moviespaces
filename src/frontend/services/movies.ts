@@ -27,6 +27,25 @@ function mapResults(results: any[]): Movie[] {
   }));
 }
 
+// Resolve a marquee title (a scraped showtime's bare title, no year or id)
+// to the most plausible film. A title on a marquee is either a current
+// release or a re-release of a famous film, and OMDb's own result order
+// roughly tracks fame — so: exact-title matches released in the current
+// theatrical window first (a remake in theaters now beats the original),
+// otherwise the top exact match in OMDb's order (a "Jaws" re-release is the
+// 1975 film, not whatever same-titled short is newest — sorting by newest
+// year here is how wrong posters happened), otherwise the top result with a
+// poster at all. Callers that need "was this an exact match?" (to trust the
+// imdbId) can compare the pick's title themselves.
+export function pickFilmForShowing(results: Movie[], marqueeTitle: string): Movie | null {
+  const wanted = marqueeTitle.trim().toLowerCase();
+  const withPoster = results.filter((r) => r.posterPath);
+  const exact = withPoster.filter((r) => r.title.trim().toLowerCase() === wanted);
+  const windowStart = new Date().getFullYear() - 1;
+  const current = exact.filter((r) => r.releaseYear != null && r.releaseYear >= windowStart);
+  return current[0] ?? exact[0] ?? withPoster[0] ?? null;
+}
+
 export interface SearchOutcome {
   results: Movie[];
   // Set when OMDb rejected the query itself (e.g. too short/generic) rather
