@@ -60,6 +60,14 @@
   .t b{color:var(--accent);font-weight:700}
   .t .sub{display:block;color:var(--faint);font-size:13px;margin-top:2px}
   .new{display:inline-block;background:var(--accent);color:var(--base);font-size:10px;font-weight:700;letter-spacing:.5px;border-radius:4px;padding:1px 6px;margin-right:6px;vertical-align:2px}
+  .notes{margin-top:40px;background:var(--raised);border:1px solid var(--border);border-radius:14px;padding:18px}
+  .notes h2{margin-bottom:4px}
+  .notes p{color:var(--faint);font-size:13.5px;margin-bottom:10px}
+  .notes textarea{width:100%;min-height:110px;resize:vertical;background:var(--surface);border:1px solid var(--border2);border-radius:10px;color:var(--text);font-family:Karla,sans-serif;font-size:15px;line-height:1.5;padding:12px}
+  .notes textarea:focus{outline:none;border-color:var(--accent-border)}
+  .notes .send{display:inline-flex;align-items:center;gap:8px;margin-top:12px;background:var(--accent);color:var(--base);border:0;border-radius:999px;font-family:Karla;font-weight:700;font-size:15px;padding:12px 22px;cursor:pointer}
+  .notes .send:active{opacity:.85}
+  .notes .inc{color:var(--faint);font-size:12.5px;margin-top:8px}
   footer{margin-top:56px;border-top:1px solid var(--border);padding-top:22px;color:var(--faint);font-size:13.5px}
   footer a{color:var(--muted)}
 </style>
@@ -149,6 +157,14 @@
     <div data-i="g4"><b>Delete a throwaway account</b> → it's really gone, you're signed out</div>
   </section>
 
+  <section class="notes">
+    <h2>Notes for us</h2>
+    <p>Anything you noticed — bugs, confusion, wording, ideas. Tapping send opens your mail app with this note and your progress filled in.</p>
+    <textarea id="note" placeholder="e.g. Step B2 — after Start the group, the celebration card flashed twice&hellip;"></textarea>
+    <button class="send" id="send" type="button">Email this to MovieSpaces &rarr;</button>
+    <div class="inc">Goes to moviespaces.dev@gmail.com from your own mail app — nothing is sent until you hit send there.</div>
+  </section>
+
   <footer>Anything slow, confusing, or ugly is worth an email — where you got stuck is gold. <a href="mailto:support@moviespaces.org">support@moviespaces.org</a> · &copy; 2026 MovieSpaces</footer>
 </div>
 <script>
@@ -194,6 +210,25 @@
     refresh();
   });
   refresh();
+
+  // Notes -> the owner's inbox, via the tester's own mail app. No backend,
+  // nothing sent silently; the draft survives page reloads.
+  var NKEY="ms-beta-note";
+  var note=document.getElementById("note");
+  try{note.value=localStorage.getItem(NKEY)||""}catch(e){}
+  note.addEventListener("input",function(){try{localStorage.setItem(NKEY,note.value)}catch(e){}});
+  document.getElementById("send").addEventListener("click",function(){
+    var n=rows.filter(function(r){return r.classList.contains("on")}).length;
+    var left=rows.filter(function(r){return !r.classList.contains("on")})
+      .map(function(r){return "- "+r.querySelector(".t").textContent.replace(/^NEW/,"").trim().slice(0,80)});
+    var body=(note.value.trim()||"(no note written)")+
+      "\n\n--- checklist: "+n+"/"+rows.length+" done ---";
+    if(left.length&&left.length<=12)body+="\nNot done yet:\n"+left.join("\n");
+    body=body.slice(0,1500);
+    var subject="Beta note ("+n+"/"+rows.length+" flows done)";
+    location.href="mailto:moviespaces.dev@gmail.com?subject="+
+      encodeURIComponent(subject)+"&body="+encodeURIComponent(body);
+  });
 })();
 </script>
 </body>
