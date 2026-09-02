@@ -10,6 +10,7 @@ import {
   KeyboardAvoidingView,
   Platform,
   ActivityIndicator,
+  Linking,
 } from "react-native";
 import { Text, TextInput } from "@/frontend/components/scaled-text";
 import { router } from "expo-router";
@@ -218,6 +219,20 @@ export default function SettingsScreen() {
 
   const appVersion = Constants.expoConfig?.version;
 
+  // Feedback goes through the user's own mail app — the backend has no
+  // outbound email, and a mail draft the user reviews beats a silent form.
+  const handleSendFeedback = async () => {
+    const subject = `MovieSpaces feedback (v${appVersion ?? "?"} · ${Platform.OS})`;
+    const body = "What happened / what did you expect?\n\n\n---\nApp version: " +
+      `${appVersion ?? "unknown"} · ${Platform.OS} ${Platform.Version}`;
+    const url = `mailto:moviespaces.dev@gmail.com?subject=${encodeURIComponent(subject)}&body=${encodeURIComponent(body)}`;
+    try {
+      await Linking.openURL(url);
+    } catch {
+      showToast("Couldn't open your mail app — email us at moviespaces.dev@gmail.com");
+    }
+  };
+
   return (
     <Starfield>
       <ScrollView style={styles.container} contentContainerStyle={styles.content}>
@@ -238,6 +253,24 @@ export default function SettingsScreen() {
               thumbColor={Palette.text}
             />
           </View>
+        </View>
+
+        <Text style={styles.sectionLabel}>FEEDBACK</Text>
+        <View style={styles.card}>
+          <TouchableOpacity
+            activeOpacity={0.7}
+            style={styles.linkRow}
+            onPress={handleSendFeedback}
+            accessibilityRole="button"
+            accessibilityLabel="Send feedback by email"
+          >
+            <View style={styles.rowTextBlock}>
+              <Text style={styles.linkText}>Send Feedback</Text>
+              <Text style={styles.rowSubtitle}>
+                Bugs, ideas, anything — opens an email to us
+              </Text>
+            </View>
+          </TouchableOpacity>
         </View>
 
         <Text style={styles.sectionLabel}>LEGAL</Text>
