@@ -1,0 +1,8 @@
+# Served by Cloudflare Workers static assets. HSTS makes browsers stick to
+# https after the first visit; the http->https redirect itself is the
+# zone-level "Always Use HTTPS" toggle in the Cloudflare dashboard.
+/*
+  Strict-Transport-Security: max-age=31536000; includeSubDomains
+  X-Content-Type-Options: nosniff
+  X-Frame-Options: DENY
+  Referrer-Policy: strict-origin-when-cross-origin
