@@ -6,7 +6,6 @@ import {
   ScrollView,
   StyleSheet,
   TouchableOpacity,
-  ActivityIndicator,
   Share,
   Alert,
   Modal,
@@ -15,6 +14,7 @@ import {
   Linking,
 } from "react-native";
 import { Text, TextInput } from "@/frontend/components/scaled-text";
+import { FilmLoader } from "@/frontend/components/film-loader";
 import { useLocalSearchParams, router } from "expo-router";
 import AsyncStorage from "@react-native-async-storage/async-storage";
 import DateTimePicker from "@react-native-community/datetimepicker";
@@ -855,7 +855,7 @@ export default function GroupScreen() {
   if (loading) {
     return (
       <Starfield>
-        <ActivityIndicator size="large" color={SpaceTheme.glowCyan} style={{ flex: 1 }} />
+        <FilmLoader full />
       </Starfield>
     );
   }

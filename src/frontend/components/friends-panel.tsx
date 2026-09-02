@@ -1,4 +1,4 @@
-import { useRef, useState } from "react";
+import { useEffect, useRef, useState } from "react";
 import {
   View,
   FlatList,
@@ -13,6 +13,10 @@ import { Ionicons } from "@expo/vector-icons";
 import { Avatar } from "@/frontend/components/avatar";
 import { SpaceTheme, SpaceStyles, Palette, Type, Radius, Display } from "@/frontend/constants/theme";
 import { useFriends, Profile } from "@/frontend/hooks/use-friends";
+import { useProfiles } from "@/frontend/hooks/use-profiles";
+import { useBlockedIds } from "@/frontend/hooks/use-blocked-ids";
+import { authFetch } from "@/frontend/services/api";
+import { supabase } from "@/frontend/config/supabase";
 import { blockUser } from "@/frontend/services/moderation";
 import { useToast } from "@/frontend/components/toast";
 
@@ -38,6 +42,63 @@ export function FriendsPanel() {
 
   const friendIds = new Set(friends.map((f) => f.id));
   const sentRequestByUserId = new Map(sentRequests.map((r) => [r.receiver.id, r.id]));
+  // Blocks in both directions (see blocked_peer_ids) — a blocked pair should
+  // never be suggested to each other, in search or in "recently met".
+  const blockedIds = useBlockedIds();
+
+  // People from your most recent crews/Spaces who aren't friends yet — the
+  // person you just watched a movie with is the likeliest next friend, and
+  // hunting them down by name was the only path before.
+  const [recentPeers, setRecentPeers] = useState<
+    { userId: string; name: string; from: string }[]
+  >([]);
+  useEffect(() => {
+    let cancelled = false;
+    (async () => {
+      try {
+        const {
+          data: { user },
+        } = await supabase.auth.getUser();
+        if (!user) return;
+        const res = await authFetch(`${process.env.EXPO_PUBLIC_API_URL}/api/group/mine`);
+        if (!res.ok) return;
+        const groups: {
+          filmName: string;
+          createdAt: string;
+          screeningTime: string | null;
+          members?: { userId: string; name: string }[];
+        }[] = await res.json();
+        const when = (g: (typeof groups)[number]) =>
+          new Date(g.screeningTime ?? g.createdAt).getTime();
+        const seen = new Set<string>([user.id]);
+        const peers: { userId: string; name: string; from: string }[] = [];
+        for (const g of [...groups].sort((a, b) => when(b) - when(a))) {
+          for (const m of g.members ?? []) {
+            if (!m.userId || seen.has(m.userId)) continue;
+            seen.add(m.userId);
+            peers.push({ userId: m.userId, name: m.name, from: g.filmName });
+          }
+          if (peers.length >= 20) break;
+        }
+        if (!cancelled) setRecentPeers(peers);
+      } catch {
+        /* suggestion-only — silence is fine */
+      }
+    })();
+    return () => {
+      cancelled = true;
+    };
+  }, []);
+  const visiblePeers = recentPeers
+    .filter(
+      (p) =>
+        !blockedIds.has(p.userId) &&
+        !friendIds.has(p.userId) &&
+        !sentRequestByUserId.has(p.userId) &&
+        !pendingRequests.some((r) => r.requester.id === p.userId),
+    )
+    .slice(0, 8);
+  const peerProfiles = useProfiles(visiblePeers.map((p) => p.userId));
 
   // The same search box doubles as a live filter over your existing friends
   // — without this, a large friends list has no way to jump to a specific
@@ -176,7 +237,7 @@ export function FriendsPanel() {
       {results.length > 0 && (
         <View style={styles.section}>
           <Text style={styles.sectionLabel}>SEARCH RESULTS</Text>
-          {results.map((user) => (
+          {results.filter((u) => !blockedIds.has(u.id)).map((user) => (
             <View key={user.id} style={styles.row}>
               <Avatar uri={user.avatar_url} name={user.display_name} size={40} />
               <View style={styles.rowTextBlock}>
@@ -211,6 +272,34 @@ export function FriendsPanel() {
                   <Text style={styles.actionButtonText}>Add</Text>
                 </TouchableOpacity>
               )}
+            </View>
+          ))}
+        </View>
+      )}
+
+      {!query.trim() && visiblePeers.length > 0 && (
+        <View style={styles.section}>
+          <Text style={styles.sectionLabel}>RECENTLY MET</Text>
+          {visiblePeers.map((p) => (
+            <View key={p.userId} style={styles.row}>
+              <Avatar uri={peerProfiles.get(p.userId)?.avatarUrl} name={p.name} size={40} />
+              <View style={styles.rowTextBlock}>
+                <Text style={styles.rowText} numberOfLines={1}>
+                  {p.name}
+                </Text>
+                <Text style={styles.rowUsername} numberOfLines={1}>
+                  from {p.from}
+                </Text>
+              </View>
+              <TouchableOpacity
+                activeOpacity={0.8}
+                style={styles.actionButton}
+                hitSlop={8}
+                disabled={busyId === p.userId}
+                onPress={() => runRowAction(p.userId, () => handleAdd(p.userId))}
+              >
+                <Text style={styles.actionButtonText}>Add</Text>
+              </TouchableOpacity>
             </View>
           ))}
         </View>

@@ -7,6 +7,7 @@ import {
   ActivityIndicator,
 } from "react-native";
 import { Text, TextInput } from "@/frontend/components/scaled-text";
+import { FilmLoader } from "@/frontend/components/film-loader";
 import { useLocalSearchParams, router } from "expo-router";
 import { Ionicons } from "@expo/vector-icons";
 import { Starfield } from "@/frontend/components/starfield";
@@ -304,7 +305,7 @@ export default function SpaceDiscoveryScreen() {
           </Text>
         )}
 
-        {loading && <ActivityIndicator color={Palette.accent} style={styles.loading} />}
+        {loading && <FilmLoader style={styles.loading} />}
 
         {errorText && !loading && (
           <View style={styles.card}>

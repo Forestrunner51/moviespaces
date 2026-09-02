@@ -11,6 +11,7 @@ import {
   Keyboard,
 } from "react-native";
 import { Text, TextInput } from "@/frontend/components/scaled-text";
+import { FilmLoader } from "@/frontend/components/film-loader";
 import { router } from "expo-router";
 import { Ionicons } from "@expo/vector-icons";
 import DateTimePicker from "@react-native-community/datetimepicker";
@@ -21,7 +22,7 @@ import { SpaceStyles, Palette, Type, Display, Radius, Font } from "@/frontend/co
 import { useToast } from "@/frontend/components/toast";
 import { authFetch } from "@/frontend/services/api";
 import { resolveDisplayName } from "@/frontend/services/display-name";
-import { searchMovies, Movie } from "@/frontend/services/movies";
+import { searchMovies, Movie, pickFilmForShowing } from "@/frontend/services/movies";
 import { combineDateAndTime, formatEventDate, isPastDateTime } from "@/frontend/utils/event-date";
 import { POST_ACTIVITIES } from "@/frontend/constants/activities";
 import {
@@ -106,12 +107,11 @@ const formatTime = (d: Date) =>
 async function resolveFromShowing(title: string): Promise<PickedMovie> {
   try {
     const outcome = await searchMovies(title);
-    const wanted = title.trim().toLowerCase();
-    const exact = outcome.results.filter((r) => r.title.trim().toLowerCase() === wanted);
-    const pick = (exact.length ? exact : outcome.results.filter((r) => r.posterPath))
-      .slice()
-      .sort((a, b) => (b.releaseYear ?? 0) - (a.releaseYear ?? 0))[0];
-    if (pick) return { title, imdbId: exact.length ? pick.imdbId : "", posterPath: pick.posterPath ?? null };
+    const pick = pickFilmForShowing(outcome.results, title);
+    if (pick) {
+      const isExact = pick.title.trim().toLowerCase() === title.trim().toLowerCase();
+      return { title, imdbId: isExact ? pick.imdbId : "", posterPath: pick.posterPath ?? null };
+    }
   } catch {
     /* offline or OMDb hiccup — proceed with the bare title */
   }
@@ -370,7 +370,7 @@ export default function MatchScreen() {
 
   const crewList = (onStartOwn: () => void, startLabel: string) =>
     crews === null ? (
-      <ActivityIndicator color={Palette.accent} style={{ marginTop: 20 }} />
+      <FilmLoader line="Checking for crews already forming…" style={{ marginTop: 20 }} />
     ) : (
       <>
         {crews.length > 0 && <Text style={styles.stepLabel}>CREWS ALREADY FORMING</Text>}
@@ -469,7 +469,7 @@ export default function MatchScreen() {
             </Text>
             <ScrollView keyboardShouldPersistTaps="handled" contentContainerStyle={{ paddingBottom: 60 }}>
               <ShowtimePicker selection={showtime} onSelect={onShowingPicked} />
-              {resolving && <ActivityIndicator color={Palette.accent} style={{ marginTop: 16 }} />}
+              {resolving && <FilmLoader line="Matching the marquee to the movie…" style={{ marginTop: 16 }} />}
             </ScrollView>
           </>
         )}
@@ -495,6 +495,17 @@ export default function MatchScreen() {
                   <Text style={styles.crumbChange}>Change</Text>
                 </TouchableOpacity>
               </View>
+              {/* The poster is a best guess from a bare marquee title —
+                  same-name films and re-releases can fool it. Let the human
+                  fix it instead of shipping a crew with the wrong art. */}
+              <TouchableOpacity
+                onPress={() => setStage("film")}
+                hitSlop={6}
+                accessibilityRole="button"
+                accessibilityLabel="Wrong film or poster? Pick the film manually"
+              >
+                <Text style={styles.wrongFilmLink}>Wrong film or poster? Pick it manually</Text>
+              </TouchableOpacity>
 
               <TouchableOpacity
                 activeOpacity={0.8}
@@ -911,6 +922,7 @@ const styles = StyleSheet.create({
   crumbs: { flexDirection: "row", alignItems: "center", gap: 6, marginBottom: 10 },
   crumbText: { ...Type.small, fontFamily: Font.semibold, color: Palette.accent, flex: 1 },
   crumbChange: { ...Type.small, color: Palette.textMuted, textDecorationLine: "underline", marginLeft: 6 },
+  wrongFilmLink: { ...Type.caption, color: Palette.textFaint, textDecorationLine: "underline", marginTop: -6, marginBottom: 12 },
   kinds: { gap: 12, marginTop: 4 },
   kindCard: {
     ...SpaceStyles.glassCard,

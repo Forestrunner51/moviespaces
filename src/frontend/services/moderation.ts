@@ -102,6 +102,14 @@ async function fetchBlockedIds(): Promise<ReadonlySet<string>> {
   } = await supabase.auth.getUser();
   if (!user) return EMPTY;
 
+  // Preferred: blocked_peer_ids() returns blocks in BOTH directions (people
+  // I blocked + people who blocked me) so neither side sees the other on
+  // social surfaces. Falls back to my own outgoing blocks if the function
+  // isn't applied yet (it's a hand-run migration).
+  const rpc = await supabase.rpc("blocked_peer_ids");
+  if (!rpc.error) {
+    return new Set(((rpc.data as string[] | null) || []).map(String));
+  }
   const { data, error } = await supabase.from("blocks").select("blocked_id").eq("blocker_id", user.id);
   if (error) {
     console.error("Failed to load blocked users:", error);

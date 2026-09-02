@@ -8,6 +8,7 @@ import {
   ScrollView,
 } from "react-native";
 import { Text } from "@/frontend/components/scaled-text";
+import { FilmLoader } from "@/frontend/components/film-loader";
 import { router, useFocusEffect } from "expo-router";
 import { Ionicons } from "@expo/vector-icons";
 import { Starfield } from "@/frontend/components/starfield";
@@ -438,7 +439,7 @@ export default function HomeScreen() {
           </TouchableOpacity>
         </View>
         {spacesLoading ? (
-          <ActivityIndicator color={Palette.accent} style={styles.sectionLoading} />
+          <FilmLoader style={styles.sectionLoading} />
         ) : spacesError ? (
           <LoadError compact onRetry={retryOpenSpaces} />
         ) : nearbySpaces.length === 0 ? (

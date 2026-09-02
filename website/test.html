@@ -1,0 +1,265 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<meta name="theme-color" content="#16100D">
+<title>MovieSpaces Beta Checklist</title>
+<meta name="robots" content="noindex">
+<link rel="icon" href="/favicon.svg" type="image/svg+xml">
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link href="https://fonts.googleapis.com/css2?family=Bebas+Neue&family=Karla:ital,wght@0,400;0,600;0,700;1,400&display=swap" rel="stylesheet">
+<style>
+  :root{
+    --base:#16100D; --raised:#221913; --surface:#2B201A;
+    --text:#F7F0E8; --muted:#B3A296; --faint:#7D6D61;
+    --accent:#EF8A3C; --positive:#6FBF73;
+    --accent-dim:rgba(239,138,60,.13); --accent-border:rgba(239,138,60,.35);
+    --border:rgba(247,240,232,.10); --border2:rgba(247,240,232,.16);
+  }
+  *{margin:0;padding:0;box-sizing:border-box}
+  body{background:var(--base);color:var(--text);font-family:Karla,system-ui,sans-serif;line-height:1.55}
+  .wrap{max-width:760px;margin:0 auto;padding:0 20px 80px}
+  nav{display:flex;align-items:center;justify-content:space-between;padding:22px 0}
+  .wordmark{font-family:'Bebas Neue',sans-serif;font-size:22px;letter-spacing:4px;color:var(--text);text-decoration:none}
+  .wordmark span{color:var(--accent)}
+  nav a.back{color:var(--muted);text-decoration:none;font-size:15px;font-weight:600}
+  nav a.back:hover{color:var(--accent)}
+  .kicker{font-family:'Bebas Neue',sans-serif;letter-spacing:3px;font-size:14px;color:var(--accent);margin:26px 0 8px}
+  h1{font-size:clamp(30px,6vw,40px);line-height:1.1;letter-spacing:-.5px;margin-bottom:14px}
+  .intro{color:var(--muted);font-size:16px;margin-bottom:10px}
+  .intro b{color:var(--text)}
+  .intro a{color:var(--accent)}
+  .bughow{background:var(--raised);border:1px solid var(--border);border-left:3px solid var(--accent);border-radius:10px;padding:12px 16px;margin:18px 0 8px;color:var(--muted);font-size:14.5px}
+  .bughow b{color:var(--text)}
+
+  .bar{position:sticky;top:0;z-index:5;background:rgba(22,16,13,.94);backdrop-filter:blur(6px);border-bottom:1px solid var(--border);margin:0 -20px;padding:12px 20px}
+  .bar .row{display:flex;align-items:baseline;justify-content:space-between;gap:12px}
+  .bar .count{font-family:'Bebas Neue',sans-serif;font-size:20px;letter-spacing:1px}
+  .bar .count b{color:var(--accent)}
+  .bar .reset{background:none;border:0;color:var(--faint);font-family:Karla;font-size:13px;cursor:pointer;text-decoration:underline}
+  .track{height:6px;background:var(--surface);border-radius:99px;margin-top:8px;overflow:hidden}
+  .fill{height:100%;width:0%;background:var(--accent);border-radius:99px;transition:width .25s}
+  .done-note{display:none;color:var(--positive);font-size:13.5px;margin-top:8px;font-weight:700}
+
+  section{margin-top:34px}
+  h2{font-family:'Bebas Neue',sans-serif;font-weight:400;font-size:24px;letter-spacing:1.5px}
+  .mins{color:var(--faint);font-size:13px;margin-left:8px;font-family:Karla;letter-spacing:0}
+  .hint{color:var(--faint);font-size:13.5px;margin:2px 0 12px}
+  .item{display:flex;gap:12px;align-items:flex-start;background:var(--surface);border:1px solid var(--border);border-radius:12px;padding:13px 14px;margin-bottom:8px;cursor:pointer;-webkit-tap-highlight-color:transparent}
+  .item:hover{border-color:var(--border2)}
+  .item input{position:absolute;opacity:0;pointer-events:none}
+  .box{flex:none;width:22px;height:22px;border-radius:7px;border:2px solid var(--border2);margin-top:1px;display:flex;align-items:center;justify-content:center;transition:all .15s}
+  .box svg{opacity:0;transform:scale(.5);transition:all .15s}
+  .item.on{border-color:var(--accent-border);background:var(--accent-dim)}
+  .item.on .box{background:var(--accent);border-color:var(--accent)}
+  .item.on .box svg{opacity:1;transform:scale(1)}
+  .item.on .t{color:var(--muted)}
+  .t{font-size:15px}
+  .t b{color:var(--accent);font-weight:700}
+  .t .sub{display:block;color:var(--faint);font-size:13px;margin-top:2px}
+  .new{display:inline-block;background:var(--accent);color:var(--base);font-size:10px;font-weight:700;letter-spacing:.5px;border-radius:4px;padding:1px 6px;margin-right:6px;vertical-align:2px}
+  .notes{margin-top:40px;background:var(--raised);border:1px solid var(--border);border-radius:14px;padding:18px}
+  .notes h2{margin-bottom:4px}
+  .notes p{color:var(--faint);font-size:13.5px;margin-bottom:10px}
+  .notes textarea{width:100%;min-height:110px;resize:vertical;background:var(--surface);border:1px solid var(--border2);border-radius:10px;color:var(--text);font-family:Karla,sans-serif;font-size:15px;line-height:1.5;padding:12px}
+  .notes textarea:focus{outline:none;border-color:var(--accent-border)}
+  .notes .send{display:inline-flex;align-items:center;gap:8px;margin-top:12px;background:var(--accent);color:var(--base);border:0;border-radius:999px;font-family:Karla;font-weight:700;font-size:15px;padding:12px 22px;cursor:pointer}
+  .notes .send:active{opacity:.85}
+  .notes .inc{color:var(--faint);font-size:12.5px;margin-top:8px}
+  .notes .contact{width:100%;margin-top:8px;background:var(--surface);border:1px solid var(--border2);border-radius:10px;color:var(--text);font-family:Karla,sans-serif;font-size:14px;padding:10px 12px}
+  .notes .contact:focus{outline:none;border-color:var(--accent-border)}
+  .notes .sent{color:var(--positive);font-weight:700}
+  footer{margin-top:56px;border-top:1px solid var(--border);padding-top:22px;color:var(--faint);font-size:13.5px}
+  footer a{color:var(--muted)}
+</style>
+</head>
+<body>
+<div class="wrap">
+  <nav>
+    <a class="wordmark" href="/">MOVIE<span>SPACES</span></a>
+    <a class="back" href="/">&larr; Home</a>
+  </nav>
+
+  <div class="kicker">BETA · ~30 MINUTES</div>
+  <h1>Help us test MovieSpaces.</h1>
+  <p class="intro">Work through these flows on your phone, in order, and tap each one when it's done. Your checkmarks save on this device so you can stop and come back. A <b>second account</b> (or a friend testing with you) makes the crew, chat, and friend steps real — solo works for everything else.</p>
+  <div class="bughow"><b>Found a bug?</b> Email <a href="mailto:support@moviespaces.org">support@moviespaces.org</a> with <b>which step</b>, <b>what you expected</b>, <b>what happened</b>, and a screenshot. &ldquo;Step C3, poster was for the wrong film, here's a shot&rdquo; beats &ldquo;posters are broken.&rdquo;</div>
+
+  <div class="bar">
+    <div class="row">
+      <div class="count"><b id="done">0</b> / <span id="total">0</span> DONE</div>
+      <button class="reset" id="reset" type="button">reset all</button>
+    </div>
+    <div class="track"><div class="fill" id="fill"></div></div>
+    <div class="done-note" id="doneNote">That's everything — thank you. Email us anything that felt off, even small stuff.</div>
+  </div>
+
+  <section>
+    <h2>A · Getting in <span class="mins">~4 min</span></h2>
+    <div class="hint">Fresh installs are what we most need proven. Allow location + notifications when asked.</div>
+    <div data-i="a1">Sign up with <b>email + password</b> → you land in genre onboarding</div>
+    <div data-i="a2">Pick genres → add <b>Top 3 / Bottom 3 movies</b> — while searching, the keyboard <b>never covers</b> the search box or results</div>
+    <div data-i="a3">Finish onboarding → the Clubs &amp; Crews page → <b>join a club</b></div>
+    <div data-i="a4">Sign out and back in with <b>Apple or Google</b> → your stuff is still there</div>
+  </section>
+
+  <section>
+    <h2>B · Movie Crew <span class="mins">~6 min</span></h2>
+    <div class="hint">The heart of the app — grouping with people going to the same showing.</div>
+    <div data-i="b1">Home → tap the hero (or the <b>Find a crew</b> button) → At a theater → search a film → theaters listed are <b>actually near you</b></div>
+    <div data-i="b2">Pick a showing → <b>Start the group</b> → celebration card → say hi in chat</div>
+    <div data-i="b3"><span class="new">NEW</span>Your crew shows on <b>Home's feed</b> for the second account (&ldquo;___ started a crew for ___ · N of 6 seats&rdquo;) → <b>I'm in</b> joins it</div>
+    <div data-i="b4">Toggle <b>I've got my ticket</b> → green check on your seat, count updates</div>
+    <div data-i="b5">Any member edits the <b>showtime</b> → the other member gets a push naming who moved it; try setting a <b>past time</b> → it's refused</div>
+  </section>
+
+  <section>
+    <h2>C · Clubs &amp; Crews browse <span class="mins">~5 min</span></h2>
+    <div class="hint">Explore tab → Browse Clubs &amp; Crews.</div>
+    <div data-i="c1"><span class="new">NEW</span><b>Search</b> filters clubs and crews as you type; the search box looks normal-sized</div>
+    <div data-i="c2"><span class="new">NEW</span>Tap every chip — <b>All / Crews / Near me / Joined / Mine</b> — each shows what it says (Near me asks for location once)</div>
+    <div data-i="c3"><span class="new">NEW</span><b>Crews forming</b> rows show film, theater, time, seats → tapping one opens the crew</div>
+    <div data-i="c4"><span class="new">NEW</span>Create a club with the <b>Local club</b> toggle ON → it shows under Near me with a distance</div>
+    <div data-i="c5"><span class="new">NEW</span>Open a club → it's <b>chat + members + invite + Find a Movie Crew</b> — no showtime, tickets, or calendar junk; <b>rename it</b> via the pencil and the save works</div>
+    <div data-i="c6"><span class="new">NEW</span>My Spaces → the club card says <b>COMMUNITY CLUB</b> with a member count, not a blank date</div>
+  </section>
+
+  <section>
+    <h2>D · Host a Space <span class="mins">~5 min</span></h2>
+    <div data-i="d1">Create a <b>real screening</b> — film search shows the <b>right posters</b>, showtime picker works</div>
+    <div data-i="d2">Create a <b>Watch Party</b> at a custom venue with a cost → cost splits per confirmed person</div>
+    <div data-i="d3">Second account joins from <b>Explore</b> → confirm, cancel, re-confirm RSVP</div>
+    <div data-i="d4">Host: <b>Add to Calendar</b>, <b>Get Tickets</b>, <b>mark booked</b>, then <b>cancel</b> one Space → members get notified</div>
+    <div data-i="d5">Open a <b>shared Space link</b> while logged out → after login it lands on that Space</div>
+  </section>
+
+  <section>
+    <h2>E · Chat, friends &amp; safety <span class="mins">~5 min</span></h2>
+    <div data-i="e1">Group chat: messages arrive both ways; keyboard never covers Send; scrolling up to read <b>doesn't yank you</b> to the bottom</div>
+    <div data-i="e2">Friend request → accept on the other account → <b>DM works</b>; DMing a non-friend is blocked</div>
+    <div data-i="e3"><span class="new">NEW</span><b>Block</b> the other account → their messages disappear, no more unread badges from them, and they <b>can't re-request</b> you</div>
+    <div data-i="e4"><span class="new">NEW</span>With the app <b>closed</b>, get a chat message → tapping the push opens <b>that exact chat</b></div>
+    <div data-i="e5">Sign out → the phone <b>stops receiving</b> that account's pushes</div>
+  </section>
+
+  <section>
+    <h2>F · CineMind &amp; profile <span class="mins">~5 min</span></h2>
+    <div data-i="f1">Play today's <b>CineMind</b> — all five challenges, get a score + streak, replay is locked</div>
+    <div data-i="f2">Spin <b>Roulette</b> a few times — options feel varied</div>
+    <div data-i="f3"><span class="new">NEW</span>Profile shows your <b>TOP 3 and BOTTOM 3</b> posters, lined up, plus real stat numbers</div>
+    <div data-i="f4">Set a <b>profile photo</b> → it appears in chats and crew seats quickly</div>
+  </section>
+
+  <section>
+    <h2>G · The ugly stuff <span class="mins">~2 min</span></h2>
+    <div data-i="g1">Airplane mode → screens say <b>&ldquo;couldn't load&rdquo; with Retry</b>, not fake-empty &ldquo;nothing here&rdquo;</div>
+    <div data-i="g2">Cold-open the app indoors → showtime picker still finds your location (or offers search-by-name, never a dead spinner)</div>
+    <div data-i="g3">iOS Settings → largest text size → nothing overflows or gets cut off</div>
+    <div data-i="g4"><b>Delete a throwaway account</b> → it's really gone, you're signed out</div>
+  </section>
+
+  <section class="notes">
+    <h2>Notes for us</h2>
+    <p>Anything you noticed — bugs, confusion, wording, ideas. Tapping send opens your mail app with this note and your progress filled in.</p>
+    <textarea id="note" placeholder="e.g. Step B2 — after Start the group, the celebration card flashed twice&hellip;"></textarea>
+    <input id="contact" class="contact" type="text" placeholder="Your name or email (optional, so we can follow up)" autocomplete="off">
+    <input id="website" type="text" tabindex="-1" autocomplete="off" aria-hidden="true" style="position:absolute;left:-9999px" placeholder="website">
+    <button class="send" id="send" type="button">Send to MovieSpaces &rarr;</button>
+    <div class="inc" id="sendNote">Sends straight to the MovieSpaces team (falls back to your mail app if that fails).</div>
+  </section>
+
+  <footer>Anything slow, confusing, or ugly is worth an email — where you got stuck is gold. <a href="mailto:support@moviespaces.org">support@moviespaces.org</a> · &copy; 2026 MovieSpaces</footer>
+</div>
+<script>
+(function(){
+  var KEY="ms-beta-checklist-v1";
+  var saved={};
+  try{saved=JSON.parse(localStorage.getItem(KEY)||"{}")||{}}catch(e){}
+  var rows=[].slice.call(document.querySelectorAll("[data-i]"));
+  var done=document.getElementById("done"),total=document.getElementById("total"),
+      fill=document.getElementById("fill"),note=document.getElementById("doneNote");
+  total.textContent=rows.length;
+  function save(){try{localStorage.setItem(KEY,JSON.stringify(saved))}catch(e){}}
+  function refresh(){
+    var n=rows.filter(function(r){return r.classList.contains("on")}).length;
+    done.textContent=n;
+    fill.style.width=(rows.length?100*n/rows.length:0)+"%";
+    note.style.display=(n===rows.length&&n>0)?"block":"none";
+  }
+  rows.forEach(function(r){
+    var id=r.getAttribute("data-i");
+    r.classList.add("item");
+    var t=document.createElement("span");t.className="t";
+    while(r.firstChild)t.appendChild(r.firstChild);
+    var box=document.createElement("span");box.className="box";
+    box.innerHTML='<svg width="13" height="13" viewBox="0 0 24 24" fill="none"><path d="M4 12.5 9.5 18 20 6.5" stroke="#16100D" stroke-width="3.4" stroke-linecap="round" stroke-linejoin="round"/></svg>';
+    r.appendChild(box);r.appendChild(t);
+    r.setAttribute("role","checkbox");r.setAttribute("tabindex","0");
+    if(saved[id]){r.classList.add("on")}
+    r.setAttribute("aria-checked",r.classList.contains("on")?"true":"false");
+    function toggle(){
+      r.classList.toggle("on");
+      saved[id]=r.classList.contains("on");
+      r.setAttribute("aria-checked",saved[id]?"true":"false");
+      save();refresh();
+    }
+    r.addEventListener("click",toggle);
+    r.addEventListener("keydown",function(e){if(e.key===" "||e.key==="Enter"){e.preventDefault();toggle()}});
+  });
+  document.getElementById("reset").addEventListener("click",function(){
+    if(!confirm("Clear all checkmarks?"))return;
+    saved={};save();
+    rows.forEach(function(r){r.classList.remove("on");r.setAttribute("aria-checked","false")});
+    refresh();
+  });
+  refresh();
+
+  // Notes -> the owner's inbox, via the tester's own mail app. No backend,
+  // nothing sent silently; the draft survives page reloads.
+  var NKEY="ms-beta-note";
+  var note=document.getElementById("note");
+  try{note.value=localStorage.getItem(NKEY)||""}catch(e){}
+  note.addEventListener("input",function(){try{localStorage.setItem(NKEY,note.value)}catch(e){}});
+  var sendBtn=document.getElementById("send"),sendNote=document.getElementById("sendNote");
+  function checklistSummary(){
+    var n=rows.filter(function(r){return r.classList.contains("on")}).length;
+    var left=rows.filter(function(r){return !r.classList.contains("on")})
+      .map(function(r){return "- "+r.querySelector(".t").textContent.replace(/^NEW/,"").trim().slice(0,80)});
+    var out=n+"/"+rows.length+" done";
+    if(left.length&&left.length<=12)out+="\nNot done yet:\n"+left.join("\n");
+    return out;
+  }
+  function mailtoFallback(){
+    var body=((note.value.trim()||"(no note written)")+"\n\n--- checklist ---\n"+checklistSummary()).slice(0,1500);
+    location.href="mailto:moviespaces.dev@gmail.com?subject="+
+      encodeURIComponent("Beta note from the site checklist")+"&body="+encodeURIComponent(body);
+  }
+  sendBtn.addEventListener("click",function(){
+    if(!note.value.trim()){note.focus();return}
+    sendBtn.disabled=true;sendBtn.textContent="Sending\u2026";
+    fetch("https://moviespaces.onrender.com/api/site/feedback",{
+      method:"POST",headers:{"Content-Type":"application/json"},
+      body:JSON.stringify({
+        note:note.value.trim().slice(0,4000),
+        checklist:checklistSummary().slice(0,300),
+        contact:document.getElementById("contact").value.trim().slice(0,300),
+        website:document.getElementById("website").value
+      })
+    }).then(function(r){
+      if(!r.ok)throw new Error("status "+r.status);
+      note.value="";try{localStorage.removeItem(NKEY)}catch(e){}
+      sendBtn.textContent="Sent \u2713";
+      sendNote.textContent="Got it — thank you!";sendNote.classList.add("sent");
+      setTimeout(function(){sendBtn.disabled=false;sendBtn.textContent="Send to MovieSpaces \u2192"},2500);
+    }).catch(function(){
+      sendBtn.disabled=false;sendBtn.textContent="Send to MovieSpaces \u2192";
+      sendNote.textContent="Direct send didn't work — opening your mail app instead.";
+      mailtoFallback();
+    });
+  });
+})();
+</script>
+</body>
+</html>

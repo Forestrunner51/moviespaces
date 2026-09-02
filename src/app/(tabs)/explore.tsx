@@ -3,12 +3,12 @@ import {
   View,
   FlatList,
   StyleSheet,
-  ActivityIndicator,
   TouchableOpacity,
   Alert,
   RefreshControl,
 } from "react-native";
 import { Text, TextInput } from "@/frontend/components/scaled-text";
+import { FilmLoader } from "@/frontend/components/film-loader";
 import { router, useFocusEffect } from "expo-router";
 import { Ionicons } from "@expo/vector-icons";
 import { Starfield } from "@/frontend/components/starfield";
@@ -275,7 +275,7 @@ export default function ExploreScreen() {
   if (loading) {
     return (
       <Starfield>
-        <ActivityIndicator size="large" color={SpaceTheme.glowCyan} style={{ flex: 1 }} />
+        <FilmLoader full />
       </Starfield>
     );
   }
