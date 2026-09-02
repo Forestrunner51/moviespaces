@@ -11,6 +11,7 @@ import {
   Keyboard,
 } from "react-native";
 import { Text, TextInput } from "@/frontend/components/scaled-text";
+import { FilmLoader } from "@/frontend/components/film-loader";
 import { router } from "expo-router";
 import { Ionicons } from "@expo/vector-icons";
 import DateTimePicker from "@react-native-community/datetimepicker";
@@ -369,7 +370,7 @@ export default function MatchScreen() {
 
   const crewList = (onStartOwn: () => void, startLabel: string) =>
     crews === null ? (
-      <ActivityIndicator color={Palette.accent} style={{ marginTop: 20 }} />
+      <FilmLoader line="Checking for crews already forming…" style={{ marginTop: 20 }} />
     ) : (
       <>
         {crews.length > 0 && <Text style={styles.stepLabel}>CREWS ALREADY FORMING</Text>}
@@ -468,7 +469,7 @@ export default function MatchScreen() {
             </Text>
             <ScrollView keyboardShouldPersistTaps="handled" contentContainerStyle={{ paddingBottom: 60 }}>
               <ShowtimePicker selection={showtime} onSelect={onShowingPicked} />
-              {resolving && <ActivityIndicator color={Palette.accent} style={{ marginTop: 16 }} />}
+              {resolving && <FilmLoader line="Matching the marquee to the movie…" style={{ marginTop: 16 }} />}
             </ScrollView>
           </>
         )}

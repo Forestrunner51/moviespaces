@@ -1,6 +1,7 @@
 import { useEffect, useRef, useState } from "react";
 import { View, ActivityIndicator, StyleSheet, TouchableOpacity } from "react-native";
 import { Text } from "@/frontend/components/scaled-text";
+import { FilmLoader } from "@/frontend/components/film-loader";
 import { useLocalSearchParams, router } from "expo-router";
 import AsyncStorage from "@react-native-async-storage/async-storage";
 import { authFetch } from "@/frontend/services/api";
@@ -97,7 +98,7 @@ export default function JoinScreen() {
           </>
         ) : (
           <>
-            <ActivityIndicator size="large" color={Palette.accent} />
+            <FilmLoader />
             <Text style={styles.subtitle}>Joining...</Text>
           </>
         )}

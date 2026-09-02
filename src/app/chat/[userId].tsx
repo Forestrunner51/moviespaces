@@ -11,6 +11,7 @@ import {
   type NativeSyntheticEvent,
 } from "react-native";
 import { Text, TextInput } from "@/frontend/components/scaled-text";
+import { FilmLoader } from "@/frontend/components/film-loader";
 import { useLocalSearchParams, Stack } from "expo-router";
 import { Ionicons } from "@expo/vector-icons";
 import { useSafeAreaInsets } from "react-native-safe-area-context";
@@ -126,7 +127,7 @@ export default function ChatScreen() {
       >
         <Stack.Screen options={{ title: name || "Chat" }} />
         {loading && messages.length === 0 ? (
-          <ActivityIndicator color={SpaceTheme.glowCyan} style={{ flex: 1 }} />
+          <FilmLoader full />
         ) : (
           <FlatList
             ref={listRef}

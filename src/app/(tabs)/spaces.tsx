@@ -9,6 +9,7 @@ import {
   TouchableOpacity,
 } from "react-native";
 import { Text } from "@/frontend/components/scaled-text";
+import { FilmLoader } from "@/frontend/components/film-loader";
 import { router, useFocusEffect, useLocalSearchParams } from "expo-router";
 import { useSafeAreaInsets } from "react-native-safe-area-context";
 import { Ionicons } from "@expo/vector-icons";
@@ -310,7 +311,7 @@ export default function MySpacesScreen() {
           </ScrollView>
         ) : tab === "rent" ? (
           loading ? (
-            <ActivityIndicator size="large" color={SpaceTheme.glowCyan} style={{ flex: 1 }} />
+            <FilmLoader full />
           ) : (
             <>
               <Text style={styles.subtitle}>Watch parties you&apos;re part of</Text>
