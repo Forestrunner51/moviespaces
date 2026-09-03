@@ -245,7 +245,14 @@ namespace Backend.Services
             used.Add(castDeduct.MovieA.ImdbId);
             used.Add(castDeduct.MovieB.ImdbId);
 
-            var mysteryMovie = BuildMysteryMovie(rng, catalog, used);
+            // The mystery slot draws from BOTH catalogs — roughly one day
+            // in three is a TV show. Same seeded rng, so the day's puzzle
+            // stays deterministic; falls back to a film when the TV catalog
+            // is empty. (The legacy MysteryTv slot below still exists for
+            // old clients; it's unscored either way.)
+            var mysteryMovie = rng.Next(3) == 0
+                ? BuildMysteryTv(rng, tvCatalog) ?? BuildMysteryMovie(rng, catalog, used)
+                : BuildMysteryMovie(rng, catalog, used);
             if (mysteryMovie == null) return null;
 
             // Separate catalog/pool, so no "used" exclusion needed against

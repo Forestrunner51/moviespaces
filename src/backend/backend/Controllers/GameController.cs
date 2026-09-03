@@ -749,7 +749,7 @@ namespace Backend.Controllers
                     {Row("The Connection", regraded?.Connection.Correct)}
                     {Row("Chronos", regraded?.Chronos.Correct)}
                     {Row("Cast Deduct", regraded?.CastDeduct.Correct)}
-                    {Row("Mystery Movie", regraded?.MysteryMovie.Correct)}
+                    {Row("The Mystery", regraded?.MysteryMovie.Correct)}
                     {(progress.PuzzleDate <= DailyPuzzleService.FiveChallengeEraEnd
                         ? Row("Mystery TV", regraded?.MysteryTv.Correct)
                         : "")}
