@@ -255,6 +255,21 @@ export default function SettingsScreen() {
           </View>
         </View>
 
+        <Text style={styles.sectionLabel}>HELP</Text>
+        <View style={styles.card}>
+          <TouchableOpacity
+            activeOpacity={0.7}
+            style={styles.linkRow}
+            onPress={() => router.push("/tour")}
+            accessibilityRole="button"
+          >
+            <View style={styles.rowTextBlock}>
+              <Text style={styles.linkText}>App Tour</Text>
+              <Text style={styles.rowSubtitle}>The 60-second walkthrough, any time</Text>
+            </View>
+          </TouchableOpacity>
+        </View>
+
         <Text style={styles.sectionLabel}>FEEDBACK</Text>
         <View style={styles.card}>
           <TouchableOpacity

@@ -16,7 +16,6 @@ import { SpaceStyles, Palette, Type, Display, Radius } from "@/frontend/constant
 import { useToast } from "@/frontend/components/toast";
 import { authFetch } from "@/frontend/services/api";
 import { formatEventDate } from "@/frontend/utils/event-date";
-import { completeOnboarding } from "@/frontend/services/onboarding";
 import { getDeviceLocation, type Coordinates } from "@/frontend/services/nearby-theaters";
 import { distanceMiles, formatMilesAway } from "@/frontend/utils/distance";
 
@@ -247,9 +246,12 @@ export default function SpaceDiscoveryScreen() {
     }
   };
 
-  const handleContinue = async () => {
+  const handleContinue = () => {
+    // Last onboarding stop is the 60-second tour; IT calls
+    // completeOnboarding when finished or skipped.
     setFinishing(true);
-    await completeOnboarding();
+    router.push({ pathname: "/tour", params: { onboarding: "1" } });
+    setFinishing(false);
   };
 
   return (
@@ -424,8 +426,10 @@ export default function SpaceDiscoveryScreen() {
                   activeOpacity={0.85}
                   style={styles.previewButton}
                   onPress={() => router.push({ pathname: "/group", params: { groupId: space.id } })}
+                  accessibilityLabel={`Preview ${space.displayName} before joining`}
                 >
-                  <Text style={styles.previewButtonText}>View Club</Text>
+                  <Ionicons name="eye-outline" size={15} color={Palette.accent} />
+                  <Text style={styles.previewButtonText}>Preview</Text>
                 </TouchableOpacity>
 
                 <TouchableOpacity
@@ -541,10 +545,14 @@ const styles = StyleSheet.create({
   previewButton: {
     ...SpaceStyles.field,
     flex: 1,
+    flexDirection: "row",
+    justifyContent: "center",
     alignItems: "center",
+    gap: 6,
     paddingVertical: 11,
+    borderColor: Palette.accentBorder,
   },
-  previewButtonText: { ...Type.small, color: Palette.textMuted, fontWeight: "700" },
+  previewButtonText: { ...Type.small, color: Palette.accent, fontWeight: "700" },
   joinButton: {
     flex: 1,
     alignItems: "center",
