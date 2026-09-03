@@ -179,6 +179,7 @@ function Layout() {
         <Stack.Screen name="legal/terms" options={{ title: "Terms of Service" }} />
         <Stack.Screen name="legal/privacy" options={{ title: "Privacy Policy" }} />
         <Stack.Screen name="settings" options={{ title: "Settings" }} />
+        <Stack.Screen name="tour" options={{ headerShown: false }} />
         <Stack.Screen name="roulette" options={{ title: "Movie Roulette" }} />
         <Stack.Screen name="onboarding-interests" options={{ headerShown: false }} />
         <Stack.Screen name="onboarding-taste" options={{ headerShown: false }} />

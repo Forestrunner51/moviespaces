@@ -274,8 +274,18 @@ export default function MatchScreen() {
     setStage("confirm");
   };
 
+  // Set when "Wrong film or poster?" on the confirm screen sends the user to
+  // the film search: their showing is already chosen, so the next pick must
+  // return to confirm instead of falling into the start-a-crew flow (which,
+  // for theater kind, would ask them to name a venue they don't have).
+  const repickRef = useRef(false);
   const pickMovie = (m: Movie) => {
     setMovie({ title: m.title, imdbId: m.imdbId, posterPath: m.posterPath });
+    if (repickRef.current) {
+      repickRef.current = false;
+      setStage("confirm");
+      return;
+    }
     setCrews(null);
     setStage("crews");
   };
@@ -358,6 +368,9 @@ export default function MatchScreen() {
     if (stage === "kind") {
       if (router.canGoBack()) router.back();
       else router.replace("/(tabs)/explore");
+    } else if (stage === "film" && repickRef.current) {
+      repickRef.current = false;
+      setStage("confirm");
     } else if (stage === "pickShowing" || stage === "film") setStage("kind");
     else if (stage === "confirm") setStage("pickShowing");
     else if (stage === "crews") setStage("film");
@@ -515,7 +528,10 @@ export default function MatchScreen() {
                   same-name films and re-releases can fool it. Let the human
                   fix it instead of shipping a crew with the wrong art. */}
               <TouchableOpacity
-                onPress={() => setStage("film")}
+                onPress={() => {
+                  repickRef.current = true;
+                  setStage("film");
+                }}
                 hitSlop={6}
                 accessibilityRole="button"
                 accessibilityLabel="Wrong film or poster? Pick the film manually"

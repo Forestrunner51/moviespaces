@@ -15,6 +15,7 @@ import { MoviePoster } from "@/frontend/components/movie-poster";
 import { SpaceStyles, Palette, Type, Display, Radius } from "@/frontend/constants/theme";
 import { useToast } from "@/frontend/components/toast";
 import { authFetch } from "@/frontend/services/api";
+import { markOnboarded } from "@/frontend/services/onboarding";
 import { formatEventDate } from "@/frontend/utils/event-date";
 import { getDeviceLocation, type Coordinates } from "@/frontend/services/nearby-theaters";
 import { distanceMiles, formatMilesAway } from "@/frontend/utils/distance";
@@ -246,10 +247,12 @@ export default function SpaceDiscoveryScreen() {
     }
   };
 
-  const handleContinue = () => {
-    // Last onboarding stop is the 60-second tour; IT calls
-    // completeOnboarding when finished or skipped.
+  const handleContinue = async () => {
+    // Onboarding is DONE here — the flag is written now, so quitting during
+    // the optional tour epilogue can't replay the whole flow next session.
+    // The tour just handles the final routing into the app.
     setFinishing(true);
+    await markOnboarded();
     router.push({ pathname: "/tour", params: { onboarding: "1" } });
     setFinishing(false);
   };

@@ -77,6 +77,11 @@ if (corsOrigins == null || corsOrigins.Length == 0)
         "http://localhost:19006",
         "http://127.0.0.1:8081",
         "http://127.0.0.1:19006",
+        // The marketing site's beta-checklist notes box POSTs to
+        // /api/site/feedback from the browser — without these here, that
+        // endpoint only works if someone remembers a Render env var.
+        "https://moviespaces.org",
+        "https://www.moviespaces.org",
     };
 }
 

@@ -976,8 +976,11 @@ function MysteryChallenge({
                     accessibilityRole="button"
                     accessibilityState={{ disabled: wrong }}
                   >
+                    {/* No year on the label: the Year clue is visible from
+                        tier 1 on easy/medium, so printing each option's year
+                        would let the answer identify itself. */}
                     <Text style={[styles.mysteryOptionText, wrong && styles.mysteryOptionTextWrong]}>
-                      {m.title} ({m.releaseYear})
+                      {m.title}
                     </Text>
                   </TouchableOpacity>
                 );
