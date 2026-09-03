@@ -22,7 +22,7 @@ import { SpaceStyles, Palette, Type, Display, Radius, Font } from "@/frontend/co
 import { useToast } from "@/frontend/components/toast";
 import { authFetch } from "@/frontend/services/api";
 import { resolveDisplayName } from "@/frontend/services/display-name";
-import { searchMovies, Movie, pickFilmForShowing } from "@/frontend/services/movies";
+import { searchMovies, Movie, pickFilmForShowing, getNowPlaying } from "@/frontend/services/movies";
 import { combineDateAndTime, formatEventDate, isPastDateTime } from "@/frontend/utils/event-date";
 import { POST_ACTIVITIES } from "@/frontend/constants/activities";
 import {
@@ -154,12 +154,23 @@ export default function MatchScreen() {
 
   // --- venue: film search ---
   const [query, setQuery] = useState("");
+  // Tap-to-pick options before anyone types — the rotating now-playing list
+  // create-space already uses. Typing is the fallback, not the front door.
+  const [nowPlaying, setNowPlaying] = useState<Movie[]>([]);
+  const [searchNotice, setSearchNotice] = useState<string | null>(null);
   const [results, setResults] = useState<Movie[]>([]);
   const [searching, setSearching] = useState(false);
   const searchTimer = useRef<ReturnType<typeof setTimeout> | null>(null);
   const searchSeq = useRef(0);
+  useEffect(() => {
+    if (stage !== "film" || nowPlaying.length > 0) return;
+    getNowPlaying("movie").then(setNowPlaying).catch(() => {});
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [stage]);
+
   const handleSearch = (text: string) => {
     setQuery(text);
+    setSearchNotice(null);
     if (searchTimer.current) clearTimeout(searchTimer.current);
     const q = text.trim();
     if (q.length < 2) {
@@ -175,6 +186,7 @@ export default function MatchScreen() {
         const outcome = await searchMovies(q);
         if (seq !== searchSeq.current) return;
         setResults(outcome.results);
+        setSearchNotice(outcome.notice);
       } catch {
         /* transient — leave prior results */
       } finally {
@@ -431,6 +443,10 @@ export default function MatchScreen() {
         {stage === "kind" && (
           <>
             <Text style={styles.title}>How do you want to watch?</Text>
+            <Text style={styles.kindSub}>
+              A crew is up to 6 people matched onto one concrete plan — a real showing, or a
+              watch party someone hosts. Not a group chat about movies; an actual night out.
+            </Text>
             <View style={styles.kinds}>
               {KINDS.map((k) => (
                 <TouchableOpacity
@@ -634,8 +650,17 @@ export default function MatchScreen() {
               />
             </View>
             {searching && <ActivityIndicator color={Palette.accent} style={{ marginTop: 14 }} />}
+            {!searching && query.trim().length >= 2 && results.length === 0 && (
+              <Text style={styles.searchEmpty}>
+                {searchNotice ??
+                  `No movie found for “${query.trim()}” — double-check the spelling.`}
+              </Text>
+            )}
+            {query.trim().length < 2 && nowPlaying.length > 0 && (
+              <Text style={styles.stepLabel}>OR PICK ONE THAT&apos;S OUT NOW</Text>
+            )}
             <FlatList
-              data={results}
+              data={query.trim().length >= 2 ? results : nowPlaying}
               keyExtractor={(m) => m.imdbId}
               keyboardShouldPersistTaps="handled"
               contentContainerStyle={{ paddingTop: 8 }}
@@ -1016,6 +1041,8 @@ const styles = StyleSheet.create({
   startOwnText: { ...Type.small, fontFamily: Font.semibold, color: Palette.accent },
   // forms
   stepLabel: { ...Display.section, color: Palette.textMuted, marginTop: 12, marginBottom: 6 },
+  kindSub: { ...Type.small, color: Palette.textMuted, marginTop: 6, marginBottom: 4 },
+  searchEmpty: { ...Type.small, color: Palette.textMuted, marginTop: 16, textAlign: "center" },
   field: { ...SpaceStyles.field, ...Type.body, color: Palette.text, padding: 12 },
   placeBox: {
     ...SpaceStyles.field,

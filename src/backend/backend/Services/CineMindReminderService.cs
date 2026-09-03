@@ -71,7 +71,7 @@ namespace Backend.Services
             using var scope = _scopeFactory.CreateScope();
             var db = scope.ServiceProvider.GetRequiredService<AppDbContext>();
 
-            var today = DateOnly.FromDateTime(now);
+            var today = CentralTime.Today; // same day boundary as the puzzle itself
 
             // Cheap pre-check so the ~40 post-send passes per day exit without
             // attempting the insert — EF logs every failed DbCommand at Error

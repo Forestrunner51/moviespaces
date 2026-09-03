@@ -390,6 +390,7 @@ export default function CineMindScreen() {
           {challengeIndex === 0 && (
             <View style={styles.card}>
               <Text style={styles.challengeLabel}>Challenge 1 of 5</Text>
+              <Text style={styles.lockHint}>Tap carefully — answers lock in as you pick.</Text>
               <Text style={styles.challengeTitle}>The Connection</Text>
               <Text style={styles.challengeHint}>
                 Which {puzzle.connection.linkKind} links all four of these films?
@@ -1075,6 +1076,7 @@ const styles = StyleSheet.create({
     textTransform: "uppercase",
     fontWeight: "700",
   },
+  lockHint: { ...Type.caption, color: Palette.textFaint, fontStyle: "italic", marginTop: 2, marginBottom: 6 },
   challengeTitle: { ...Type.title, fontWeight: "700", color: SpaceTheme.starWhite, marginTop: 2 },
   challengeHint: { ...Type.small, color: SpaceTheme.mutedOrbit, marginTop: 4, marginBottom: 14, lineHeight: 18 },
   posterRow: { flexDirection: "row", flexWrap: "wrap", gap: 10, marginBottom: 16, justifyContent: "center" },

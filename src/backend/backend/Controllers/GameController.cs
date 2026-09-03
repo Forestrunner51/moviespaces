@@ -236,7 +236,7 @@ namespace Backend.Controllers
                 });
             }
 
-            var today = DateOnly.FromDateTime(DateTime.UtcNow);
+            var today = CentralTime.Today;
             var days = rows.Select(r => r.PuzzleDate).ToHashSet();
             var playedToday = days.Contains(today);
 
@@ -302,7 +302,7 @@ namespace Backend.Controllers
             var userId = GetUserId();
             if (string.IsNullOrEmpty(userId)) return Unauthorized(new { error = "Unauthorized" });
 
-            var today = DateOnly.FromDateTime(DateTime.UtcNow);
+            var today = CentralTime.Today;
 
             // Score first, then speed — same ordering as the per-Space board,
             // so a player's rank means the same thing on both.
@@ -399,7 +399,7 @@ namespace Backend.Controllers
                 .Distinct()
                 .ToList();
 
-            var today = DateOnly.FromDateTime(DateTime.UtcNow);
+            var today = CentralTime.Today;
             var rows = await _db.UserDailyProgress
                 .Where(p => p.PuzzleDate == today && memberIds.Contains(p.UserId))
                 .ToListAsync();
@@ -559,7 +559,7 @@ namespace Backend.Controllers
             var authError = CheckAdminSecret();
             if (authError != null) return authError;
 
-            var today = DateOnly.FromDateTime(DateTime.UtcNow);
+            var today = CentralTime.Today;
 
             var alreadyPlayed = await _db.UserDailyProgress.AnyAsync(p => p.PuzzleDate == today);
             if (alreadyPlayed)
@@ -770,9 +770,13 @@ namespace Backend.Controllers
             return minutes > 0 ? $"{minutes}m {seconds}s" : $"{seconds}s";
         }
 
+        // The puzzle day rolls at midnight CENTRAL, not UTC — UTC midnight is
+        // ~6-7 PM in Dallas, so testers saw "today's" puzzle reset mid-evening
+        // and reported it as "not 24 hours". Launch market is DFW; the whole
+        // showtimes pipeline already runs on CentralTime for the same reason.
         private static int SecondsUntilMidnightUtc()
         {
-            var now = DateTime.UtcNow;
+            var now = CentralTime.Now;
             return (int)(now.Date.AddDays(1) - now).TotalSeconds;
         }
 

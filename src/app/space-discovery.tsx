@@ -425,7 +425,7 @@ export default function SpaceDiscoveryScreen() {
                   style={styles.previewButton}
                   onPress={() => router.push({ pathname: "/group", params: { groupId: space.id } })}
                 >
-                  <Text style={styles.previewButtonText}>Preview</Text>
+                  <Text style={styles.previewButtonText}>View Club</Text>
                 </TouchableOpacity>
 
                 <TouchableOpacity
