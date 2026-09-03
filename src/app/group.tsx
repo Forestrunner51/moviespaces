@@ -36,6 +36,7 @@ import { EVENT_CATEGORIES, eventCategoryOf } from "@/frontend/constants/event-ca
 import { reportContent } from "@/frontend/services/moderation";
 import { Avatar, AvatarStack } from "@/frontend/components/avatar";
 import { useProfiles } from "@/frontend/hooks/use-profiles";
+import { useProfileSheet } from "@/frontend/components/profile-sheet";
 import { useForegroundPoll } from "@/frontend/hooks/use-foreground-poll";
 import { ShowtimePicker, ShowtimeSelection } from "@/frontend/components/showtime-picker";
 import { formatEventDate, isPastDateTime } from "@/frontend/utils/event-date";
@@ -101,6 +102,7 @@ interface Group {
 
 export default function GroupScreen() {
   const { showToast } = useToast();
+  const { openProfile } = useProfileSheet();
   const { groupId, code, matched, openEdit } = useLocalSearchParams<{
     groupId: string;
     // Set by match.tsx on arrival so the crew card can do the reveal
@@ -1098,14 +1100,21 @@ export default function GroupScreen() {
               {Array.from({ length: group.maxCapacity }).map((_, i) => {
                 const m = groupMembers[i];
                 return m ? (
-                  <View key={m.id} style={styles.crewSeatFilled}>
+                  <TouchableOpacity
+                    key={m.id}
+                    style={styles.crewSeatFilled}
+                    activeOpacity={0.7}
+                    disabled={!m.userId}
+                    onPress={() => openProfile(m.userId)}
+                    accessibilityLabel={`View ${m.name}'s profile`}
+                  >
                     <Avatar uri={memberProfiles.get(m.userId)?.avatarUrl} name={m.name} size={36} />
                     {m.hasTicket && (
                       <View style={styles.crewSeatTicket}>
                         <Ionicons name="checkmark" size={10} color={Palette.base} />
                       </View>
                     )}
-                  </View>
+                  </TouchableOpacity>
                 ) : (
                   <View key={`open-${i}`} style={styles.crewSeatOpen}>
                     <Ionicons name="person-outline" size={14} color={Palette.textFaint} />
@@ -1406,7 +1415,14 @@ export default function GroupScreen() {
               const canRemove = isHost && !hasPassed && item.userId !== group.userId;
               return (
                 <View style={styles.memberRow}>
-                  <Avatar uri={profile?.avatarUrl} name={item.name} size={36} />
+                  <TouchableOpacity
+                    activeOpacity={0.7}
+                    disabled={!item.userId}
+                    onPress={() => openProfile(item.userId)}
+                    accessibilityLabel={`View ${item.name}'s profile`}
+                  >
+                    <Avatar uri={profile?.avatarUrl} name={item.name} size={36} />
+                  </TouchableOpacity>
                   <View style={styles.memberNameBlock}>
                     <Text style={styles.memberName}>{item.name}</Text>
                     {isWebGuest && <Text style={styles.guestTag}>Joined from the web</Text>}

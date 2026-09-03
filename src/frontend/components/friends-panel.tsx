@@ -11,6 +11,7 @@ import { Text, TextInput } from "@/frontend/components/scaled-text";
 import { router } from "expo-router";
 import { Ionicons } from "@expo/vector-icons";
 import { Avatar } from "@/frontend/components/avatar";
+import { useProfileSheet } from "@/frontend/components/profile-sheet";
 import { SpaceTheme, SpaceStyles, Palette, Type, Radius, Display } from "@/frontend/constants/theme";
 import { useFriends, Profile } from "@/frontend/hooks/use-friends";
 import { useProfiles } from "@/frontend/hooks/use-profiles";
@@ -22,6 +23,7 @@ import { useToast } from "@/frontend/components/toast";
 
 export function FriendsPanel() {
   const { showToast } = useToast();
+  const { openProfile } = useProfileSheet();
   const {
     friends,
     pendingRequests,
@@ -245,7 +247,9 @@ export function FriendsPanel() {
           <Text style={styles.sectionLabel}>SEARCH RESULTS</Text>
           {results.filter((u) => !blockedIds.has(u.id)).map((user) => (
             <View key={user.id} style={styles.row}>
-              <Avatar uri={user.avatar_url} name={user.display_name} size={40} />
+              <TouchableOpacity activeOpacity={0.7} onPress={() => openProfile(user.id)}>
+                <Avatar uri={user.avatar_url} name={user.display_name} size={40} />
+              </TouchableOpacity>
               <View style={styles.rowTextBlock}>
                 <Text style={styles.rowText} numberOfLines={1}>
                   {user.display_name}
@@ -288,7 +292,9 @@ export function FriendsPanel() {
           <Text style={styles.sectionLabel}>RECENTLY MET</Text>
           {visiblePeers.map((p) => (
             <View key={p.userId} style={styles.row}>
-              <Avatar uri={peerProfiles.get(p.userId)?.avatarUrl} name={p.name} size={40} />
+              <TouchableOpacity activeOpacity={0.7} onPress={() => openProfile(p.userId)}>
+                <Avatar uri={peerProfiles.get(p.userId)?.avatarUrl} name={p.name} size={40} />
+              </TouchableOpacity>
               <View style={styles.rowTextBlock}>
                 <Text style={styles.rowText} numberOfLines={1}>
                   {p.name}

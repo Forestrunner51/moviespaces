@@ -18,6 +18,7 @@ import { useSafeAreaInsets } from "react-native-safe-area-context";
 import { Starfield } from "@/frontend/components/starfield";
 import { SpaceTheme, Palette, Type, Radius } from "@/frontend/constants/theme";
 import { Avatar } from "@/frontend/components/avatar";
+import { useProfileSheet } from "@/frontend/components/profile-sheet";
 import { useGroupChat, GroupMessage, GroupChatType } from "@/frontend/hooks/use-group-chat";
 import { reportContent, blockUser } from "@/frontend/services/moderation";
 import { useBlockedIds } from "@/frontend/hooks/use-blocked-ids";
@@ -40,6 +41,7 @@ const MessageRow = memo(function MessageRow({
   onRetry: (m: GroupMessage) => void;
   onLongPress: (m: GroupMessage) => void;
 }) {
+  const { openProfile } = useProfileSheet();
   if (isMe) {
     return (
       <View style={styles.myMsgWrap}>
@@ -65,7 +67,13 @@ const MessageRow = memo(function MessageRow({
   }
   return (
     <TouchableOpacity activeOpacity={0.9} onLongPress={() => onLongPress(item)} style={styles.rowThem}>
-      <Avatar uri={item.sender_avatar_url} name={item.sender_name} size={28} />
+      <TouchableOpacity
+        activeOpacity={0.7}
+        onPress={() => item.sender_id && openProfile(item.sender_id)}
+        accessibilityLabel={`View ${item.sender_name || "sender"}'s profile`}
+      >
+        <Avatar uri={item.sender_avatar_url} name={item.sender_name} size={28} />
+      </TouchableOpacity>
       <View style={{ flex: 1 }}>
         <Text style={styles.senderName}>
           {item.sender_name || "Someone"}
