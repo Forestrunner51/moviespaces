@@ -46,7 +46,7 @@ const PAGES: {
     icon: "bulb",
     kicker: "CINEMIND",
     title: "One puzzle. Every day.",
-    body: "Five quick movie challenges a day, with streaks and club leaderboards. Resets at midnight — bragging rights don't.",
+    body: "Four quick movie challenges a day, with streaks and club leaderboards. Resets at midnight — bragging rights don't.",
   },
   {
     icon: "person-circle",

@@ -80,13 +80,6 @@ export default function CineMindScreen() {
   // Locked once the first guess is made — see the difficulty picker below.
   const [mysteryDifficulty, setMysteryDifficulty] = useState<MysteryDifficulty>("easy");
 
-  const [tvCatalog, setTvCatalog] = useState<CatalogMovie[] | null>(null);
-  const [tvCatalogLoading, setTvCatalogLoading] = useState(false);
-  const [tvCatalogError, setTvCatalogError] = useState<string | null>(null);
-  const [mysteryTvGuess, setMysteryTvGuess] = useState<string | null>(null);
-  const [mysteryTvAttemptsUsed, setMysteryTvAttemptsUsed] = useState(0);
-  const [mysteryTvResolved, setMysteryTvResolved] = useState(false);
-
   const [elapsedMs, setElapsedMs] = useState(0);
   // Wall-clock start, not an accumulating counter — a throttled JS timer in
   // the background would otherwise under-count the player's real time.
@@ -117,9 +110,6 @@ export default function CineMindScreen() {
       setMysteryAttemptsUsed(0);
       setMysteryResolved(false);
       setMysteryDifficulty("easy");
-      setMysteryTvGuess(null);
-      setMysteryTvAttemptsUsed(0);
-      setMysteryTvResolved(false);
       startedAt.current = Date.now();
       setElapsedMs(0);
       setPhase("playing");
@@ -164,23 +154,6 @@ export default function CineMindScreen() {
     loadCatalog();
   }, [challengeIndex, catalog, catalogLoading, catalogError, loadCatalog]);
 
-  const loadTvCatalog = useCallback(() => {
-    setTvCatalogLoading(true);
-    setTvCatalogError(null);
-    browseCatalog("tv")
-      .then(setTvCatalog)
-      .catch((err) => {
-        console.warn("Couldn't load TV catalog for Mystery TV:", err);
-        setTvCatalogError(err?.message || "Couldn't load the show list.");
-      })
-      .finally(() => setTvCatalogLoading(false));
-  }, []);
-
-  useEffect(() => {
-    if (challengeIndex !== 4 || tvCatalog != null || tvCatalogLoading || tvCatalogError) return;
-    loadTvCatalog();
-  }, [challengeIndex, tvCatalog, tvCatalogLoading, tvCatalogError, loadTvCatalog]);
-
   const handleSubmit = async () => {
     // Ref, not state: a double-tap fires both handlers before React re-renders,
     // and the server rejects the second submit as a duplicate — which would
@@ -204,8 +177,6 @@ export default function CineMindScreen() {
           mysteryMovieGuess: mysteryGuess,
           mysteryMovieAttemptsUsed: mysteryAttemptsUsed,
           mysteryMovieDifficulty: mysteryDifficulty,
-          mysteryTvGuess: mysteryTvGuess,
-          mysteryTvAttemptsUsed: mysteryTvAttemptsUsed,
         },
         timeTakenMs,
       );
@@ -325,7 +296,6 @@ export default function CineMindScreen() {
             <ResultRow label="Chronos" res={result.chronos} />
             <ResultRow label="Cast Deduct" res={result.castDeduct} />
             <ResultRow label="Mystery Movie" res={result.mysteryMovie} />
-            <ResultRow label="Mystery TV" res={result.mysteryTv} />
           </View>
 
           <TouchableOpacity activeOpacity={0.85} style={styles.primaryButton} onPress={handleShare}>
@@ -348,8 +318,7 @@ export default function CineMindScreen() {
     (challengeIndex === 0 && connectionAnswer != null) ||
     (challengeIndex === 1 && chronosOrder.length === puzzle.chronos.movies.length) ||
     (challengeIndex === 2 && castDeductAnswer != null) ||
-    (challengeIndex === 3 && mysteryResolved) ||
-    (challengeIndex === 4 && mysteryTvResolved);
+    (challengeIndex === 3 && mysteryResolved);
 
   return (
     <Starfield>
@@ -389,7 +358,7 @@ export default function CineMindScreen() {
 
           {challengeIndex === 0 && (
             <View style={styles.card}>
-              <Text style={styles.challengeLabel}>Challenge 1 of 5</Text>
+              <Text style={styles.challengeLabel}>Challenge 1 of 4</Text>
               <Text style={styles.lockHint}>Tap carefully — answers lock in as you pick.</Text>
               <Text style={styles.challengeTitle}>The Connection</Text>
               <Text style={styles.challengeHint}>
@@ -410,7 +379,7 @@ export default function CineMindScreen() {
   
           {challengeIndex === 1 && (
             <View style={styles.card}>
-              <Text style={styles.challengeLabel}>Challenge 2 of 5</Text>
+              <Text style={styles.challengeLabel}>Challenge 2 of 4</Text>
               <Text style={styles.challengeTitle}>Chronos</Text>
               <Text style={styles.challengeHint}>
                 Tap these in order of release — oldest first. Tap again to remove.
@@ -445,7 +414,7 @@ export default function CineMindScreen() {
   
           {challengeIndex === 2 && (
             <View style={styles.card}>
-              <Text style={styles.challengeLabel}>Challenge 3 of 5</Text>
+              <Text style={styles.challengeLabel}>Challenge 3 of 4</Text>
               <Text style={styles.challengeTitle}>Cast Deduct</Text>
               <Text style={styles.challengeHint}>Which actor appears in both of these films?</Text>
               <PosterRow movies={[puzzle.castDeduct.movieA, puzzle.castDeduct.movieB]} showTitles />
@@ -490,39 +459,13 @@ export default function CineMindScreen() {
             />
           )}
   
-          {challengeIndex === 4 && (
-            <MysteryChallenge
-              challengeNumber={5}
-              clues={puzzle.mysteryTv}
-              catalog={tvCatalog}
-              catalogLoading={tvCatalogLoading}
-              catalogError={tvCatalogError}
-              onRetryCatalog={loadTvCatalog}
-              onSkip={() => {
-                setMysteryTvGuess(null);
-                setMysteryTvResolved(true);
-              }}
-              attemptsUsed={mysteryTvAttemptsUsed}
-              resolved={mysteryTvResolved}
-              solvedGuess={mysteryTvGuess}
-              difficulty="easy"
-              onDifficultyChange={undefined}
-              onGuess={(imdbId, correct, newAttemptsUsed, maxAttempts) => {
-                setMysteryTvAttemptsUsed(newAttemptsUsed);
-                if (correct || newAttemptsUsed >= maxAttempts) {
-                  setMysteryTvGuess(correct ? imdbId : null);
-                  setMysteryTvResolved(true);
-                }
-              }}
-            />
-          )}
   
           <TouchableOpacity
             activeOpacity={0.85}
             style={[styles.primaryButton, (!canAdvance || submittingUi) && styles.primaryButtonDisabled]}
             disabled={!canAdvance || submittingUi}
             onPress={() => {
-              if (challengeIndex < 4) setChallengeIndex(challengeIndex + 1);
+              if (challengeIndex < 3) setChallengeIndex(challengeIndex + 1);
               else handleSubmit();
             }}
           >
@@ -530,7 +473,7 @@ export default function CineMindScreen() {
               <ActivityIndicator color={SpaceTheme.backgroundVoid} />
             ) : (
               <Text style={styles.primaryButtonText}>
-                {challengeIndex < 4 ? "Next Challenge" : "Submit & See Score"}
+                {challengeIndex < 3 ? "Next Challenge" : "Submit & See Score"}
               </Text>
             )}
           </TouchableOpacity>
@@ -841,7 +784,7 @@ function MysteryChallenge({
   onDifficultyChange,
   onGuess,
 }: {
-  challengeNumber: 4 | 5;
+  challengeNumber: 4;
   clues: MysteryMovieView;
   catalog: CatalogMovie[] | null;
   catalogLoading: boolean;
@@ -893,7 +836,7 @@ function MysteryChallenge({
 
   return (
     <View style={styles.card}>
-      <Text style={styles.challengeLabel}>Challenge {challengeNumber} of 5</Text>
+      <Text style={styles.challengeLabel}>Challenge {challengeNumber} of 4</Text>
       {/* No emoji — The Connection / Chronos / Cast Deduct don't carry one,
           and the odd title out read as decoration rather than meaning. */}
       <Text style={styles.challengeTitle}>{isTv ? "Mystery TV Show" : "Mystery Movie"}</Text>
