@@ -26,6 +26,11 @@ export const TextInput = forwardRef<RNTextInput, TextInputProps>(function TextIn
   // clips ascenders/descenders — testers saw letters cut off in the tight
   // onboarding search boxes. The input's natural line height is always
   // correct for a single-line field.
+  // Multiline composers legitimately want a lineHeight (matching the sent
+  // bubbles they feed); only single-line fields clip.
+  if (props.multiline) {
+    return <RNTextInput ref={ref} maxFontSizeMultiplier={MAX_FONT_SCALE} {...props} />;
+  }
   const { lineHeight: _dropped, ...flat } = StyleSheet.flatten(props.style) ?? {};
   return <RNTextInput ref={ref} maxFontSizeMultiplier={MAX_FONT_SCALE} {...props} style={flat} />;
 });

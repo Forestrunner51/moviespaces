@@ -177,10 +177,13 @@ namespace Backend.Controllers
                 CompletedAt = DateTime.UtcNow,
                 StreakCount = streak,
                 DisplayName = CleanDisplayName(request.DisplayName),
+                // Four scored challenges — Mystery TV is retired (see
+                // DailyPuzzleService.MaxScore); counting it would make a
+                // perfect day record as 4-of-5 forever.
                 ChallengesSolvedCount = new[]
                 {
                     graded.Connection.Correct, graded.Chronos.Correct, graded.CastDeduct.Correct,
-                    graded.MysteryMovie.Correct, graded.MysteryTv.Correct,
+                    graded.MysteryMovie.Correct,
                 }.Count(c => c),
             };
 
@@ -266,7 +269,7 @@ namespace Backend.Controllers
                 gamesPlayed = rows.Count,
                 currentStreak,
                 maxStreak,
-                perfectCount = rows.Count(r => r.Score == DailyPuzzleService.MaxScore),
+                perfectCount = rows.Count(r => r.Score == DailyPuzzleService.MaxScoreFor(r.PuzzleDate)),
                 averageScore = (int)Math.Round(rows.Average(r => r.Score)),
                 playedToday,
                 // Bucketed by ChallengesSolvedCount, not Score: Mystery
@@ -663,7 +666,8 @@ namespace Backend.Controllers
                 : null;
 
             var puzzleNumber = dailyPuzzle?.PuzzleNumber ?? 0;
-            var isPerfect = progress.Score == DailyPuzzleService.MaxScore;
+            var pageMaxScore = DailyPuzzleService.MaxScoreFor(progress.PuzzleDate);
+            var isPerfect = progress.Score == pageMaxScore;
             var timeText = System.Net.WebUtility.HtmlEncode(FormatDuration(progress.TimeTakenMs));
             var iosStoreUrl = System.Net.WebUtility.HtmlEncode(_configuration["AppLinks:IosStoreUrl"] ?? "");
             var androidStoreUrl = System.Net.WebUtility.HtmlEncode(_configuration["AppLinks:AndroidStoreUrl"] ?? "");
@@ -687,7 +691,7 @@ namespace Backend.Controllers
             <meta charset='utf-8'>
             <meta name='viewport' content='width=device-width, initial-scale=1'>
             <title>CineMind #{puzzleNumber} - MovieSpaces</title>
-            <meta property='og:title' content='CineMind #{puzzleNumber} — {progress.Score}/{DailyPuzzleService.MaxScore}'>
+            <meta property='og:title' content='CineMind #{puzzleNumber} — {progress.Score}/{pageMaxScore}'>
             <meta property='og:description' content='A daily 3-minute movie puzzle. Can you beat this score?'>
             <style>
                 * {{ margin: 0; padding: 0; box-sizing: border-box; }}
@@ -736,7 +740,7 @@ namespace Backend.Controllers
         <body>
             <div class='card'>
                 <p class='eyebrow'>CineMind #{puzzleNumber}</p>
-                <div class='score'>{progress.Score}<span>/{DailyPuzzleService.MaxScore}</span></div>
+                <div class='score'>{progress.Score}<span>/{pageMaxScore}</span></div>
                 <p class='meta'>{timeText}{(progress.StreakCount > 1 ? $" &middot; <span class='streak'>{progress.StreakCount} day streak</span>" : "")}</p>
 
                 {(isPerfect ? "<div class='perfect'>Perfect score</div>" : "")}
@@ -746,7 +750,9 @@ namespace Backend.Controllers
                     {Row("Chronos", regraded?.Chronos.Correct)}
                     {Row("Cast Deduct", regraded?.CastDeduct.Correct)}
                     {Row("Mystery Movie", regraded?.MysteryMovie.Correct)}
-                    {Row("Mystery TV", regraded?.MysteryTv.Correct)}
+                    {(progress.PuzzleDate <= DailyPuzzleService.FiveChallengeEraEnd
+                        ? Row("Mystery TV", regraded?.MysteryTv.Correct)
+                        : "")}
                 </div>
 
                 <a href='moviespaces://cinemind' class='cta'>Play Today's CineMind</a>

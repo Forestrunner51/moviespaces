@@ -247,6 +247,7 @@ export default function MatchScreen() {
 
   const pickKind = (k: CrewKind) => {
     resolveSeq.current += 1;
+    repickRef.current = false;
     setResolving(false);
     setKind(k);
     if (k === "venue") setHasTicket(false);
@@ -279,10 +280,22 @@ export default function MatchScreen() {
   // return to confirm instead of falling into the start-a-crew flow (which,
   // for theater kind, would ask them to name a venue they don't have).
   const repickRef = useRef(false);
+  const startRepick = () => {
+    repickRef.current = true;
+    setStage("film");
+  };
+  const changeKind = () => {
+    repickRef.current = false;
+    setStage("kind");
+  };
   const pickMovie = (m: Movie) => {
     setMovie({ title: m.title, imdbId: m.imdbId, posterPath: m.posterPath });
     if (repickRef.current) {
       repickRef.current = false;
+      // Clear the OLD film's crew list — confirm renders "join a crew
+      // already going", and stale film-A crews under film B's summary would
+      // let someone join the exact wrong-film crew the repick exists to fix.
+      setCrews(null);
       setStage("confirm");
       return;
     }
@@ -387,7 +400,7 @@ export default function MatchScreen() {
         {kindMeta.title}
         {movie && stage !== "film" && stage !== "pickShowing" ? `  ·  ${movie.title}` : ""}
       </Text>
-      <TouchableOpacity onPress={() => setStage("kind")} hitSlop={8} accessibilityRole="button">
+      <TouchableOpacity onPress={changeKind} hitSlop={8} accessibilityRole="button">
         <Text style={styles.crumbChange}>Change</Text>
       </TouchableOpacity>
     </View>
@@ -528,10 +541,7 @@ export default function MatchScreen() {
                   same-name films and re-releases can fool it. Let the human
                   fix it instead of shipping a crew with the wrong art. */}
               <TouchableOpacity
-                onPress={() => {
-                  repickRef.current = true;
-                  setStage("film");
-                }}
+                onPress={startRepick}
                 hitSlop={6}
                 accessibilityRole="button"
                 accessibilityLabel="Wrong film or poster? Pick the film manually"

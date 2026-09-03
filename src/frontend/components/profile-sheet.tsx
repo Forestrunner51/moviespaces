@@ -62,8 +62,11 @@ function ProfileSheet({ userId, onClose }: { userId: string; onClose: () => void
 
   useEffect(() => {
     let cancelled = false;
-    supabase.auth.getUser().then(({ data: { user } }) => {
-      if (!cancelled) setMyId(user?.id ?? null);
+    // getSession, not getUser: it resolves from the local session with no
+    // network round-trip, so "is this me?" is settled before the profile
+    // fetch can win the race and briefly offer Add Friend on your own card.
+    supabase.auth.getSession().then(({ data: { session } }) => {
+      if (!cancelled) setMyId(session?.user.id ?? null);
     });
     supabase
       .from("profiles")
@@ -155,7 +158,7 @@ function ProfileSheet({ userId, onClose }: { userId: string; onClose: () => void
               <Text style={styles.noTaste}>No taste picks yet — mysterious.</Text>
             )}
 
-            {!isSelf && (
+            {!isSelf && myId != null && (
               <View style={styles.actions}>
                 {isFriend ? (
                   <TouchableOpacity

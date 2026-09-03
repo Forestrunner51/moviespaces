@@ -77,13 +77,16 @@ if (corsOrigins == null || corsOrigins.Length == 0)
         "http://localhost:19006",
         "http://127.0.0.1:8081",
         "http://127.0.0.1:19006",
-        // The marketing site's beta-checklist notes box POSTs to
-        // /api/site/feedback from the browser — without these here, that
-        // endpoint only works if someone remembers a Render env var.
-        "https://moviespaces.org",
-        "https://www.moviespaces.org",
     };
 }
+// The marketing site's beta-checklist notes box POSTs to /api/site/feedback
+// from the browser. Appended UNCONDITIONALLY: these were once only in the
+// empty-config fallback above, which silently stopped applying the moment any
+// Cors__AllowedOrigins env var was set on Render.
+corsOrigins = corsOrigins
+    .Concat(new[] { "https://moviespaces.org", "https://www.moviespaces.org" })
+    .Distinct()
+    .ToArray();
 
 builder.Services.AddCors(options =>
 {

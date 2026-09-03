@@ -55,6 +55,16 @@ namespace Backend.Services
         // the previous TestFlight build can keep submitting it safely.
         public const int MaxScore = 400;
 
+        // The five-challenge era: rows written on or before this puzzle date
+        // were scored out of 500 with Mystery TV counted. Stats, perfect-day
+        // checks, and the share page must judge a row against ITS era's
+        // ceiling — comparing a 500-scale row to MaxScore=400 misclassifies
+        // every historic day in both directions.
+        public const int LegacyMaxScore = 500;
+        public static readonly DateOnly FiveChallengeEraEnd = new(2026, 9, 3);
+        public static int MaxScoreFor(DateOnly puzzleDate) =>
+            puzzleDate <= FiveChallengeEraEnd ? LegacyMaxScore : MaxScore;
+
         // Distractor count for multiple choice (answer + 3 wrong = 4 options).
         private const int WrongOptionCount = 3;
 
