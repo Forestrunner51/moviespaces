@@ -281,7 +281,7 @@ const styles = StyleSheet.create({
     paddingVertical: 10,
     paddingHorizontal: 12,
   },
-  searchInput: { flex: 1, ...Type.small, color: Palette.text, padding: 0 },
+  searchInput: { flex: 1, ...Type.small, color: Palette.text, paddingVertical: 2, paddingHorizontal: 0 },
   resultList: { ...SpaceStyles.glassCard, marginTop: 6, overflow: "hidden" },
   resultRow: {
     flexDirection: "row",
