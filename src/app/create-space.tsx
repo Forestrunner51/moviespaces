@@ -1454,6 +1454,11 @@ export default function CreateSpaceScreen() {
               <Text style={[styles.modalEmptyText, { color: Palette.textMuted }]}>
                 {movieSearchNotice}
               </Text>
+            ) : !movieSearching && movieSearch.trim().length >= 2 && movieResults.length === 0 ? (
+              <Text style={[styles.modalEmptyText, { color: Palette.textMuted }]}>
+                No {searchingTv ? "show" : "movie"} found for &ldquo;{movieSearch.trim()}&rdquo; —
+                double-check the spelling, or use it as a custom title above.
+              </Text>
             ) : null}
             {movieSearching ? (
               <ActivityIndicator color={Palette.accent} style={{ marginTop: 20 }} />

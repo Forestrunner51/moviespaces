@@ -66,19 +66,25 @@ export function FriendsPanel() {
           filmName: string;
           createdAt: string;
           screeningTime: string | null;
+          isPublic: boolean;
+          matchMovieKey?: string | null;
           members?: { userId: string; name: string }[];
         }[] = await res.json();
         const when = (g: (typeof groups)[number]) =>
           new Date(g.screeningTime ?? g.createdAt).getTime();
         const seen = new Set<string>([user.id]);
         const peers: { userId: string; name: string; from: string }[] = [];
-        for (const g of [...groups].sort((a, b) => when(b) - when(a))) {
+        // Crews and hosted Spaces only — you "met" the five people at your
+        // showing, not five thousand co-members of a genre club (one big
+        // club roster would flood every suggestion slot).
+        const met = groups.filter((g) => !g.isPublic || !!g.matchMovieKey);
+        outer: for (const g of [...met].sort((a, b) => when(b) - when(a))) {
           for (const m of g.members ?? []) {
             if (!m.userId || seen.has(m.userId)) continue;
             seen.add(m.userId);
             peers.push({ userId: m.userId, name: m.name, from: g.filmName });
+            if (peers.length >= 20) break outer;
           }
-          if (peers.length >= 20) break;
         }
         if (!cancelled) setRecentPeers(peers);
       } catch {

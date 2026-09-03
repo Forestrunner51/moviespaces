@@ -859,7 +859,7 @@ namespace Backend.Controllers
                 return null;
             }
 
-            var today = DateOnly.FromDateTime(DateTime.UtcNow);
+            var today = CentralTime.Today;
 
             // One query across every club: today's scores joined to the
             // membership table in SQL, so member ids never round-trip to the

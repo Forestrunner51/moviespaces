@@ -15,8 +15,8 @@ import { MoviePoster } from "@/frontend/components/movie-poster";
 import { SpaceStyles, Palette, Type, Display, Radius } from "@/frontend/constants/theme";
 import { useToast } from "@/frontend/components/toast";
 import { authFetch } from "@/frontend/services/api";
+import { markOnboarded } from "@/frontend/services/onboarding";
 import { formatEventDate } from "@/frontend/utils/event-date";
-import { completeOnboarding } from "@/frontend/services/onboarding";
 import { getDeviceLocation, type Coordinates } from "@/frontend/services/nearby-theaters";
 import { distanceMiles, formatMilesAway } from "@/frontend/utils/distance";
 
@@ -248,8 +248,13 @@ export default function SpaceDiscoveryScreen() {
   };
 
   const handleContinue = async () => {
+    // Onboarding is DONE here — the flag is written now, so quitting during
+    // the optional tour epilogue can't replay the whole flow next session.
+    // The tour just handles the final routing into the app.
     setFinishing(true);
-    await completeOnboarding();
+    await markOnboarded();
+    router.push({ pathname: "/tour", params: { onboarding: "1" } });
+    setFinishing(false);
   };
 
   return (
@@ -424,7 +429,9 @@ export default function SpaceDiscoveryScreen() {
                   activeOpacity={0.85}
                   style={styles.previewButton}
                   onPress={() => router.push({ pathname: "/group", params: { groupId: space.id } })}
+                  accessibilityLabel={`Preview ${space.displayName} before joining`}
                 >
+                  <Ionicons name="eye-outline" size={15} color={Palette.accent} />
                   <Text style={styles.previewButtonText}>Preview</Text>
                 </TouchableOpacity>
 
@@ -541,10 +548,14 @@ const styles = StyleSheet.create({
   previewButton: {
     ...SpaceStyles.field,
     flex: 1,
+    flexDirection: "row",
+    justifyContent: "center",
     alignItems: "center",
+    gap: 6,
     paddingVertical: 11,
+    borderColor: Palette.accentBorder,
   },
-  previewButtonText: { ...Type.small, color: Palette.textMuted, fontWeight: "700" },
+  previewButtonText: { ...Type.small, color: Palette.accent, fontWeight: "700" },
   joinButton: {
     flex: 1,
     alignItems: "center",

@@ -110,6 +110,10 @@ async function fetchBlockedIds(): Promise<ReadonlySet<string>> {
   if (!rpc.error) {
     return new Set(((rpc.data as string[] | null) || []).map(String));
   }
+  // Loud, not silent: without the function the both-direction guarantee
+  // quietly degrades to outgoing-only, which is exactly the kind of
+  // regression nobody notices until a blocked user reappears.
+  console.warn("blocked_peer_ids RPC unavailable (migration applied?) — falling back to outgoing blocks only:", rpc.error.message);
   const { data, error } = await supabase.from("blocks").select("blocked_id").eq("blocker_id", user.id);
   if (error) {
     console.error("Failed to load blocked users:", error);

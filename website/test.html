@@ -179,14 +179,14 @@
   try{saved=JSON.parse(localStorage.getItem(KEY)||"{}")||{}}catch(e){}
   var rows=[].slice.call(document.querySelectorAll("[data-i]"));
   var done=document.getElementById("done"),total=document.getElementById("total"),
-      fill=document.getElementById("fill"),note=document.getElementById("doneNote");
+      fill=document.getElementById("fill"),doneBanner=document.getElementById("doneNote");
   total.textContent=rows.length;
   function save(){try{localStorage.setItem(KEY,JSON.stringify(saved))}catch(e){}}
   function refresh(){
     var n=rows.filter(function(r){return r.classList.contains("on")}).length;
     done.textContent=n;
     fill.style.width=(rows.length?100*n/rows.length:0)+"%";
-    note.style.display=(n===rows.length&&n>0)?"block":"none";
+    doneBanner.style.display=(n===rows.length&&n>0)?"block":"none";
   }
   rows.forEach(function(r){
     var id=r.getAttribute("data-i");

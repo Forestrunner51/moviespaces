@@ -80,7 +80,7 @@ namespace Backend.Services
 
         public async Task<(DailyPuzzle, DailyPuzzlePayload)?> GetOrCreateTodayAsync(AppDbContext db)
         {
-            var today = DateOnly.FromDateTime(DateTime.UtcNow);
+            var today = CentralTime.Today;
 
             var existing = await db.DailyPuzzles.FirstOrDefaultAsync(p => p.PuzzleDate == today);
             if (existing != null)

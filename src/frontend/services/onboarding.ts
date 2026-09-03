@@ -23,6 +23,13 @@ export async function clearOnboardingFlag() {
   }
 }
 
+// Writes just the flag, no navigation — called when onboarding's real work
+// is done but an optional epilogue (the tour) is still ahead, so a force-quit
+// mid-tour can't send the next session back through the whole flow.
+export async function markOnboarded() {
+  await AsyncStorage.setItem(ONBOARDED_KEY, "1");
+}
+
 export async function completeOnboarding() {
   await AsyncStorage.setItem(ONBOARDED_KEY, "1");
   router.replace(consumePendingRedirect() ?? "/");

@@ -39,11 +39,14 @@ function mapResults(results: any[]): Movie[] {
 // imdbId) can compare the pick's title themselves.
 export function pickFilmForShowing(results: Movie[], marqueeTitle: string): Movie | null {
   const wanted = marqueeTitle.trim().toLowerCase();
-  const withPoster = results.filter((r) => r.posterPath);
-  const exact = withPoster.filter((r) => r.title.trim().toLowerCase() === wanted);
+  // Exact-title matching runs over ALL results: a small release with no OMDb
+  // poster art is still the right film (and its imdbId still matters for
+  // crew convergence) — a poster is a preference within a tier, not a gate.
+  const exact = results.filter((r) => r.title.trim().toLowerCase() === wanted);
+  const preferPoster = (list: Movie[]) => list.find((r) => r.posterPath) ?? list[0] ?? null;
   const windowStart = new Date().getFullYear() - 1;
   const current = exact.filter((r) => r.releaseYear != null && r.releaseYear >= windowStart);
-  return current[0] ?? exact[0] ?? withPoster[0] ?? null;
+  return preferPoster(current) ?? preferPoster(exact) ?? results.find((r) => r.posterPath) ?? null;
 }
 
 export interface SearchOutcome {
