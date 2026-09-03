@@ -16,6 +16,7 @@ import { LoadError } from "@/frontend/components/load-error";
 import { SpaceStyles, Palette, Type, Display, Font, Radius } from "@/frontend/constants/theme";
 import { MoviePoster } from "@/frontend/components/movie-poster";
 import { Avatar, AvatarStack } from "@/frontend/components/avatar";
+import { useProfileSheet } from "@/frontend/components/profile-sheet";
 import { CoachTip } from "@/frontend/components/coach-tip";
 import { useProfiles } from "@/frontend/hooks/use-profiles";
 import { formatEventDate } from "@/frontend/utils/event-date";
@@ -67,6 +68,7 @@ interface MySpace {
 // the card has a reaction: "I'm in" joins on the spot.
 function FeedCard({ space }: { space: NearbySpace }) {
   const { showToast } = useToast();
+  const { openProfile } = useProfileSheet();
   const members = space.members ?? [];
   const profiles = useProfiles([space.userId, ...members.map((m) => m.userId)]);
   const host = profiles.get(space.userId);
@@ -107,7 +109,14 @@ function FeedCard({ space }: { space: NearbySpace }) {
       accessibilityLabel={`${space.hostName} is seeing ${space.filmName}`}
     >
       <View style={styles.feedHead}>
-        <Avatar uri={host?.avatarUrl} name={space.hostName} size={40} />
+        <TouchableOpacity
+          activeOpacity={0.7}
+          disabled={!space.userId}
+          onPress={() => openProfile(space.userId)}
+          accessibilityLabel={`View ${space.hostName}'s profile`}
+        >
+          <Avatar uri={host?.avatarUrl} name={space.hostName} size={40} />
+        </TouchableOpacity>
         <View style={{ flex: 1 }}>
           <Text style={styles.feedLead} numberOfLines={2}>
             <Text style={styles.feedName}>{space.hostName}</Text>

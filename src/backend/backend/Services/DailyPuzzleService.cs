@@ -48,7 +48,12 @@ namespace Backend.Services
         // difficulty (see GradeMysteryItem — harder difficulty means fewer
         // attempts/clues, never a bigger prize, specifically so this stays a
         // fixed number the leaderboard/percentile/stats can keep assuming).
-        public const int MaxScore = 500;
+        // 4 scored challenges × 100. Mystery TV (challenge 5) was cut
+        // 2026-09-03 — after the matching-game conversion it played as a
+        // duplicate of Mystery Movie. It's still GENERATED (payload schema
+        // unchanged, old rows readable) and still GRADED at zero points, so
+        // the previous TestFlight build can keep submitting it safely.
+        public const int MaxScore = 400;
 
         // Distractor count for multiple choice (answer + 3 wrong = 4 options).
         private const int WrongOptionCount = 3;
@@ -812,12 +817,16 @@ namespace Backend.Services
             var mysteryMovie = GradeMysteryItem(
                 payload.MysteryMovie, answers.MysteryMovieGuess, answers.MysteryMovieAttemptsUsed,
                 answers.MysteryMovieDifficulty);
-            // TV track is Easy-only for now — no difficulty param to pass.
+            // Mystery TV is retired from scoring (see MaxScore) but still
+            // graded so an old client that renders its result row gets a
+            // truthful correct/answer — with Points forced to zero so the
+            // sum can't exceed the new MaxScore.
             var mysteryTv = GradeMysteryItem(
-                payload.MysteryTv, answers.MysteryTvGuess, answers.MysteryTvAttemptsUsed, difficulty: null);
+                payload.MysteryTv, answers.MysteryTvGuess, answers.MysteryTvAttemptsUsed, difficulty: null)
+                with { Points = 0 };
 
             var score = connection.Points + chronos.Points + castDeduct.Points
-                + mysteryMovie.Points + mysteryTv.Points;
+                + mysteryMovie.Points;
 
             // Streak and percentile are filled in by the controller, which
             // owns the database — the service stays pure so it's testable.

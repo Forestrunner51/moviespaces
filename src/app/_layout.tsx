@@ -25,6 +25,7 @@ import {
   startNotificationRouting,
 } from "@/frontend/services/notification-routing";
 import { FriendsProvider } from "@/frontend/hooks/use-friends";
+import { ProfileSheetProvider } from "@/frontend/components/profile-sheet";
 import { resetBlockedIds } from "@/frontend/services/moderation";
 import { setPendingRedirect } from "@/frontend/services/pending-redirect";
 import { ToastProvider } from "@/frontend/components/toast";
@@ -198,7 +199,9 @@ function RootLayout() {
   return (
     <ToastProvider>
       <FriendsProvider>
+      <ProfileSheetProvider>
         <Layout />
+      </ProfileSheetProvider>
       </FriendsProvider>
     </ToastProvider>
   );
