@@ -1,4 +1,4 @@
-import { useCallback, useEffect, useRef, useState } from "react";
+import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import {
   View,
   StyleSheet,
@@ -9,7 +9,7 @@ import {
   KeyboardAvoidingView,
   Platform,
 } from "react-native";
-import { Text, TextInput } from "@/frontend/components/scaled-text";
+import { Text } from "@/frontend/components/scaled-text";
 import { router } from "expo-router";
 import { Ionicons } from "@expo/vector-icons";
 import { Starfield } from "@/frontend/components/starfield";
@@ -669,6 +669,7 @@ function Option({
 }
 
 interface MysteryGuessLogEntry {
+  imdbId: string;
   title: string;
   correct: boolean;
   feedback: string[];
@@ -772,6 +773,59 @@ function availableClues(clues: MysteryMovieView): Set<ClueField> {
 // here is determined by an exact match on year + full cast (+ director, for
 // movies) against a small hand-curated catalog, which is reliable enough in
 // practice without ever needing the server to confirm a specific guess.
+// Matching an option to the clues, shared by the option builder and the tap
+// handler. Ids are redacted from the payload, so identity is established the
+// way the old typed-search flow did it: director (movies only) + year + cast.
+function isMysteryMatch(m: CatalogMovie, clues: MysteryMovieView, isTv: boolean): boolean {
+  const directorOk = isTv || (!!m.director && m.director === clues.director);
+  return (
+    directorOk &&
+    m.releaseYear === clues.releaseYear &&
+    m.cast.length === clues.cast.length &&
+    m.cast.every((actor) => clues.cast.includes(actor))
+  );
+}
+
+// Deterministic tiny hash — the option set must not reshuffle between
+// renders or attempts (and Math.random during render trips the compiler's
+// purity rule), so everything derives from the puzzle itself.
+function mysteryHash(str: string): number {
+  let h = 0;
+  for (let i = 0; i < str.length; i++) h = (h * 31 + str.charCodeAt(i)) | 0;
+  return Math.abs(h);
+}
+
+// The mystery challenges are a pick-from-six matching game (typed guessing
+// asked testers to spell obscure titles and dead-ended on typos). One right
+// answer + five decoys, decoys preferring the same decade and shared cast so
+// the year/cast clues don't hand the answer over; slot order is seeded by
+// the puzzle so it's stable all day. Null when the catalog doesn't contain
+// the answer — the caller falls back to skip, same as a failed catalog load.
+function buildMysteryOptions(
+  catalog: CatalogMovie[],
+  clues: MysteryMovieView,
+  isTv: boolean,
+): CatalogMovie[] | null {
+  const answer = catalog.find((m) => isMysteryMatch(m, clues, isTv));
+  if (!answer) return null;
+  const seed = clues.cast.join("|") + clues.releaseYear;
+  const decade = Math.floor(clues.releaseYear / 10);
+  const decoys = catalog
+    .filter((m) => m.imdbId !== answer.imdbId)
+    .map((m) => ({
+      m,
+      score:
+        (Math.floor(m.releaseYear / 10) === decade ? 2 : 0) +
+        (m.cast.some((actor) => clues.cast.includes(actor)) ? 1 : 0),
+      h: mysteryHash(m.imdbId + seed),
+    }))
+    .sort((a, b) => b.score - a.score || a.h - b.h)
+    .slice(0, 5)
+    .map((x) => x.m);
+  const insertAt = mysteryHash(seed) % (decoys.length + 1);
+  return [...decoys.slice(0, insertAt), answer, ...decoys.slice(insertAt)];
+}
+
 function MysteryChallenge({
   challengeNumber,
   clues,
@@ -803,7 +857,6 @@ function MysteryChallenge({
   onDifficultyChange: ((difficulty: MysteryDifficulty) => void) | undefined;
   onGuess: (imdbId: string, correct: boolean, newAttemptsUsed: number, maxAttempts: number) => void;
 }) {
-  const [search, setSearch] = useState("");
   const [history, setHistory] = useState<MysteryGuessLogEntry[]>([]);
 
   const isTv = clues.mediaType === "tv";
@@ -812,24 +865,11 @@ function MysteryChallenge({
   const visibleClues = cluesForTier(difficulty, tier, availableClues(clues));
   const decade = `${Math.floor(clues.releaseYear / 10) * 10}s`;
 
-  const query = search.trim().toLowerCase();
-  const matches =
-    catalog && query.length > 0
-      ? catalog.filter((m) => m.title.toLowerCase().includes(query)).slice(0, 6)
-      : [];
-
-  // Director only factors in for movies — clues.director (and every catalog
-  // TV entry's director) is always null for the TV track, so comparing it
-  // there would be vacuously true and wouldn't help discriminate anything.
-  const isMatch = (m: CatalogMovie) => {
-    const directorOk = isTv || (!!m.director && m.director === clues.director);
-    return (
-      directorOk &&
-      m.releaseYear === clues.releaseYear &&
-      m.cast.length === clues.cast.length &&
-      m.cast.every((actor) => clues.cast.includes(actor))
-    );
-  };
+  const options = useMemo(
+    () => (catalog ? buildMysteryOptions(catalog, clues, isTv) : null),
+    [catalog, clues, isTv],
+  );
+  const wrongIds = new Set(history.filter((e) => !e.correct).map((e) => e.imdbId));
 
   const nearMissFeedback = (m: CatalogMovie): string[] => {
     const feedback: string[] = [];
@@ -843,9 +883,11 @@ function MysteryChallenge({
 
   const handlePick = (m: CatalogMovie) => {
     if (resolved) return;
-    const correct = isMatch(m);
-    setHistory((prev) => [...prev, { title: m.title, correct, feedback: correct ? [] : nearMissFeedback(m) }]);
-    setSearch("");
+    const correct = isMysteryMatch(m, clues, isTv);
+    setHistory((prev) => [
+      ...prev,
+      { imdbId: m.imdbId, title: m.title, correct, feedback: correct ? [] : nearMissFeedback(m) },
+    ]);
     onGuess(m.imdbId, correct, attemptsUsed + 1, maxAttempts);
   };
 
@@ -856,7 +898,7 @@ function MysteryChallenge({
           and the odd title out read as decoration rather than meaning. */}
       <Text style={styles.challengeTitle}>{isTv ? "Mystery TV Show" : "Mystery Movie"}</Text>
       <Text style={styles.challengeHint}>
-        Guess the {isTv ? "show" : "film"} from the clues below. Fewer guesses, more points.
+        Pick the {isTv ? "show" : "film"} that matches the clues. Fewer guesses, more points.
       </Text>
 
       {onDifficultyChange && (
@@ -919,39 +961,38 @@ function MysteryChallenge({
         </View>
       ) : (
         <>
-          <TextInput
-            style={styles.mysteryInput}
-            value={search}
-            onChangeText={setSearch}
-            placeholder={catalogLoading ? "Loading list…" : `Type a ${isTv ? "show" : "movie"} title…`}
-            placeholderTextColor={SpaceTheme.mutedOrbit}
-            editable={!catalogLoading}
-            autoCorrect={false}
-          />
           {catalogLoading && <ActivityIndicator style={styles.mysteryLoadingIndicator} color={SpaceTheme.glowCyan} />}
-          {matches.map((m) => (
-            <TouchableOpacity
-              key={m.imdbId}
-              activeOpacity={0.8}
-              style={styles.mysteryMatchRow}
-              onPress={() => handlePick(m)}
-            >
-              <Text style={styles.mysteryMatchText}>
-                {m.title} ({m.releaseYear})
-              </Text>
-            </TouchableOpacity>
-          ))}
-          {!catalogLoading && catalog != null && query.length > 0 && matches.length === 0 && (
+          {options && (
+            <View style={styles.mysteryOptionList}>
+              {options.map((m) => {
+                const wrong = wrongIds.has(m.imdbId);
+                return (
+                  <TouchableOpacity
+                    key={m.imdbId}
+                    activeOpacity={0.8}
+                    disabled={wrong}
+                    style={[styles.mysteryOption, wrong && styles.mysteryOptionWrong]}
+                    onPress={() => handlePick(m)}
+                    accessibilityRole="button"
+                    accessibilityState={{ disabled: wrong }}
+                  >
+                    <Text style={[styles.mysteryOptionText, wrong && styles.mysteryOptionTextWrong]}>
+                      {m.title} ({m.releaseYear})
+                    </Text>
+                  </TouchableOpacity>
+                );
+              })}
+            </View>
+          )}
+          {!catalogLoading && catalog != null && !options && (
             <>
+              {/* Catalog loaded but the answer isn't findable in it — same
+                  dead-end as a failed catalog load, so offer the same out. */}
               <Text style={styles.mysteryNoMatchesText}>
-                No matches — check the spelling, or skip if you don&apos;t know it.
+                Something&apos;s off with today&apos;s list — skip this one and the rest still count.
               </Text>
-              {/* A non-movie / "I don't know" input finds nothing to guess, so
-                  the player would otherwise be stuck (Next stays disabled until
-                  this challenge resolves). Skipping scores it 0 — same as
-                  running out of attempts — and lets the other challenges count. */}
               <TouchableOpacity activeOpacity={0.85} style={styles.mysterySkipButton} onPress={onSkip}>
-                <Text style={styles.mysterySkipButtonText}>I don&apos;t know — skip this one</Text>
+                <Text style={styles.mysterySkipButtonText}>Skip this challenge</Text>
               </TouchableOpacity>
             </>
           )}
@@ -1231,6 +1272,18 @@ const styles = StyleSheet.create({
   },
   mysteryMatchText: { color: SpaceTheme.starWhite, ...Type.small },
   mysteryLoadingIndicator: { marginTop: 12 },
+  mysteryOptionList: { gap: 8, marginTop: 4 },
+  mysteryOption: {
+    backgroundColor: Palette.raised,
+    borderWidth: 1,
+    borderColor: Palette.border,
+    borderRadius: Radius.small,
+    paddingVertical: 12,
+    paddingHorizontal: 14,
+  },
+  mysteryOptionWrong: { opacity: 0.45, borderColor: Palette.danger },
+  mysteryOptionText: { ...Type.small, color: Palette.text, fontWeight: "600" },
+  mysteryOptionTextWrong: { color: Palette.textMuted, textDecorationLine: "line-through" },
   mysteryNoMatchesText: {
     color: SpaceTheme.mutedOrbit,
     ...Type.caption,
