@@ -37,6 +37,13 @@ Legend: `[ ]` todo · `[x]` done · `[~]` needs verify
 - [ ] Feedback pipeline env vars on Render (site notes → email):
       `Resend__ApiKey` (+ optional `Feedback__To`); CORS for the site is now
       baked into code, no env var needed
+- [ ] Moderation env vars on Render: `Admin__OwnerUserId` (= YOUR Supabase
+      auth user id — makes you host/mod of the 7 seeded genre clubs; re-run
+      the club seed after setting it, response shows `adopted: 7`) and
+      `Reports__HookSecret` (any random string)
+- [ ] Supabase → Database → Webhooks: on `reports` INSERT → POST
+      `https://moviespaces.onrender.com/api/site/report-hook` with header
+      `x-hook-secret` = that same secret → every report emails you in seconds
 
 ## PHASE 2 — Build → TestFlight
 - [ ] `npm run ship` (does: local production build → `eas submit`)
