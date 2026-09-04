@@ -753,6 +753,9 @@ namespace Backend.Controllers
 
         private async Task<IActionResult> SeatInCrewAsync(Group crew, string userId, string name, bool hasTicket, string[]? afterActivities)
         {
+            if (await _db.GroupBans.AnyAsync(b => b.GroupId == crew.Id && b.UserId == userId))
+                return BadRequest(new { error = "You were removed from this crew by its starter." });
+
             await using var tx = await _db.Database.BeginTransactionAsync();
             await LockGroupRowAsync(crew.Id);
             var seated = await _db.GroupMembers.CountAsync(m => m.GroupId == crew.Id);
@@ -1335,6 +1338,9 @@ namespace Backend.Controllers
             var tooLong = CheckLength(req.Name, GroupFieldLimits.Name, "Your name");
             if (tooLong != null) return BadRequest(new { error = tooLong });
 
+            if (await _db.GroupBans.AnyAsync(b => b.GroupId == id && b.UserId == userId))
+                return BadRequest(new { error = "You were removed from this Space by the host." });
+
             // Count and insert in one transaction so two simultaneous joins
             // can't both see "one seat left". The unique (GroupId, UserId)
             // index is the backstop for the duplicate-join race the
@@ -1770,6 +1776,13 @@ namespace Backend.Controllers
             if (req.TotalCostCents.HasValue && req.TotalCostCents.Value < 0)
                 return BadRequest(new { error = "Cost can't be negative." });
 
+            // A crew's plan is LOCKED once it exists: people took seats for
+            // THIS showing — moving it out from under them breaks the thing
+            // they joined. (A legacy crew with no ScreeningTime may still set
+            // one; every crew since the showing-first flow is born with one.)
+            if (group.MatchMovieKey != null && group.ScreeningTime != null)
+                return BadRequest(new { error = "A crew's showing is locked — it's the plan everyone joined. Start a new crew for a different showing." });
+
             // Same rule as MatchForMovie: a Space can't be rescheduled into
             // the past (the open feed would hide it and the reminder would
             // never fire, so the only effect would be confusion).
@@ -1879,6 +1892,13 @@ namespace Backend.Controllers
             if (member.UserId == group.UserId) return BadRequest(new { error = "The host can't be removed. Use Hand Off Ownership instead." });
 
             _db.GroupMembers.Remove(member);
+            // Removal sticks: without this, the match flow would re-seat a
+            // removed member in the same open crew on their next tap.
+            if (!string.IsNullOrEmpty(member.UserId)
+                && !await _db.GroupBans.AnyAsync(b => b.GroupId == id && b.UserId == member.UserId))
+            {
+                _db.GroupBans.Add(new GroupBan { GroupId = id, UserId = member.UserId });
+            }
             await _db.SaveChangesAsync();
 
             return Ok();

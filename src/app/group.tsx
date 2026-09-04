@@ -908,8 +908,11 @@ export default function GroupScreen() {
   // event furniture (showtime, tickets, calendar, hangout-after, booking)
   // stays off and the screen is members + chat + invite.
   const isClub = group.isPublic && !group.matchMovieKey && !!group.genreCategory;
-  const canEdit = isHost || (isCrew && isMember);
   const crewHasPlan = !!group.screeningTime || !!group.cinemaName;
+  // Crews: the plan is locked once it exists — the showing IS what everyone
+  // joined. Only a legacy crew with no plan can still set one; hosted Spaces
+  // keep host editing.
+  const canEdit = (isHost && !isCrew) || (isCrew && isMember && !crewHasPlan);
   // Legacy Spaces predate the screeningTime column and have no exact event
   // time — falling back to createdAt (same pattern as profile.tsx's spaces
   // list) means they're still treated as past rather than staying "active"
