@@ -64,6 +64,50 @@ namespace Backend.Controllers
             return Ok(new { results, message });
         }
 
+        // GET /api/movies/title-lookup?title=Akira
+        //
+        // OMDb's ?t= mode: ONE result, the title OMDb itself considers the
+        // best match — which skews to the famous film. ?s= search order does
+        // not (searching "Akira" ranks a 2016 same-name film above the 1988
+        // one), which is how marquee-title resolution picked wrong posters.
+        // The client prefers this result among exact title matches. Same
+        // 24h cache and shape as search rows.
+        [HttpGet("title-lookup")]
+        public async Task<IActionResult> TitleLookup([FromQuery] string title, [FromQuery] string? mediaType)
+        {
+            if (string.IsNullOrWhiteSpace(title)) return Ok(new { result = (object?)null });
+            var type = mediaType == "tv" ? "series" : "movie";
+            var apiKey = _configuration["Omdb:ApiKey"];
+            if (string.IsNullOrWhiteSpace(apiKey)) return Ok(new { result = (object?)null });
+
+            var cacheKey = $"omdb:title:{type}:{title.Trim().ToLowerInvariant()}";
+            if (_cache.TryGetValue(cacheKey, out object? cachedHit))
+            {
+                return Ok(new { result = cachedHit });
+            }
+
+            object? mapped = null;
+            try
+            {
+                var client = _httpClientFactory.CreateClient();
+                var url = $"{BaseUrl}?apikey={apiKey}&t={Uri.EscapeDataString(title.Trim())}&type={type}";
+                var response = await client.GetAsync(url);
+                if (response.IsSuccessStatusCode)
+                {
+                    var body = await response.Content.ReadAsStringAsync();
+                    using var doc = JsonDocument.Parse(body);
+                    mapped = MapItem(doc.RootElement);
+                }
+            }
+            catch (Exception ex)
+            {
+                Console.WriteLine($"OMDb title lookup failed: {ex.Message}");
+                return Ok(new { result = (object?)null });
+            }
+            _cache.Set(cacheKey, mapped, TimeSpan.FromHours(24));
+            return Ok(new { result = mapped });
+        }
+
         [HttpGet("search-tv")]
         public async Task<IActionResult> SearchTv([FromQuery] string query)
         {

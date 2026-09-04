@@ -27,7 +27,7 @@ import { SpaceStyles, Palette, Type } from "@/frontend/constants/theme";
 import { POST_ACTIVITIES } from "@/frontend/constants/activities";
 import { useFriends } from "@/frontend/hooks/use-friends";
 import { useToast } from "@/frontend/components/toast";
-import { searchMovies, searchTvShows, getNowPlaying, Movie, pickFilmForShowing } from "@/frontend/services/movies";
+import { searchMovies, searchTvShows, getNowPlaying, Movie, resolveMarqueeTitle } from "@/frontend/services/movies";
 import { ShowtimePicker, ShowtimeSelection } from "@/frontend/components/showtime-picker";
 import { useSafeAreaInsets } from "react-native-safe-area-context";
 import {
@@ -515,9 +515,8 @@ export default function CreateSpaceScreen() {
     // art: shared-title and re-release handling lives in pickFilmForShowing
     // (movies.ts) — see its comment for the ranking rules.
     setPosterPath(null);
-    searchMovies(sel.movieTitle)
-      .then((outcome) => {
-        const pick = pickFilmForShowing(outcome.results, sel.movieTitle);
+    resolveMarqueeTitle(sel.movieTitle)
+      .then((pick) => {
         if (pick?.posterPath) setPosterPath(pick.posterPath);
       })
       .catch(() => {});

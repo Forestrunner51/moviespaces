@@ -49,6 +49,44 @@ export function pickFilmForShowing(results: Movie[], marqueeTitle: string): Movi
   return preferPoster(current) ?? preferPoster(exact) ?? results.find((r) => r.posterPath) ?? null;
 }
 
+// OMDb's single best match for a title — the famous one, unlike search
+// order. Null on miss/failure; never throws (resolution is best-effort).
+export async function lookupTitle(title: string, mediaType: "movie" | "tv" = "movie"): Promise<Movie | null> {
+  try {
+    const url = `${process.env.EXPO_PUBLIC_API_URL}/api/movies/title-lookup?title=${encodeURIComponent(title)}&mediaType=${mediaType}`;
+    const res = await authFetch(url);
+    if (!res.ok) return null;
+    const data = await res.json();
+    return data.result ? mapResults([data.result])[0] : null;
+  } catch {
+    return null;
+  }
+}
+
+// The full marquee-title resolution: search + title-lookup in parallel, then
+// pick. The title-lookup hit wins among exact matches (it's how "Akira" means
+// the 1988 film, not a same-named 2016 one search ranks first) — UNLESS the
+// search side found an exact match in the current theatrical window, which
+// means a remake is actually in theaters and beats the famous original.
+export async function resolveMarqueeTitle(marqueeTitle: string): Promise<Movie | null> {
+  const [outcome, titleHit] = await Promise.all([
+    searchMovies(marqueeTitle).catch(() => ({ results: [] as Movie[], notice: null })),
+    lookupTitle(marqueeTitle),
+  ]);
+  const pick = pickFilmForShowing(outcome.results, marqueeTitle);
+  const wanted = marqueeTitle.trim().toLowerCase();
+  if (titleHit && titleHit.title.trim().toLowerCase() === wanted) {
+    const windowStart = new Date().getFullYear() - 1;
+    const pickIsCurrentExact =
+      pick != null &&
+      pick.title.trim().toLowerCase() === wanted &&
+      pick.releaseYear != null &&
+      pick.releaseYear >= windowStart;
+    if (!pickIsCurrentExact) return titleHit;
+  }
+  return pick;
+}
+
 export interface SearchOutcome {
   results: Movie[];
   // Set when OMDb rejected the query itself (e.g. too short/generic) rather
