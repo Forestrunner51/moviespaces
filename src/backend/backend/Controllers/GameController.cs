@@ -298,7 +298,7 @@ namespace Backend.Controllers
         // day. The caller's own row is looked up separately and always
         // returned, so being outside the top still shows you your rank.
         [HttpGet("leaderboard/global")]
-        public async Task<IActionResult> GetGlobalLeaderboard()
+        public async Task<IActionResult> GetGlobalLeaderboard([FromQuery] string? period = null)
         {
             const int TopCount = 100;
 
@@ -306,6 +306,57 @@ namespace Backend.Controllers
             if (string.IsNullOrEmpty(userId)) return Unauthorized(new { error = "Unauthorized" });
 
             var today = CentralTime.Today;
+
+            // ?period=week — rolling 7 puzzle days, score SUMMED across the
+            // days you played (rewards showing up daily, which is the whole
+            // point of a daily puzzle), total time as the tiebreak. In-memory
+            // aggregation: a week of rows is small at any scale we'll see.
+            if (string.Equals(period, "week", StringComparison.OrdinalIgnoreCase))
+            {
+                var weekStart = today.AddDays(-6);
+                var weekRows = await _db.UserDailyProgress
+                    .Where(p => p.PuzzleDate >= weekStart && p.PuzzleDate <= today)
+                    .ToListAsync();
+                var agg = weekRows
+                    .GroupBy(p => p.UserId)
+                    .Select(g =>
+                    {
+                        var latest = g.OrderByDescending(p => p.PuzzleDate).First();
+                        return new
+                        {
+                            g.Key,
+                            Score = g.Sum(p => p.Score),
+                            Time = g.Sum(p => (long)p.TimeTakenMs),
+                            Days = g.Count(),
+                            latest.DisplayName,
+                            latest.StreakCount,
+                        };
+                    })
+                    .OrderByDescending(x => x.Score)
+                    .ThenBy(x => x.Time)
+                    .ToList();
+
+                object WeekEntry(int idx) => new
+                {
+                    rank = idx + 1,
+                    name = string.IsNullOrWhiteSpace(agg[idx].DisplayName) ? "Player" : agg[idx].DisplayName,
+                    score = agg[idx].Score,
+                    timeTakenMs = (int)Math.Min(agg[idx].Time, int.MaxValue),
+                    streakCount = agg[idx].StreakCount,
+                    isYou = agg[idx].Key == userId,
+                    daysPlayed = agg[idx].Days,
+                };
+
+                var mineIdx = agg.FindIndex(x => x.Key == userId);
+                return Ok(new
+                {
+                    puzzleDate = $"{weekStart:yyyy-MM-dd}",
+                    playedCount = agg.Count,
+                    isTruncated = agg.Count > Math.Min(agg.Count, TopCount),
+                    you = mineIdx >= 0 ? WeekEntry(mineIdx) : null,
+                    leaderboard = Enumerable.Range(0, Math.Min(agg.Count, TopCount)).Select(WeekEntry).ToList(),
+                });
+            }
 
             // Score first, then speed — same ordering as the per-Space board,
             // so a player's rank means the same thing on both.

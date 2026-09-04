@@ -354,7 +354,7 @@ export default function CineMindScreen() {
             forget to come back tomorrow to keep your streak.
           </CoachTip>
           <View style={styles.progressRow}>
-            {[0, 1, 2, 3, 4].map((i) => (
+            {[0, 1, 2, 3].map((i) => (
               <View
                 key={i}
                 style={[

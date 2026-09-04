@@ -159,6 +159,8 @@ export interface LeaderboardEntry {
   timeTakenMs: number;
   streakCount: number;
   isYou: boolean;
+  // Weekly board only: how many of the 7 days this player showed up.
+  daysPlayed?: number;
 }
 
 export interface SpaceLeaderboard {
@@ -279,8 +281,9 @@ export interface GlobalLeaderboard {
 // Unlike the per-Space board, this throws on failure: it backs a whole screen
 // whose only job is to show it, so a silent null would render an empty tab
 // that looks identical to "nobody has played".
-export async function fetchGlobalLeaderboard(): Promise<GlobalLeaderboard> {
-  const res = await authFetchWithTimeout(`${BASE}/leaderboard/global`, {}, COLD_START_TIMEOUT_MS);
+export async function fetchGlobalLeaderboard(period: "today" | "week" = "today"): Promise<GlobalLeaderboard> {
+  const suffix = period === "week" ? "?period=week" : "";
+  const res = await authFetchWithTimeout(`${BASE}/leaderboard/global${suffix}`, {}, COLD_START_TIMEOUT_MS);
   if (!res.ok) {
     const body = await res.json().catch(() => ({}));
     throw new Error(body?.error || `Couldn't load the leaderboard (${res.status}).`);

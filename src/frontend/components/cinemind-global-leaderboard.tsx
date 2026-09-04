@@ -31,6 +31,7 @@ interface GlobalLeaderboardViewProps {
 // inside a Space, so a player with no Spaces finished a puzzle and had
 // nowhere to see where they landed. This is the screen that always works.
 export function GlobalLeaderboardView({ onBack }: GlobalLeaderboardViewProps) {
+  const [period, setPeriod] = useState<"today" | "week">("today");
   const [data, setData] = useState<GlobalLeaderboard | null>(null);
   const [error, setError] = useState<string | null>(null);
   const [loading, setLoading] = useState(true);
@@ -48,7 +49,7 @@ export function GlobalLeaderboardView({ onBack }: GlobalLeaderboardViewProps) {
     }
 
     try {
-      const next = await fetchGlobalLeaderboard();
+      const next = await fetchGlobalLeaderboard(period);
       setData(next);
       setError(null);
     } catch (err: any) {
@@ -57,7 +58,7 @@ export function GlobalLeaderboardView({ onBack }: GlobalLeaderboardViewProps) {
       setLoading(false);
       setRefreshing(false);
     }
-  }, []);
+  }, [period]);
 
   useEffect(() => {
     load();
@@ -93,12 +94,38 @@ export function GlobalLeaderboardView({ onBack }: GlobalLeaderboardViewProps) {
           <Text style={styles.backRowText}>Back to Puzzle</Text>
         </TouchableOpacity>
 
-        <Text style={styles.title}>Today&apos;s Leaderboard</Text>
+        <Text style={styles.title}>
+          {period === "week" ? "This Week\u2019s Leaderboard" : "Today\u2019s Leaderboard"}
+        </Text>
         {!!data && (
           <Text style={styles.subtitle}>
-            {data.playedCount} {data.playedCount === 1 ? "player" : "players"} today
+            {data.playedCount} {data.playedCount === 1 ? "player" : "players"}{" "}
+            {period === "week" ? "this week — scores add up across the days you play" : "today"}
           </Text>
         )}
+
+        <View style={styles.periodRow}>
+          {(["today", "week"] as const).map((p) => (
+            <TouchableOpacity
+              key={p}
+              activeOpacity={0.85}
+              style={[styles.periodChip, period === p && styles.periodChipOn]}
+              onPress={() => {
+                if (p !== period) {
+                  setPeriod(p);
+                  setLoading(true);
+                  setError(null);
+                }
+              }}
+              accessibilityRole="button"
+              accessibilityState={{ selected: period === p }}
+            >
+              <Text style={[styles.periodChipText, period === p && styles.periodChipTextOn]}>
+                {p === "today" ? "Today" : "This Week"}
+              </Text>
+            </TouchableOpacity>
+          ))}
+        </View>
 
         {error && (
           <View style={styles.card}>
@@ -112,7 +139,9 @@ export function GlobalLeaderboardView({ onBack }: GlobalLeaderboardViewProps) {
 
         {!error && data?.leaderboard.length === 0 && (
           <View style={styles.card}>
-            <Text style={styles.emptyTitle}>Nobody has played yet today.</Text>
+            <Text style={styles.emptyTitle}>
+              {period === "week" ? "Nobody has played this week." : "Nobody has played yet today."}
+            </Text>
             <Text style={styles.emptyText}>Be the first on the board.</Text>
             <TouchableOpacity activeOpacity={0.85} style={styles.button} onPress={onBack}>
               <Text style={styles.buttonText}>Play Today&apos;s Puzzle</Text>
@@ -189,6 +218,18 @@ const styles = StyleSheet.create({
     marginTop: 4,
     marginBottom: 16,
   },
+  periodRow: { flexDirection: "row", gap: 8, marginBottom: 14 },
+  periodChip: {
+    paddingVertical: 7,
+    paddingHorizontal: 16,
+    borderRadius: Radius.pill,
+    borderWidth: 1,
+    borderColor: Palette.border,
+    backgroundColor: Palette.raised,
+  },
+  periodChipOn: { backgroundColor: Palette.accentDim, borderColor: Palette.accentBorder },
+  periodChipText: { ...Type.small, color: Palette.textMuted, fontWeight: "600" },
+  periodChipTextOn: { color: Palette.accent },
   card: { ...SpaceStyles.glassCard, padding: 16, marginBottom: 16, alignItems: "stretch" },
   row: {
     flexDirection: "row",
