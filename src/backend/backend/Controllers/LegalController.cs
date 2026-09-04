@@ -164,9 +164,19 @@ namespace Backend.Controllers
                 h2 {{ font-size: 16px; font-weight: 700; margin-bottom: 8px; color: #EF8A3C; }}
                 p {{ font-size: 14px; color: #F7F0E8; margin-bottom: 24px; }}
                 a {{ color: #EF8A3C; }}
+                .home {{
+                    display: inline-block;
+                    color: #B3A296;
+                    text-decoration: none;
+                    font-size: 14px;
+                    font-weight: 600;
+                    margin-bottom: 24px;
+                }}
+                .home:hover {{ color: #EF8A3C; }}
             </style>
         </head>
         <body>
+            <a class='home' href='https://moviespaces.org'>&larr; moviespaces.org</a>
             <h1>{WebUtility.HtmlEncode(title)}</h1>
             <p class='updated'>Last updated {WebUtility.HtmlEncode(LastUpdated)}</p>
             {sectionsHtml}
