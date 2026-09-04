@@ -70,6 +70,15 @@
   .cta{display:inline-flex;align-items:center;gap:10px;background:var(--accent);color:var(--base);font-weight:700;font-size:16px;padding:14px 26px;border-radius:999px;text-decoration:none;box-shadow:0 8px 30px rgba(239,138,60,.25)}
   .cta svg{flex:none}
   .cta-note{color:var(--faint);font-size:14px}
+  .notify{margin-top:22px;max-width:430px}
+  .notify-line{color:var(--muted);font-size:15px;margin-bottom:10px}
+  .notify-line b{color:var(--text)}
+  .notify-row{display:flex;gap:8px}
+  .notify-row input[type=email]{flex:1;min-width:0;background:var(--raised);border:1px solid var(--border2);border-radius:999px;color:var(--text);font-family:Karla,sans-serif;font-size:15px;padding:12px 18px}
+  .notify-row input[type=email]:focus{outline:none;border-color:var(--accent-border)}
+  .notify-row button{background:var(--accent);color:var(--base);border:0;border-radius:999px;font-family:Karla,sans-serif;font-weight:700;font-size:15px;padding:12px 20px;cursor:pointer;white-space:nowrap}
+  .notify-row button:disabled{opacity:.6;cursor:default}
+  .notify-done{color:var(--positive);font-size:14.5px;font-weight:700;margin-top:10px}
 
   /* phone mockup, pure CSS */
   .phone-col{display:flex;justify-content:center}
@@ -215,6 +224,9 @@
     .sub{font-size:16.5px}
     /* full-width CTA reads as a button, not a pill lost in space */
     .cta-row{flex-direction:column;align-items:stretch;gap:10px}
+    .notify{max-width:none}
+    .notify-row{flex-direction:column}
+    .notify-row button{padding:13px}
     .cta{justify-content:center}
     .cta-note{text-align:center}
     .phone{width:270px}
@@ -257,6 +269,17 @@
           </a>
           <span class="cta-note">iPhone · free · First crews forming in Dallas this fall.</span>
         </div>
+        <form class="notify" id="notifyForm" autocomplete="on">
+          <p class="notify-line">MovieSpaces launches this fall. <b>Get the link first.</b></p>
+          <div class="notify-row">
+            <input type="email" id="notifyEmail" name="email" placeholder="you@email.com" required
+                   autocomplete="email" inputmode="email" aria-label="Email address">
+            <input type="text" id="notifyWebsite" tabindex="-1" autocomplete="off" aria-hidden="true"
+                   style="position:absolute;left:-9999px" placeholder="website">
+            <button type="submit" id="notifyBtn">Notify me</button>
+          </div>
+          <p class="notify-done" id="notifyDone" hidden>🎬 You&rsquo;re on the list — see you opening night.</p>
+        </form>
       </div>
       <div class="phone-col">
         <div class="phone" aria-hidden="true">
@@ -396,6 +419,30 @@
     </footer>
   </div>
 <script>
+(function(){
+  var form=document.getElementById("notifyForm");
+  if(form){
+    form.addEventListener("submit",function(e){
+      e.preventDefault();
+      var email=document.getElementById("notifyEmail").value.trim();
+      var btn=document.getElementById("notifyBtn");
+      if(!email)return;
+      btn.disabled=true;btn.textContent="Adding\u2026";
+      fetch("https://moviespaces.onrender.com/api/site/notify",{
+        method:"POST",headers:{"Content-Type":"application/json"},
+        body:JSON.stringify({email:email,website:document.getElementById("notifyWebsite").value})
+      }).then(function(r){
+        if(!r.ok)throw new Error("status "+r.status);
+        document.getElementById("notifyDone").hidden=false;
+        form.querySelector(".notify-row").hidden=true;
+        document.querySelector(".notify-line").hidden=true;
+      }).catch(function(){
+        btn.disabled=false;btn.textContent="Notify me";
+        alert("Couldn't save that — try again in a moment?");
+      });
+    });
+  }
+})();
 (function(){
   var API="https://moviespaces.onrender.com/api/site/clapper";
   var el=document.getElementById("takeCount"),board=document.getElementById("clapper");

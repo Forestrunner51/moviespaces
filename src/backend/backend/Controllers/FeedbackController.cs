@@ -71,6 +71,49 @@ namespace Backend.Controllers
             return Ok(new { count = row?.Count ?? taps });
         }
 
+        public record NotifyRequest(string? Email, string? Website);
+
+        // POST /api/site/notify — the landing page's "get the link first"
+        // box. Anonymous by nature; defenses are the guest-join IP limit,
+        // the honeypot, a length cap, and a shape check. Duplicates return
+        // 200 (idempotent — "you're on the list" either way).
+        [HttpPost("notify")]
+        [AllowAnonymous]
+        [EnableRateLimiting("guest-join")]
+        public async Task<IActionResult> Notify([FromBody] NotifyRequest req)
+        {
+            if (!string.IsNullOrWhiteSpace(req.Website)) return Ok(new { ok = true }); // honeypot
+
+            var email = (req.Email ?? "").Trim().ToLowerInvariant();
+            if (email.Length is < 6 or > 320 || !email.Contains('@') || !email.Contains('.') || email.Contains(' '))
+                return BadRequest(new { error = "That doesn't look like an email." });
+
+            if (!await _db.LaunchSignups.AnyAsync(x => x.Email == email))
+            {
+                _db.LaunchSignups.Add(new LaunchSignup { Email = email });
+                await _db.SaveChangesAsync();
+            }
+            return Ok(new { ok = true });
+        }
+
+        // GET /api/site/notify/list — admin-gated export for launch day.
+        [HttpGet("notify/list")]
+        [AllowAnonymous]
+        public async Task<IActionResult> NotifyList()
+        {
+            var expected = _config["CineMind:AdminSecret"];
+            if (string.IsNullOrWhiteSpace(expected))
+                return StatusCode(500, new { error = "CineMind:AdminSecret is not configured." });
+            Request.Headers.TryGetValue("x-admin-secret", out var provided);
+            if (!System.Security.Cryptography.CryptographicOperations.FixedTimeEquals(
+                    System.Text.Encoding.UTF8.GetBytes(provided.ToString()),
+                    System.Text.Encoding.UTF8.GetBytes(expected)))
+                return Unauthorized(new { error = "Unauthorized" });
+            var rows = await _db.LaunchSignups.OrderBy(x => x.CreatedAt)
+                .Select(x => new { x.Email, x.CreatedAt }).ToListAsync();
+            return Ok(new { count = rows.Count, rows });
+        }
+
         // POST /api/site/report-hook — Supabase Database Webhook target for
         // INSERTs on public.reports. Turns "reports land in a table nobody
         // watches" into an email within seconds, which is what "timely action
