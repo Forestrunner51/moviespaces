@@ -823,8 +823,6 @@ namespace Backend.Services
             "tt7366338", // Chernobyl
             "tt9140554", // Cobra Kai
             "tt5788792", // The Marvelous Mrs. Maisel
-            "tt7908628", // Bridgerton
-            "tt0121220", // Sex and the City
             "tt0306414", // The Wire
             "tt0411008", // Lost
             "tt3032476", // Better Call Saul
@@ -1180,7 +1178,7 @@ namespace Backend.Services
         //
         // OMDb's free tier has a daily request cap, so this is a deliberate
         // one-shot admin action rather than something that runs per request.
-        public async Task<(int Added, int Updated, int Failed)> SeedAsync(AppDbContext db)
+        public async Task<(int Added, int Updated, int Failed)> SeedAsync(AppDbContext db, bool refresh = false)
         {
             // A carousel id with no seed entry would silently never appear —
             // the flag has nothing to attach to. Worth a warning rather than a
@@ -1200,6 +1198,10 @@ namespace Backend.Services
 
             foreach (var imdbId in SeedImdbIds.Distinct(StringComparer.OrdinalIgnoreCase))
             {
+                // Already-seeded rows are skipped by default: a top-up run
+                // after a quota-limited day only pays OMDb for what's missing.
+                // ?refresh=true forces a full re-fetch of every row.
+                if (!refresh && existing.ContainsKey(imdbId)) continue;
                 var entry = await _omdb.LookupCatalogEntryAsync(imdbId);
                 if (entry == null || entry.ReleaseYear == 0)
                 {
@@ -1257,13 +1259,20 @@ namespace Backend.Services
         // Same idempotent upsert-by-ImdbId pattern as SeedAsync, against the
         // separate TV table — see SeedTvImdbIds for why it's a much shorter
         // list, and CineMindTvShow for why there's no Director field to set.
-        public async Task<(int Added, int Updated, int Failed)> SeedTvAsync(AppDbContext db)
+        public async Task<(int Added, int Updated, int Failed)> SeedTvAsync(AppDbContext db, bool refresh = false)
         {
             var existing = await db.CineMindTvShows.ToDictionaryAsync(m => m.ImdbId, StringComparer.OrdinalIgnoreCase);
             int added = 0, updated = 0, failed = 0;
+            // Twin rows sharing (title, year) under different ids break the
+            // mystery's clue-matching (the client can pick the twin whose id
+            // isn't the payload's answer) — so an id that resolves to a
+            // title+year already in the catalog is skipped, not added.
+            var byTitleYear = new HashSet<string>(
+                existing.Values.Select(v => $"{v.Title}|{v.ReleaseYear}".ToLowerInvariant()));
 
             foreach (var imdbId in SeedTvImdbIds.Distinct(StringComparer.OrdinalIgnoreCase))
             {
+                if (!refresh && existing.ContainsKey(imdbId)) continue;
                 var entry = await _omdb.LookupCatalogEntryAsync(imdbId, mediaType: "series");
                 if (entry == null || entry.ReleaseYear == 0)
                 {
@@ -1286,6 +1295,11 @@ namespace Backend.Services
                 }
                 else
                 {
+                    var dedupeKey = $"{entry.Title}|{entry.ReleaseYear}".ToLowerInvariant();
+                    if (!byTitleYear.Add(dedupeKey))
+                    {
+                        continue; // same show under a second id — don't add a twin
+                    }
                     db.CineMindTvShows.Add(new CineMindTvShow
                     {
                         ImdbId = entry.ImdbId,

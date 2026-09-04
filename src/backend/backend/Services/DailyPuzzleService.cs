@@ -250,14 +250,25 @@ namespace Backend.Services
             // stays deterministic; falls back to a film when the TV catalog
             // is empty. (The legacy MysteryTv slot below still exists for
             // old clients; it's unscored either way.)
-            var mysteryMovie = rng.Next(3) == 0
+            // GATED OFF until the post-2026-09 client build is broadly
+            // installed: shipped builds hardcode the MOVIE catalog for the
+            // mystery autocomplete, so a TV answer is unwinnable for them
+            // (silently degrades to skip = guaranteed 0). Flip the Render env
+            // var CineMind__TvMysteryEnabled=true once the new build is out.
+            // rng.Next(3) is consumed regardless so the day's stream (and
+            // therefore every other challenge) is identical either way.
+            var tvMysteryEnabled = string.Equals(
+                _configuration["CineMind:TvMysteryEnabled"], "true", StringComparison.OrdinalIgnoreCase);
+            var wantTvMystery = rng.Next(3) == 0;
+            var mysteryMovie = tvMysteryEnabled && wantTvMystery
                 ? BuildMysteryTv(rng, tvCatalog) ?? BuildMysteryMovie(rng, catalog, used)
                 : BuildMysteryMovie(rng, catalog, used);
             if (mysteryMovie == null) return null;
 
-            // Separate catalog/pool, so no "used" exclusion needed against
-            // the movie challenges above.
-            var mysteryTv = BuildMysteryTv(rng, tvCatalog);
+            // Legacy slot for old clients (unscored). Must not duplicate the
+            // scored mystery when THAT is a TV show today.
+            var mysteryTv = BuildMysteryTv(rng, tvCatalog,
+                exclude: mysteryMovie.MediaType == "tv" ? mysteryMovie.Answer : null);
             if (mysteryTv == null) return null;
 
             // Stamped explicitly, not defaulted — see DailyPuzzlePayload's
@@ -294,11 +305,15 @@ namespace Backend.Services
         // Same shape, TV catalog — no Director (see CineMindTvShow) and no
         // "used" exclusion since this pool is entirely separate from the
         // movie challenges' catalog.
-        private static MysteryMovieChallenge? BuildMysteryTv(Random rng, List<TvCatalogEntry> tvCatalog)
+        private static MysteryMovieChallenge? BuildMysteryTv(
+            Random rng, List<TvCatalogEntry> tvCatalog, string? exclude = null)
         {
-            if (tvCatalog.Count == 0) return null;
+            var pool = exclude == null
+                ? tvCatalog
+                : tvCatalog.Where(e => !string.Equals(e.Show.ImdbId, exclude, StringComparison.OrdinalIgnoreCase)).ToList();
+            if (pool.Count == 0) return null;
 
-            var target = tvCatalog[rng.Next(tvCatalog.Count)];
+            var target = pool[rng.Next(pool.Count)];
             return new MysteryMovieChallenge(
                 "tv",
                 target.Show.ImdbId,
@@ -649,7 +664,11 @@ namespace Backend.Services
                     foreach (var m in payload.Chronos.Movies) movies.Add(m.ImdbId);
                     movies.Add(payload.CastDeduct.MovieA.ImdbId);
                     movies.Add(payload.CastDeduct.MovieB.ImdbId);
-                    movies.Add(payload.MysteryMovie.Answer);
+                    // The scored mystery can be either media type now — file
+                    // its answer in the pool it actually came from, or the
+                    // exclusion never fires.
+                    if (payload.MysteryMovie.MediaType == "tv") tv.Add(payload.MysteryMovie.Answer);
+                    else movies.Add(payload.MysteryMovie.Answer);
                     tv.Add(payload.MysteryTv.Answer);
                 }
                 catch (Exception ex)

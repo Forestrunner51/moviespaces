@@ -386,17 +386,28 @@
   var count=null,pending=0,flushTimer=null;
   function render(){el.textContent=count==null?"1":count.toLocaleString()}
   fetch(API).then(function(r){return r.json()}).then(function(d){
-    count=(d.count||0)+1; // the take being slated is the NEXT one
+    // The take being slated is the NEXT one — and a slow-arriving GET must
+    // never rewind taps already made locally.
+    var next=(d.count||0)+1+pending;
+    count=count==null?next:Math.max(count,next);
     render();
-  }).catch(function(){count=1;render()});
+  }).catch(function(){if(count==null){count=1;render()}});
+  var inFlight=false;
   function flush(){
-    if(!pending)return;
-    var taps=Math.min(pending,50);pending-=taps;
+    if(!pending||inFlight)return;
+    var taps=Math.min(pending,50);
+    inFlight=true;
     fetch(API,{method:"POST",headers:{"Content-Type":"application/json"},body:JSON.stringify({taps:taps})})
-      .then(function(r){return r.json()})
-      .then(function(d){if(d&&typeof d.count==="number"){var next=d.count+1+pending;if(next>count){count=next;render()}}})
-      .catch(function(){});
-    if(pending)flushTimer=setTimeout(flush,900);
+      .then(function(r){if(!r.ok)throw new Error("status "+r.status);return r.json()})
+      .then(function(d){
+        pending-=taps; // only once the server actually has them
+        if(d&&typeof d.count==="number"){var next=d.count+1+pending;if(next>count){count=next;render()}}
+      })
+      .catch(function(){/* keep pending; the retry below re-sends */})
+      .finally(function(){
+        inFlight=false;
+        if(pending){clearTimeout(flushTimer);flushTimer=setTimeout(flush,1500)}
+      });
   }
   board.addEventListener("click",function(){
     count=(count==null?1:count+1);pending++;render();

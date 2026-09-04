@@ -92,12 +92,17 @@ namespace Backend.Controllers
                 var client = _httpClientFactory.CreateClient();
                 var url = $"{BaseUrl}?apikey={apiKey}&t={Uri.EscapeDataString(title.Trim())}&type={type}";
                 var response = await client.GetAsync(url);
-                if (response.IsSuccessStatusCode)
+                if (!response.IsSuccessStatusCode)
                 {
-                    var body = await response.Content.ReadAsStringAsync();
-                    using var doc = JsonDocument.Parse(body);
-                    mapped = MapItem(doc.RootElement);
+                    // Quota/5xx is transient — caching this null for 24h would
+                    // pin every resolution of the title back to raw search
+                    // order (the wrong-Akira bug) long after OMDb recovers.
+                    Console.WriteLine($"OMDb title lookup error {(int)response.StatusCode}");
+                    return Ok(new { result = (object?)null });
                 }
+                var body = await response.Content.ReadAsStringAsync();
+                using var doc = JsonDocument.Parse(body);
+                mapped = MapItem(doc.RootElement);
             }
             catch (Exception ex)
             {
