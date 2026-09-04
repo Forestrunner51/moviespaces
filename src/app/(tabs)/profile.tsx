@@ -7,6 +7,7 @@ import {
   ScrollView,
   KeyboardAvoidingView,
   Platform,
+  Linking,
 } from "react-native";
 import { Text, TextInput } from "@/frontend/components/scaled-text";
 import { supabase } from "@/frontend/config/supabase";
@@ -552,6 +553,31 @@ export default function ProfileScreen() {
             ))
           )}
         </View>
+
+        <View style={styles.followSection}>
+          <Text style={styles.followLabel}>FOLLOW MOVIESPACES</Text>
+          <View style={styles.followRow}>
+            {(
+              [
+                { icon: "logo-instagram", label: "Instagram", url: "https://instagram.com/moviespacesapp" },
+                { icon: "logo-tiktok", label: "TikTok", url: "https://www.tiktok.com/@moviespacesapp" },
+                { icon: "logo-youtube", label: "YouTube", url: "https://www.youtube.com/@moviespacesapp" },
+                { icon: "globe-outline", label: "Website", url: "https://moviespaces.org" },
+              ] as const
+            ).map((social) => (
+              <TouchableOpacity
+                key={social.label}
+                activeOpacity={0.7}
+                style={styles.followButton}
+                onPress={() => Linking.openURL(social.url).catch(() => {})}
+                accessibilityRole="link"
+                accessibilityLabel={`MovieSpaces on ${social.label}`}
+              >
+                <Ionicons name={social.icon} size={20} color={Palette.textMuted} />
+              </TouchableOpacity>
+            ))}
+          </View>
+        </View>
       </ScrollView>
       </KeyboardAvoidingView>
     </Starfield>
@@ -705,6 +731,19 @@ const styles = StyleSheet.create({
   },
   cancelEditButtonText: { ...Type.small, color: Palette.textMuted,},
   spacesSection: { marginBottom: 24 },
+  followSection: { alignItems: "center", marginTop: 6, marginBottom: 8 },
+  followLabel: { ...Type.caption, fontWeight: "700", letterSpacing: 1.5, color: Palette.textFaint, marginBottom: 10 },
+  followRow: { flexDirection: "row", gap: 12 },
+  followButton: {
+    width: 44,
+    height: 44,
+    borderRadius: 22,
+    borderWidth: 1,
+    borderColor: Palette.border,
+    backgroundColor: Palette.raised,
+    alignItems: "center",
+    justifyContent: "center",
+  },
   spacesSectionTitle: {
     ...Type.body,
     fontWeight: "700",
