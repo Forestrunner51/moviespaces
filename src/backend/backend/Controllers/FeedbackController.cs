@@ -48,6 +48,7 @@ namespace Backend.Controllers
         // renders on the public landing page.
         [HttpGet("clapper")]
         [AllowAnonymous]
+        [EnableRateLimiting("guest-join")]
         public async Task<IActionResult> GetClapper()
         {
             var row = await _db.SiteCounters.AsNoTracking().FirstOrDefaultAsync(c => c.Key == ClapperKey);
