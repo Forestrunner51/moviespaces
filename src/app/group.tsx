@@ -1249,6 +1249,86 @@ export default function GroupScreen() {
           </Text>
         )}
 
+        {/* Actions live directly under the when/where — Invite, Directions,
+            Chat, Calendar are what someone opens this screen to do; they were
+            buried below the member list. Space code rides just beneath. */}
+
+        {/* The club's whole job is routing people into real plans — so the
+            match flow gets a first-class button here, not just the FAB. */}
+        {isClub && (
+          <ActionButton
+            icon="people-outline"
+            label="Find a Movie Crew"
+            onPress={() => router.push("/match")}
+            style={styles.joinButton}
+            textStyle={styles.buttonText}
+            iconColor={SpaceTheme.backgroundVoid}
+          />
+        )}
+
+        <View style={styles.quickActionsRow}>
+          {!hasPassed && (
+            <QuickAction icon="share-social-outline" label="Invite" onPress={shareLink} />
+          )}
+
+          {!hasPassed && !!group.cinemaName && (
+            <QuickAction icon="navigate-outline" label="Directions" onPress={handleOpenMaps} />
+          )}
+
+          {/* Hosted Spaces: chat unlocks when you're marked going — a
+              pending RSVP hasn't committed to the plan yet. Crews and clubs
+              are exempt (a crew seat IS the commitment; clubs are pure chat). */}
+          {(isHost || (isMember && (isCrew || isClub || myMember?.confirmed))) && (
+            <QuickAction
+              icon="chatbubbles-outline"
+              label="Chat"
+              onPress={() =>
+                router.push({
+                  pathname: "/group-chat/[id]",
+                  params: {
+                    id: group.id,
+                    type: "group",
+                    title: group.filmName,
+                    showTime: group.showTime,
+                    showDate: group.showDate,
+                    seasonEpisodeInfo: group.seasonEpisodeInfo ?? "",
+                  },
+                })
+              }
+            />
+          )}
+
+          {(isHost || isMember) && !isClub && group.spaceType === "public_gathering" && !hasPassed && (
+            <QuickAction icon="ticket-outline" label="Tickets" onPress={handleGetTickets} />
+          )}
+
+          {(isHost || isMember) && !isClub && !hasPassed && (
+            <QuickAction
+              icon="calendar-outline"
+              label="Calendar"
+              onPress={handleAddToCalendar}
+              loading={addingToCalendar}
+            />
+          )}
+
+          {!isHost && (
+            <QuickAction icon="flag-outline" label="Report" onPress={handleReportSpace} />
+          )}
+        </View>
+        {isMember && !isHost && !isCrew && !isClub && !myMember?.confirmed && !hasPassed && (
+          <Text style={styles.chatLockedHint}>
+            Confirm you&apos;re going to unlock the group chat.
+          </Text>
+        )}
+        {!!group?.spaceCode && !hasPassed && (
+          <TouchableOpacity activeOpacity={0.85} style={styles.spaceCodeRow} onPress={shareLink}>
+            <Ionicons name="key-outline" size={16} color={SpaceTheme.accentGold} />
+            <Text style={styles.spaceCodeLabel}>Space code</Text>
+            <Text style={styles.spaceCodeValue}>{group.spaceCode}</Text>
+          </TouchableOpacity>
+        )}
+
+
         {/* No per-Space ticket link for a theater screening: "Get Tickets"
             opens a Fandango search for the film, and the host's own "Find
             Showtimes Near Me" is what actually resolves a real showtime.
@@ -1524,81 +1604,6 @@ export default function GroupScreen() {
           />
         )}
 
-        {!!group?.spaceCode && !hasPassed && (
-          <TouchableOpacity activeOpacity={0.85} style={styles.spaceCodeRow} onPress={shareLink}>
-            <Ionicons name="key-outline" size={16} color={SpaceTheme.accentGold} />
-            <Text style={styles.spaceCodeLabel}>Space code</Text>
-            <Text style={styles.spaceCodeValue}>{group.spaceCode}</Text>
-          </TouchableOpacity>
-        )}
-
-        {/* The club's whole job is routing people into real plans — so the
-            match flow gets a first-class button here, not just the FAB. */}
-        {isClub && (
-          <ActionButton
-            icon="people-outline"
-            label="Find a Movie Crew"
-            onPress={() => router.push("/match")}
-            style={styles.joinButton}
-            textStyle={styles.buttonText}
-            iconColor={SpaceTheme.backgroundVoid}
-          />
-        )}
-
-        <View style={styles.quickActionsRow}>
-          {!hasPassed && (
-            <QuickAction icon="share-social-outline" label="Invite" onPress={shareLink} />
-          )}
-
-          {!hasPassed && !!group.cinemaName && (
-            <QuickAction icon="navigate-outline" label="Directions" onPress={handleOpenMaps} />
-          )}
-
-          {/* Hosted Spaces: chat unlocks when you're marked going — a
-              pending RSVP hasn't committed to the plan yet. Crews and clubs
-              are exempt (a crew seat IS the commitment; clubs are pure chat). */}
-          {(isHost || (isMember && (isCrew || isClub || myMember?.confirmed))) && (
-            <QuickAction
-              icon="chatbubbles-outline"
-              label="Chat"
-              onPress={() =>
-                router.push({
-                  pathname: "/group-chat/[id]",
-                  params: {
-                    id: group.id,
-                    type: "group",
-                    title: group.filmName,
-                    showTime: group.showTime,
-                    showDate: group.showDate,
-                    seasonEpisodeInfo: group.seasonEpisodeInfo ?? "",
-                  },
-                })
-              }
-            />
-          )}
-
-          {(isHost || isMember) && !isClub && group.spaceType === "public_gathering" && !hasPassed && (
-            <QuickAction icon="ticket-outline" label="Tickets" onPress={handleGetTickets} />
-          )}
-
-          {(isHost || isMember) && !isClub && !hasPassed && (
-            <QuickAction
-              icon="calendar-outline"
-              label="Calendar"
-              onPress={handleAddToCalendar}
-              loading={addingToCalendar}
-            />
-          )}
-
-          {!isHost && (
-            <QuickAction icon="flag-outline" label="Report" onPress={handleReportSpace} />
-          )}
-        </View>
-        {isMember && !isHost && !isCrew && !isClub && !myMember?.confirmed && !hasPassed && (
-          <Text style={styles.chatLockedHint}>
-            Confirm you&apos;re going to unlock the group chat.
-          </Text>
-        )}
 
         {/* Crews: everyone buys their own ticket, so there's no group
             booking to mark — the ticket toggle is the signal. */}
