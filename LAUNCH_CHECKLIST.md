@@ -47,8 +47,10 @@ Legend: `[ ]` todo · `[x]` done · `[~]` needs verify
 ## PHASE 3 — Device QA (the real gate; ~1–2 evenings, needs a second account)
 Run `moviespaces.org/test` end to end (33 flows, ~30 min), then this
 new-code addendum — none of it has ever been human-tested:
-- [ ] Onboarding: genres → taste (keyboard never covers search) → clubs →
-      tour → land Home; **swipe-back cannot re-enter onboarding**
+- [ ] Onboarding: genres → taste (keyboard never covers search) → tour →
+      clubs & crews (Continue is PINNED, no scrolling needed) → land Home;
+      **swipe-back cannot re-enter onboarding**; force-quit mid-tour doesn't
+      replay onboarding
 - [ ] Profile sheet: tap a crew seat / chat avatar / feed host → sheet shows
       top-3 & bottom-3; Add Friend → Requested; Message when friends;
       **long-press on a chat avatar still opens Report/Block**
