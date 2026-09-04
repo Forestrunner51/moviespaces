@@ -44,6 +44,8 @@ Legend: `[ ]` todo · `[x]` done · `[~]` needs verify
 - [ ] Supabase → Database → Webhooks: on `reports` INSERT → POST
       `https://moviespaces.onrender.com/api/site/report-hook` with header
       `x-hook-secret` = that same secret → every report emails you in seconds
+- [ ] Verify `Sentry__Dsn` is SET on Render (blank in appsettings by design)
+      — without it the scraper's new block/parse alerts go nowhere
 
 ## PHASE 2 — Build → TestFlight
 - [ ] `npm run ship` (does: local production build → `eas submit`)
@@ -81,7 +83,13 @@ new-code addendum — none of it has ever been human-tested:
 - [ ] Push: tap a chat push with app closed → lands in that chat; sign out →
       pushes stop
 - [ ] Ugly pass: airplane mode (Retry states, not fake-empty), cold-start
-      location indoors, largest text size, delete a throwaway account
+      location indoors, largest text size
+- [ ] Deletion live-test (review-sensitive): delete a throwaway account that
+      HAS an avatar, a hosted Space with a member, and a DM thread → returns
+      200 (not 500), the other account sees the Space-cancelled push, the
+      profile/messages vanish, and the old avatar URL 404s
+- [ ] Analytics sanity: after the QA pass, `GET /api/events/summary?days=1`
+      (x-admin-secret) shows the events you just generated
 - [ ] SSO on the TestFlight build: Apple + Google round-trip
 
 ## PHASE 4 — App Store Connect
