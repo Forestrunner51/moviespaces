@@ -157,13 +157,13 @@ function Layout() {
     <ThemeProvider value={SpaceNavigationTheme}>
       <AnimatedSplashOverlay />
       <Stack>
-        <Stack.Screen name="auth" options={{ headerShown: false }} />
+        <Stack.Screen name="auth" options={{ gestureEnabled: false, headerShown: false }} />
         <Stack.Screen name="reset-password" options={{ headerShown: false }} />
         {/* headerShown: false hides the header while ON the tabs, but the
             back button of whatever screen gets pushed on top still needs a
             real title — without one, iOS falls back to the raw route name
             ("(tabs)") for that back label. */}
-        <Stack.Screen name="(tabs)" options={{ headerShown: false, title: "Home" }} />
+        <Stack.Screen name="(tabs)" options={{ gestureEnabled: false, headerShown: false, title: "Home" }} />
         {/* Titles use the app's own vocabulary — Space / Watch Party — rather
             than the pre-pivot "Group"/"Rent a Theater" wording. "Rent a
             Theater" in particular contradicted that screen's own copy, which
@@ -180,11 +180,11 @@ function Layout() {
         <Stack.Screen name="legal/terms" options={{ title: "Terms of Service" }} />
         <Stack.Screen name="legal/privacy" options={{ title: "Privacy Policy" }} />
         <Stack.Screen name="settings" options={{ title: "Settings" }} />
-        <Stack.Screen name="tour" options={{ headerShown: false }} />
+        <Stack.Screen name="tour" options={{ gestureEnabled: false, headerShown: false }} />
         <Stack.Screen name="roulette" options={{ title: "Movie Roulette" }} />
-        <Stack.Screen name="onboarding-interests" options={{ headerShown: false }} />
-        <Stack.Screen name="onboarding-taste" options={{ headerShown: false }} />
-        <Stack.Screen name="space-discovery" options={{ headerShown: false }} />
+        <Stack.Screen name="onboarding-interests" options={{ gestureEnabled: false, headerShown: false }} />
+        <Stack.Screen name="onboarding-taste" options={{ gestureEnabled: false, headerShown: false }} />
+        <Stack.Screen name="space-discovery" options={{ gestureEnabled: false, headerShown: false }} />
         <Stack.Screen name="create-club" options={{ headerShown: false }} />
         <Stack.Screen name="match" options={{ headerShown: false }} />
       </Stack>

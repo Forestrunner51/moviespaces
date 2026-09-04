@@ -1554,7 +1554,10 @@ export default function GroupScreen() {
             <QuickAction icon="navigate-outline" label="Directions" onPress={handleOpenMaps} />
           )}
 
-          {(isHost || isMember) && (
+          {/* Hosted Spaces: chat unlocks when you're marked going — a
+              pending RSVP hasn't committed to the plan yet. Crews and clubs
+              are exempt (a crew seat IS the commitment; clubs are pure chat). */}
+          {(isHost || (isMember && (isCrew || isClub || myMember?.confirmed))) && (
             <QuickAction
               icon="chatbubbles-outline"
               label="Chat"
@@ -1591,6 +1594,11 @@ export default function GroupScreen() {
             <QuickAction icon="flag-outline" label="Report" onPress={handleReportSpace} />
           )}
         </View>
+        {isMember && !isHost && !isCrew && !isClub && !myMember?.confirmed && !hasPassed && (
+          <Text style={styles.chatLockedHint}>
+            Confirm you&apos;re going to unlock the group chat.
+          </Text>
+        )}
 
         {/* Crews: everyone buys their own ticket, so there's no group
             booking to mark — the ticket toggle is the signal. */}
@@ -1949,17 +1957,20 @@ const styles = StyleSheet.create({
     alignItems: "center",
     justifyContent: "center",
   },
+  chatLockedHint: { ...Type.caption, color: Palette.textFaint, textAlign: "center", marginTop: 6 },
   ticketToggle: {
     flexDirection: "row",
     alignItems: "center",
     gap: 8,
-    marginTop: 10,
-    paddingVertical: 9,
-    paddingHorizontal: 12,
+    marginTop: 12,
+    paddingVertical: 13,
+    paddingHorizontal: 14,
     borderRadius: Radius.small,
-    borderWidth: 1,
-    borderColor: Palette.border,
-    backgroundColor: Palette.raised,
+    // Accent-framed, not another gray row: testers scrolled past the ticket
+    // flag entirely — it's the crew's whole commitment signal.
+    borderWidth: 1.5,
+    borderColor: Palette.accentBorder,
+    backgroundColor: Palette.accentDim,
   },
   ticketToggleStandalone: { marginBottom: 16, marginTop: 0 },
   ticketToggleOn: { borderColor: Palette.positiveBorder, backgroundColor: Palette.positiveDim },
