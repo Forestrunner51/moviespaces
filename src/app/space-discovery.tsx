@@ -252,9 +252,15 @@ export default function SpaceDiscoveryScreen() {
     // the optional tour epilogue can't replay the whole flow next session.
     // The tour just handles the final routing into the app.
     setFinishing(true);
-    await markOnboarded();
-    router.push({ pathname: "/tour", params: { onboarding: "1" } });
-    setFinishing(false);
+    try {
+      await markOnboarded();
+    } catch {
+      // Storage hiccup: still proceed — the tour's finish calls
+      // completeOnboarding, which writes the same flag again.
+    } finally {
+      router.push({ pathname: "/tour", params: { onboarding: "1" } });
+      setFinishing(false);
+    }
   };
 
   return (

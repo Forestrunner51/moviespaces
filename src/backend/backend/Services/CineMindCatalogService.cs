@@ -282,10 +282,11 @@ namespace Backend.Services
             "tt5433140",  // Fast & Furious Presents: Hobbs & Shaw
         };
 
-        // TV track for Mystery Movie (Easy only, for now). Shorter than the
-        // movie catalog on purpose — this only ever needs one unused show per
-        // day (unlike the movie catalog, which needs enough density for
-        // Connection/Chronos/CastDeduct too).
+        // TV track for the mystery challenge — since 2026-09-03 the mystery
+        // slot draws from BOTH catalogs (~1 day in 3 is a show, with the
+        // full difficulty ladder), so this pool needs enough depth that TV
+        // days don't cycle the same handful of answers. Still shorter than
+        // the movie catalog, which also feeds Connection/Chronos/CastDeduct.
         private static readonly string[] SeedTvImdbIds =
         {
             "tt0903747", // Breaking Bad
@@ -318,6 +319,48 @@ namespace Backend.Services
             "tt5788792", // The Marvelous Mrs. Maisel
             "tt7908628", // Bridgerton
             "tt0121220", // Sex and the City
+            "tt0306414", // The Wire
+            "tt0411008", // Lost
+            "tt3032476", // Better Call Saul
+            "tt7660850", // Succession
+            "tt10986410", // Ted Lasso
+            "tt8111088", // The Mandalorian
+            "tt3581920", // The Last of Us
+            "tt11198330", // House of the Dragon
+            "tt10919420", // Squid Game
+            "tt13443470", // Wednesday
+            "tt0773262", // Dexter
+            "tt0804503", // Mad Men
+            "tt2085059", // Black Mirror
+            "tt0096697", // The Simpsons
+            "tt0182576", // Family Guy
+            "tt0098904", // Seinfeld
+            "tt0460649", // How I Met Your Mother
+            "tt2467372", // Brooklyn Nine-Nine
+            "tt1266020", // Parks and Recreation
+            "tt0367279", // Arrested Development
+            "tt1312171", // The Umbrella Academy
+            "tt5180504", // The Witcher
+            "tt5071412", // Ozark
+            "tt5290382", // Mindhunter
+            "tt2802850", // Fargo
+            "tt0098936", // Twin Peaks
+            "tt0106179", // The X-Files
+            "tt0285331", // 24
+            "tt1796960", // Homeland
+            "tt1606375", // Downton Abbey
+            "tt11280740", // Severance
+            "tt14452776", // The Bear
+            "tt8772296", // Euphoria
+            "tt0472954", // It's Always Sunny in Philadelphia
+            "tt1439629", // Community
+            "tt0844441", // True Blood
+            "tt1632701", // Suits
+            "tt1124373", // Sons of Anarchy
+            "tt5753856", // Dark
+            "tt5834204", // The Handmaid's Tale
+            "tt0238784", // Gilmore Girls
+            "tt0098800", // The Fresh Prince of Bel-Air
         };
 
         // Upserts every seed film. Idempotent and safe to re-run: existing

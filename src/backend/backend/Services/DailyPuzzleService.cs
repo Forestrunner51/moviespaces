@@ -55,6 +55,16 @@ namespace Backend.Services
         // the previous TestFlight build can keep submitting it safely.
         public const int MaxScore = 400;
 
+        // The five-challenge era: rows written on or before this puzzle date
+        // were scored out of 500 with Mystery TV counted. Stats, perfect-day
+        // checks, and the share page must judge a row against ITS era's
+        // ceiling — comparing a 500-scale row to MaxScore=400 misclassifies
+        // every historic day in both directions.
+        public const int LegacyMaxScore = 500;
+        public static readonly DateOnly FiveChallengeEraEnd = new(2026, 9, 3);
+        public static int MaxScoreFor(DateOnly puzzleDate) =>
+            puzzleDate <= FiveChallengeEraEnd ? LegacyMaxScore : MaxScore;
+
         // Distractor count for multiple choice (answer + 3 wrong = 4 options).
         private const int WrongOptionCount = 3;
 
@@ -235,7 +245,14 @@ namespace Backend.Services
             used.Add(castDeduct.MovieA.ImdbId);
             used.Add(castDeduct.MovieB.ImdbId);
 
-            var mysteryMovie = BuildMysteryMovie(rng, catalog, used);
+            // The mystery slot draws from BOTH catalogs — roughly one day
+            // in three is a TV show. Same seeded rng, so the day's puzzle
+            // stays deterministic; falls back to a film when the TV catalog
+            // is empty. (The legacy MysteryTv slot below still exists for
+            // old clients; it's unscored either way.)
+            var mysteryMovie = rng.Next(3) == 0
+                ? BuildMysteryTv(rng, tvCatalog) ?? BuildMysteryMovie(rng, catalog, used)
+                : BuildMysteryMovie(rng, catalog, used);
             if (mysteryMovie == null) return null;
 
             // Separate catalog/pool, so no "used" exclusion needed against

@@ -3,8 +3,7 @@ import {
   Text as RNText,
   TextInput as RNTextInput,
   type TextProps,
-  type TextInputProps,
-} from "react-native";
+  type TextInputProps, StyleSheet } from "react-native";
 
 // App-wide cap on OS "Larger Text" / Dynamic Type scaling. Without a cap a
 // large accessibility text size scales every label and input without limit
@@ -22,5 +21,16 @@ export const Text = forwardRef<RNText, TextProps>(function Text(props, ref) {
 });
 
 export const TextInput = forwardRef<RNTextInput, TextInputProps>(function TextInput(props, ref) {
-  return <RNTextInput ref={ref} maxFontSizeMultiplier={MAX_FONT_SCALE} {...props} />;
+  // Strip lineHeight from whatever style arrives: our Type.* tokens all carry
+  // one (right for Text), but an iOS TextInput with an explicit lineHeight
+  // clips ascenders/descenders — testers saw letters cut off in the tight
+  // onboarding search boxes. The input's natural line height is always
+  // correct for a single-line field.
+  // Multiline composers legitimately want a lineHeight (matching the sent
+  // bubbles they feed); only single-line fields clip.
+  if (props.multiline) {
+    return <RNTextInput ref={ref} maxFontSizeMultiplier={MAX_FONT_SCALE} {...props} />;
+  }
+  const { lineHeight: _dropped, ...flat } = StyleSheet.flatten(props.style) ?? {};
+  return <RNTextInput ref={ref} maxFontSizeMultiplier={MAX_FONT_SCALE} {...props} style={flat} />;
 });

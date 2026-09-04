@@ -70,6 +70,9 @@ const MessageRow = memo(function MessageRow({
       <TouchableOpacity
         activeOpacity={0.7}
         onPress={() => item.sender_id && openProfile(item.sender_id)}
+        // The row's long-press is the report/block entry point — the avatar
+        // sitting inside it must forward it, not swallow it.
+        onLongPress={() => onLongPress(item)}
         accessibilityLabel={`View ${item.sender_name || "sender"}'s profile`}
       >
         <Avatar uri={item.sender_avatar_url} name={item.sender_name} size={28} />

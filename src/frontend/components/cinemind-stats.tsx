@@ -15,13 +15,15 @@ export function CineMindStatsCard({ stats }: CineMindStatsCardProps) {
   // already looking at says everything a one-row history could.
   if (stats.gamesPlayed <= 1) return null;
 
+  // Four scored challenges since Mystery TV was cut; the 5/5 bar only
+  // renders for players with days from the five-challenge era.
   const bars = [
-    { label: "5/5", count: stats.distribution.solved5 },
-    { label: "4/5", count: stats.distribution.solved4 },
-    { label: "3/5", count: stats.distribution.solved3 },
-    { label: "2/5", count: stats.distribution.solved2 },
-    { label: "1/5", count: stats.distribution.solved1 },
-    { label: "0/5", count: stats.distribution.solved0 },
+    ...(stats.distribution.solved5 > 0 ? [{ label: "5/5", count: stats.distribution.solved5 }] : []),
+    { label: "4/4", count: stats.distribution.solved4 },
+    { label: "3/4", count: stats.distribution.solved3 },
+    { label: "2/4", count: stats.distribution.solved2 },
+    { label: "1/4", count: stats.distribution.solved1 },
+    { label: "0/4", count: stats.distribution.solved0 },
   ];
   // Scale bars to the most common outcome rather than games played, so the
   // shape of the distribution is readable even when it's lopsided.

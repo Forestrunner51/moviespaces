@@ -137,17 +137,20 @@ export default function CineMindScreen() {
   // just sit there returning zero results forever with no indication
   // anything was wrong, indistinguishable from "broken." Now it's a visible,
   // retryable error instead.
+  // The mystery slot can be a film OR a TV show now — the option pool has
+  // to come from the catalog the answer actually lives in.
+  const mysteryMediaType = puzzle?.mysteryMovie.mediaType ?? "movie";
   const loadCatalog = useCallback(() => {
     setCatalogLoading(true);
     setCatalogError(null);
-    browseCatalog("movie")
+    browseCatalog(mysteryMediaType)
       .then(setCatalog)
       .catch((err) => {
-        console.warn("Couldn't load movie catalog for Mystery Movie:", err);
-        setCatalogError(err?.message || "Couldn't load the movie list.");
+        console.warn("Couldn't load catalog for the mystery challenge:", err);
+        setCatalogError(err?.message || "Couldn't load the list.");
       })
       .finally(() => setCatalogLoading(false));
-  }, []);
+  }, [mysteryMediaType]);
 
   useEffect(() => {
     if (challengeIndex !== 3 || catalog != null || catalogLoading || catalogError) return;
@@ -295,7 +298,7 @@ export default function CineMindScreen() {
             <ResultRow label="The Connection" res={result.connection} />
             <ResultRow label="Chronos" res={result.chronos} />
             <ResultRow label="Cast Deduct" res={result.castDeduct} />
-            <ResultRow label="Mystery Movie" res={result.mysteryMovie} />
+            <ResultRow label="The Mystery" res={result.mysteryMovie} />
           </View>
 
           <TouchableOpacity activeOpacity={0.85} style={styles.primaryButton} onPress={handleShare}>

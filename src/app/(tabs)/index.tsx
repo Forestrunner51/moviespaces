@@ -285,6 +285,11 @@ export default function HomeScreen() {
     useCallback(() => {
       let cancelled = false;
 
+      // The nearby feed too — silently (no spinner): a crew you just joined
+      // should stop showing "I'm in", and one that filled should drop off,
+      // without the whole section flashing to a loading state.
+      setReloadKey((k) => k + 1);
+
       authFetch(`${process.env.EXPO_PUBLIC_API_URL}/api/group/mine`)
         .then((res) => (res.ok ? res.json() : []))
         .then((data: MySpace[]) => {
