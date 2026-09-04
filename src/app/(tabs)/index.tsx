@@ -1,4 +1,4 @@
-import { useCallback, useEffect, useMemo, useState } from "react";
+import { useCallback, useEffect, useMemo, useState, useRef } from "react";
 import {
   View,
   TouchableOpacity,
@@ -227,6 +227,8 @@ export default function HomeScreen() {
   // Bumped by Retry; the effect below refetches on change. The spinner is
   // flipped on in the tap handler, so the effect itself only fetches.
   const [reloadKey, setReloadKey] = useState(0);
+  const hasFeedRef = useRef(false);
+  const firstFocusRef = useRef(true);
   const retryOpenSpaces = () => {
     setSpacesLoading(true);
     setReloadKey((k) => k + 1);
@@ -245,14 +247,21 @@ export default function HomeScreen() {
       })
       .then((data: NearbySpace[]) => {
         if (cancelled) return;
+        hasFeedRef.current = (data || []).length > 0;
         setOpenSpacesRaw(data || []);
         setSpacesError(false);
       })
       .catch((err) => {
         if (cancelled) return;
         console.warn("Failed to load open spaces for home screen:", err);
-        setOpenSpacesRaw([]);
-        setSpacesError(true);
+        // A failed silent REFRESH keeps what's already on screen — wiping a
+        // rendered feed to the error card because a background refetch blipped
+        // punished the user for switching tabs. Only a failed FIRST load
+        // (nothing rendered yet) shows the error state.
+        if (!hasFeedRef.current) {
+          setOpenSpacesRaw([]);
+          setSpacesError(true);
+        }
       })
       .finally(() => {
         if (!cancelled) setSpacesLoading(false);
@@ -287,8 +296,11 @@ export default function HomeScreen() {
 
       // The nearby feed too — silently (no spinner): a crew you just joined
       // should stop showing "I'm in", and one that filled should drop off,
-      // without the whole section flashing to a loading state.
-      setReloadKey((k) => k + 1);
+      // without the whole section flashing to a loading state. The FIRST
+      // focus is the mount itself — the [reloadKey] effect already fetches
+      // then, so bumping here too double-fetched every cold open.
+      if (firstFocusRef.current) firstFocusRef.current = false;
+      else setReloadKey((k) => k + 1);
 
       authFetch(`${process.env.EXPO_PUBLIC_API_URL}/api/group/mine`)
         .then((res) => (res.ok ? res.json() : []))

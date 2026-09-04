@@ -1,0 +1,122 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<meta name="theme-color" content="#16100D">
+<title>Intermission — MovieSpaces</title>
+<meta name="description" content="One long movie, directed by everybody who stops by. Clap the slate.">
+<link rel="canonical" href="https://moviespaces.org/clap">
+<link rel="icon" href="/favicon.svg" type="image/svg+xml">
+<link rel="apple-touch-icon" href="/apple-touch-icon.png">
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link href="https://fonts.googleapis.com/css2?family=Bebas+Neue&family=Karla:ital,wght@0,400;0,600;0,700;1,400&display=swap" rel="stylesheet">
+<style>
+  :root{
+    --base:#16100D; --raised:#221913;
+    --text:#F7F0E8; --muted:#B3A296; --faint:#7D6D61;
+    --accent:#EF8A3C;
+    --border:rgba(247,240,232,.10); --border2:rgba(247,240,232,.16);
+  }
+  *{margin:0;padding:0;box-sizing:border-box}
+  body{background:var(--base);color:var(--text);font-family:Karla,system-ui,sans-serif;line-height:1.5;min-height:100vh;display:flex;flex-direction:column}
+  .wrap{width:100%;max-width:720px;margin:0 auto;padding:0 20px}
+  nav{display:flex;align-items:center;justify-content:space-between;padding:22px 0}
+  .wordmark{font-family:'Bebas Neue',sans-serif;font-size:22px;letter-spacing:4px;color:var(--text);text-decoration:none}
+  .wordmark span{color:var(--accent)}
+  nav a.back{color:var(--muted);text-decoration:none;font-size:15px;font-weight:600}
+  nav a.back:hover{color:var(--accent)}
+  main{flex:1;display:flex;flex-direction:column;align-items:center;justify-content:center;text-align:center;padding:30px 20px 60px}
+  .kick{font-family:'Bebas Neue',sans-serif;letter-spacing:4px;font-size:16px;color:var(--accent);margin-bottom:8px}
+  h1{font-size:clamp(26px,5vw,34px);letter-spacing:-.4px;margin-bottom:8px}
+  .sub{color:var(--muted);font-size:16px;max-width:400px;margin-bottom:36px}
+  .clapper{display:inline-block;cursor:pointer;user-select:none;-webkit-user-select:none;-webkit-tap-highlight-color:transparent;border:0;background:none;padding:0}
+  .clapper:active{transform:scale(.97)}
+  .clap-top{height:52px;width:340px;border-radius:10px 10px 0 0;margin-left:9px;
+    background:repeating-linear-gradient(115deg,#0d0906 0 34px,var(--accent) 34px 68px);
+    border:1px solid var(--border2);transform-origin:8% 100%;transition:transform .09s ease-out}
+  .clapper.clack .clap-top{transform:rotate(-16deg)}
+  .clap-board{width:358px;background:#0d0906;border:1px solid var(--border2);border-radius:0 0 14px 14px;padding:22px 24px 24px}
+  .clap-take{font-family:'Bebas Neue',sans-serif;font-size:62px;letter-spacing:3px;line-height:1}
+  .clap-take b{color:var(--accent);font-weight:400}
+  .clap-scene{font-family:'Bebas Neue',sans-serif;font-size:14px;letter-spacing:3px;color:var(--faint);margin-top:12px;border-top:1px dashed var(--border2);padding-top:12px}
+  .yours{color:var(--faint);font-size:14px;margin-top:22px;min-height:20px}
+  .yours b{color:var(--muted)}
+  footer{border-top:1px solid var(--border);padding:20px 0 34px;color:var(--faint);font-size:13.5px;text-align:center}
+  footer a{color:var(--muted);text-decoration:none;margin:0 10px}
+  footer a:hover{color:var(--accent)}
+  @media (max-width:420px){
+    .clap-top{width:280px;height:44px}
+    .clap-board{width:296px;padding:18px}
+    .clap-take{font-size:50px}
+  }
+</style>
+</head>
+<body>
+  <div class="wrap">
+    <nav>
+      <a class="wordmark" href="/">MOVIE<span>SPACES</span></a>
+      <a class="back" href="/">&larr; Home</a>
+    </nav>
+  </div>
+  <main>
+    <div class="kick">INTERMISSION</div>
+    <h1>One long movie, directed by everybody.</h1>
+    <p class="sub">Every visitor gets to slate the shoot. Clap the board — the take counts forever.</p>
+    <button class="clapper" id="clapper" type="button" aria-label="Clap the clapperboard">
+      <div class="clap-top"></div>
+      <div class="clap-board">
+        <div class="clap-take">TAKE <b id="takeCount">&hellip;</b></div>
+        <div class="clap-scene">MOVIESPACES &middot; SCENE: DFW &middot; DIR: EVERYONE</div>
+      </div>
+    </button>
+    <p class="yours" id="yours"></p>
+  </main>
+  <footer>
+    <a href="/">Home</a><a href="/about">About</a><a href="/test">Beta test</a><a href="/support">Support</a>
+  </footer>
+<script>
+(function(){
+  var API="https://moviespaces.onrender.com/api/site/clapper";
+  var el=document.getElementById("takeCount"),board=document.getElementById("clapper"),yours=document.getElementById("yours");
+  var count=null,pending=0,flushTimer=null,inFlight=false,mine=0;
+  try{mine=parseInt(localStorage.getItem("ms-claps")||"0",10)||0}catch(e){}
+  function render(){
+    el.textContent=count==null?"1":count.toLocaleString();
+    yours.innerHTML=mine>0?("You&rsquo;ve slated <b>"+mine.toLocaleString()+"</b> take"+(mine===1?"":"s")+".") : "";
+  }
+  fetch(API).then(function(r){return r.json()}).then(function(d){
+    var next=(d.count||0)+1+pending;
+    count=count==null?next:Math.max(count,next);
+    render();
+  }).catch(function(){if(count==null){count=1;render()}});
+  function flush(){
+    if(!pending||inFlight)return;
+    var taps=Math.min(pending,50);
+    inFlight=true;
+    fetch(API,{method:"POST",headers:{"Content-Type":"application/json"},body:JSON.stringify({taps:taps})})
+      .then(function(r){if(!r.ok)throw new Error("status "+r.status);return r.json()})
+      .then(function(d){
+        pending-=taps;
+        if(d&&typeof d.count==="number"){var next=d.count+1+pending;if(next>count){count=next;render()}}
+      })
+      .catch(function(){})
+      .finally(function(){
+        inFlight=false;
+        if(pending){clearTimeout(flushTimer);flushTimer=setTimeout(flush,1500)}
+      });
+  }
+  board.addEventListener("click",function(){
+    count=(count==null?1:count+1);pending++;mine++;
+    try{localStorage.setItem("ms-claps",String(mine))}catch(e){}
+    render();
+    board.classList.remove("clack");void board.offsetWidth;board.classList.add("clack");
+    setTimeout(function(){board.classList.remove("clack")},120);
+    clearTimeout(flushTimer);flushTimer=setTimeout(flush,900);
+  });
+  render();
+})();
+</script>
+</body>
+</html>

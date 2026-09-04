@@ -1,0 +1,86 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<meta name="theme-color" content="#16100D">
+<title>Projects — MovieSpaces</title>
+<meta name="description" content="Things we're building — the MovieSpaces app, the Intermission clapper, and whatever's next.">
+<link rel="canonical" href="https://moviespaces.org/projects">
+<link rel="icon" href="/favicon.svg" type="image/svg+xml">
+<link rel="apple-touch-icon" href="/apple-touch-icon.png">
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link href="https://fonts.googleapis.com/css2?family=Bebas+Neue&family=Karla:ital,wght@0,400;0,600;0,700;1,400&display=swap" rel="stylesheet">
+<style>
+  :root{
+    --base:#16100D; --raised:#221913; --surface:#2B201A;
+    --text:#F7F0E8; --muted:#B3A296; --faint:#7D6D61;
+    --accent:#EF8A3C; --accent-dim:rgba(239,138,60,.13); --accent-border:rgba(239,138,60,.35);
+    --border:rgba(247,240,232,.10); --border2:rgba(247,240,232,.16);
+  }
+  *{margin:0;padding:0;box-sizing:border-box}
+  body{background:var(--base);color:var(--text);font-family:Karla,system-ui,sans-serif;line-height:1.55}
+  .wrap{max-width:860px;margin:0 auto;padding:0 20px 70px}
+  nav{display:flex;align-items:center;justify-content:space-between;padding:22px 0}
+  .wordmark{font-family:'Bebas Neue',sans-serif;font-size:22px;letter-spacing:4px;color:var(--text);text-decoration:none}
+  .wordmark span{color:var(--accent)}
+  nav a.back{color:var(--muted);text-decoration:none;font-size:15px;font-weight:600}
+  nav a.back:hover{color:var(--accent)}
+  .kicker{font-family:'Bebas Neue',sans-serif;letter-spacing:3px;font-size:14px;color:var(--accent);margin:30px 0 8px}
+  h1{font-size:clamp(30px,6vw,40px);letter-spacing:-.5px;margin-bottom:10px}
+  .sub{color:var(--muted);font-size:16.5px;max-width:520px;margin-bottom:34px}
+  .grid{display:grid;grid-template-columns:repeat(2,1fr);gap:16px}
+  @media (max-width:640px){.grid{grid-template-columns:1fr}}
+  .card{display:block;background:var(--surface);border:1px solid var(--border);border-radius:16px;padding:24px;text-decoration:none;color:var(--text);transition:border-color .2s}
+  a.card:hover{border-color:var(--accent-border)}
+  .card .tag{font-family:'Bebas Neue',sans-serif;letter-spacing:2.5px;font-size:12px;color:var(--accent);margin-bottom:8px}
+  .card h2{font-size:20px;margin-bottom:6px}
+  .card p{color:var(--muted);font-size:15px}
+  .card .go{display:inline-block;margin-top:14px;color:var(--accent);font-weight:700;font-size:14.5px}
+  .card.soon{border-style:dashed;background:transparent}
+  .card.soon .tag{color:var(--faint)}
+  .card.soon h2{color:var(--muted)}
+  footer{border-top:1px solid var(--border);margin-top:56px;padding-top:22px;color:var(--faint);font-size:13.5px}
+  footer a{color:var(--muted);text-decoration:none;margin-right:16px}
+  footer a:hover{color:var(--accent)}
+</style>
+</head>
+<body>
+  <div class="wrap">
+    <nav>
+      <a class="wordmark" href="/">MOVIE<span>SPACES</span></a>
+      <a class="back" href="/">&larr; Home</a>
+    </nav>
+
+    <div class="kicker">PROJECTS</div>
+    <h1>Things we&rsquo;re building.</h1>
+    <p class="sub">MovieSpaces is the main feature — but the workshop stays open. Side projects, experiments, and whatever's next land here.</p>
+
+    <div class="grid">
+      <a class="card" href="/">
+        <div class="tag">THE MAIN FEATURE</div>
+        <h2>MovieSpaces</h2>
+        <p>Pick a real showing near you and get grouped with people going to it. Host movie nights. Make some new friends.</p>
+        <span class="go">Coming soon to the App Store &rarr;</span>
+      </a>
+      <a class="card" href="/clap">
+        <div class="tag">SHORT FILM &middot; ONGOING</div>
+        <h2>The Intermission</h2>
+        <p>One long movie, directed by everybody who stops by. Clap the slate — the take counts forever.</p>
+        <span class="go">Slate a take &rarr;</span>
+      </a>
+      <div class="card soon">
+        <div class="tag">IN DEVELOPMENT</div>
+        <h2>Untitled next project</h2>
+        <p>Still in the writers&rsquo; room. Check back after opening night.</p>
+      </div>
+    </div>
+
+    <footer>
+      <a href="/">Home</a><a href="/about">About</a><a href="/test">Beta test</a><a href="/support">Support</a>
+      <div style="margin-top:10px">&copy; 2026 MovieSpaces</div>
+    </footer>
+  </div>
+</body>
+</html>

@@ -926,6 +926,12 @@ export default function GroupScreen() {
   const nowMs = Date.now();
   // A crew is IsPublic (evergreen) but does end once the showtime it set has
   // gone by; with no showtime set it's still forming, never "passed".
+  // ONE chat gate, derived once (the QuickAction and the hint used to
+  // hand-mirror each other and could drift). Hosted Spaces: chat unlocks
+  // when you're marked going — a pending RSVP hasn't committed. Crews and
+  // clubs are exempt (a seat IS the commitment; clubs are pure chat). A
+  // passed event unlocks for everyone: the conversation is history you were
+  // part of, and the Confirm button no longer renders to get you in.
   const hasPassed = group.matchMovieKey
     ? !!group.screeningTime && new Date(group.screeningTime).getTime() < nowMs
     : !group.isPublic && new Date(group.screeningTime ?? group.createdAt).getTime() < nowMs;
@@ -933,6 +939,8 @@ export default function GroupScreen() {
   // eslint-disable-next-line react-hooks/purity -- relative labels ("Tonight",
   // "In 3 days") are read off the real current time, same as hasPassed above.
   const eventDate = formatEventDate(group.screeningTime, group.showDate, group.showTime);
+  const chatUnlocked =
+    isHost || (isMember && (isCrew || isClub || !!myMember?.confirmed || hasPassed));
 
   return (
     <Starfield>
@@ -1275,10 +1283,7 @@ export default function GroupScreen() {
             <QuickAction icon="navigate-outline" label="Directions" onPress={handleOpenMaps} />
           )}
 
-          {/* Hosted Spaces: chat unlocks when you're marked going — a
-              pending RSVP hasn't committed to the plan yet. Crews and clubs
-              are exempt (a crew seat IS the commitment; clubs are pure chat). */}
-          {(isHost || (isMember && (isCrew || isClub || myMember?.confirmed))) && (
+          {chatUnlocked && (
             <QuickAction
               icon="chatbubbles-outline"
               label="Chat"
@@ -1315,7 +1320,7 @@ export default function GroupScreen() {
             <QuickAction icon="flag-outline" label="Report" onPress={handleReportSpace} />
           )}
         </View>
-        {isMember && !isHost && !isCrew && !isClub && !myMember?.confirmed && !hasPassed && (
+        {isMember && !chatUnlocked && (
           <Text style={styles.chatLockedHint}>
             Confirm you&apos;re going to unlock the group chat.
           </Text>

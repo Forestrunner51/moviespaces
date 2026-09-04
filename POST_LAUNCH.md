@@ -1,5 +1,27 @@
 # MovieSpaces — Post-Launch / v1.1+ Ideas
 
+## ★ v1.1 headliner: post-screening trivia (added 2026-09-04)
+The after-movie ritual, structured: when a Space's showtime + runtime has
+passed, its chat unlocks a 10-question spoilers-welcome quiz about THAT film,
+scored on a leaderboard just for that group. Not competing with trivia apps —
+can't exist without the Space; makes CineMind and the social loop one feature.
+
+Design notes (so future-us builds the right version):
+- Generate once per film via LLM, cache keyed by imdb id; every later Space
+  for the film reuses the set. Prompt: 10 MCQs, 4 options, answer_index,
+  JSON only, spoilers allowed.
+- **The hard part is new releases** — the main use case is films too new for
+  the model's training, where it hallucinates confidently. Do NOT ship
+  without: (a) grounding (a real synopsis source — OMDb Plot is one line and
+  not enough; consider a web-search-capable generation step), (b) player
+  flag-a-bad-question that drops the question at N flags, (c) validating
+  generated sets against 2-3 films the team actually saw first.
+- Needs: runtime stored on the film (seedable from OMDb), MovieTrivia table,
+  per-group plays + mini leaderboard, unlock check, LLM vendor key/billing/
+  timeout handling. Realistic estimate: 3-5 days + device QA, not "a day".
+- Entry point: the Space chat (a card when trivia unlocks) + the Hangout
+  After capsule.
+
 Parked here so they don't get lost. **Scope is frozen for launch** (bugs and
 blockers only) — nothing below is built until the app is live and has real
 users. Captured 2026-08-21.

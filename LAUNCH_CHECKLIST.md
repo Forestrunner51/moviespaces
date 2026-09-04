@@ -24,10 +24,11 @@ Legend: `[ ]` todo · `[x]` done · `[~]` needs verify
 - [x] Supabase hand-applied migrations — owner confirmed all three ran:
       `20260825_profile_taste`, `20260829_blocks_and_friendship_hardening`,
       `20260902_blocked_peers_fn`
-- [ ] Seed, in order (curl commands in session notes / above):
+- [ ] Seed, in order (curl commands in session notes / above). Re-runs now
+      skip already-seeded rows (add `?refresh=true` to force a full refetch):
       1. `POST /api/group/community-spaces/seed` (genre clubs)
-      2. `POST /api/game/catalog/seed` (film refresh, optional)
-      3. `POST /api/game/catalog/seed-tv` → expect `total: 72`, `failed: 0`
+      2. `POST /api/game/catalog/seed` → expect `total: 645`
+      3. `POST /api/game/catalog/seed-tv` → expect `total: ~370`, `failed: 0`
 - [ ] Delete `matchtest-{a,b,c}-0822@moviespaces.org` from Supabase Auth
 - [ ] Flip **email confirmation ON** (Supabase → Auth → Providers → Email);
       the app handles both states
@@ -39,6 +40,9 @@ Legend: `[ ]` todo · `[x]` done · `[~]` needs verify
 - [ ] `npm run ship` (does: local production build → `eas submit`)
 - [ ] Build appears in TestFlight; install on the real phone
 - [ ] Cold-launch sanity: name/icon/font right, no crash, Sentry shows the session
+- [ ] AFTER the new build is broadly installed (not before): set Render env
+      `CineMind__TvMysteryEnabled=true` — until then TV mysteries stay off
+      because pre-update builds can't answer them (movie-only autocomplete)
 
 ## PHASE 3 — Device QA (the real gate; ~1–2 evenings, needs a second account)
 Run `moviespaces.org/test` end to end (33 flows, ~30 min), then this
@@ -57,8 +61,9 @@ new-code addendum — none of it has ever been human-tested:
       date block with the space code beneath; ticket toggle reads prominent
 - [ ] Hosted Space: unconfirmed member sees "confirm to unlock chat";
       confirming unlocks it
-- [ ] CineMind: four challenges, mystery is pick-from-six; play a TV-mystery
-      day if one lands; share link shows no Mystery TV row and correct /400
+- [ ] CineMind: four challenges, mystery is pick-from-six; share link shows
+      no Mystery TV row and correct /400 (TV-mystery days are OFF until the
+      Phase-2 env flip)
 - [ ] Blocks: block second account → they vanish both ways (chats, badges,
       recently met, profile sheets), can't re-request
 - [ ] Push: tap a chat push with app closed → lands in that chat; sign out →

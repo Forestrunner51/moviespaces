@@ -1,6 +1,9 @@
+using Backend.Data;
+using Backend.Models;
 using Microsoft.AspNetCore.Authorization;
 using Microsoft.AspNetCore.Mvc;
 using Microsoft.AspNetCore.RateLimiting;
+using Microsoft.EntityFrameworkCore;
 
 namespace Backend.Controllers
 {
@@ -21,15 +24,51 @@ namespace Backend.Controllers
         private const int NoteCap = 4000;
         private const int MetaCap = 300;
 
+        private readonly AppDbContext _db;
         private readonly IHttpClientFactory _httpFactory;
         private readonly IConfiguration _config;
         private readonly ILogger<FeedbackController> _logger;
 
-        public FeedbackController(IHttpClientFactory httpFactory, IConfiguration config, ILogger<FeedbackController> logger)
+        public FeedbackController(AppDbContext db, IHttpClientFactory httpFactory, IConfiguration config, ILogger<FeedbackController> logger)
         {
+            _db = db;
             _httpFactory = httpFactory;
             _config = config;
             _logger = logger;
+        }
+
+        private const string ClapperKey = "clapper";
+        // Presses arrive batched from the site (it flushes every ~800ms of
+        // mashing), capped so one request can't jump the count absurdly.
+        private const int MaxTapsPerRequest = 50;
+
+        public record ClapperTapRequest(int? Taps);
+
+        // GET /api/site/clapper — current global take count. Anonymous: it
+        // renders on the public landing page.
+        [HttpGet("clapper")]
+        [AllowAnonymous]
+        [EnableRateLimiting("guest-join")]
+        public async Task<IActionResult> GetClapper()
+        {
+            var row = await _db.SiteCounters.AsNoTracking().FirstOrDefaultAsync(c => c.Key == ClapperKey);
+            return Ok(new { count = row?.Count ?? 0 });
+        }
+
+        // POST /api/site/clapper — add the visitor's taps. Atomic UPSERT so
+        // concurrent mashers can't lose increments; guest-join rate limit
+        // (per-IP) keeps a script from inflating the count too hilariously.
+        [HttpPost("clapper")]
+        [AllowAnonymous]
+        [EnableRateLimiting("guest-join")]
+        public async Task<IActionResult> TapClapper([FromBody] ClapperTapRequest? req)
+        {
+            var taps = Math.Clamp(req?.Taps ?? 1, 1, MaxTapsPerRequest);
+            await _db.Database.ExecuteSqlInterpolatedAsync($@"
+                INSERT INTO ""SiteCounters"" (""Key"", ""Count"") VALUES ({ClapperKey}, {taps})
+                ON CONFLICT (""Key"") DO UPDATE SET ""Count"" = ""SiteCounters"".""Count"" + {taps}");
+            var row = await _db.SiteCounters.AsNoTracking().FirstOrDefaultAsync(c => c.Key == ClapperKey);
+            return Ok(new { count = row?.Count ?? taps });
         }
 
         public record SiteFeedbackRequest(string? Note, string? Checklist, string? Contact, string? Website);

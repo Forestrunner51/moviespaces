@@ -4,6 +4,7 @@
 <meta charset="utf-8">
 <meta name="viewport" content="width=device-width, initial-scale=1">
 <meta name="theme-color" content="#16100D">
+<meta name="impact-site-verification" value="5ad48d4b-cdef-4e72-b821-7739fe0b5a4a">
 <title>MovieSpaces — We believe movies are a social event</title>
 <meta name="description" content="Pick a real showing near you and get grouped with up to five other people going to it. Host movie nights. Make some new friends.">
 <link rel="canonical" href="https://moviespaces.org/">
@@ -119,6 +120,24 @@
   .band .slogan-big{font-style:italic;font-size:clamp(22px,3.4vw,32px);color:var(--text)}
   .band .slogan-big em{color:var(--accent);font-style:italic}
 
+  /* --- intermission clapperboard --- */
+  .intermission{text-align:center;padding:64px 0 72px}
+  .clap-kick{font-family:'Bebas Neue',sans-serif;letter-spacing:3px;font-size:15px;color:var(--accent);margin-bottom:6px}
+  .clap-sub{color:var(--muted);font-size:15.5px;margin-bottom:26px}
+  .clapper{display:inline-block;cursor:pointer;user-select:none;-webkit-user-select:none;-webkit-tap-highlight-color:transparent;border:0;background:none;padding:0}
+  .clapper:active{transform:scale(.97)}
+  .clap-top{height:34px;width:230px;border-radius:8px 8px 0 0;margin-left:6px;
+    background:repeating-linear-gradient(115deg,#0d0906 0 24px,var(--accent) 24px 48px);
+    border:1px solid var(--border2);transform-origin:8% 100%;transition:transform .09s ease-out}
+  .clapper.clack .clap-top{transform:rotate(-16deg)}
+  .clap-board{width:242px;background:#0d0906;border:1px solid var(--border2);border-radius:0 0 10px 10px;padding:14px 16px 16px}
+  .clap-take{font-family:'Bebas Neue',sans-serif;font-size:40px;letter-spacing:2px;color:var(--text);line-height:1}
+  .clap-take b{color:var(--accent);font-weight:400}
+  .clap-scene{font-family:'Bebas Neue',sans-serif;font-size:12px;letter-spacing:2.5px;color:var(--faint);margin-top:8px;border-top:1px dashed var(--border2);padding-top:8px}
+  .clap-hint{color:var(--faint);font-size:13px;margin-top:14px}
+  .clap-more{color:var(--accent);text-decoration:none}
+  .clap-more:hover{text-decoration:underline}
+
   footer{padding:36px 0 56px;display:flex;align-items:center;justify-content:space-between;gap:16px;flex-wrap:wrap;border-top:1px solid var(--border)}
   footer .links a{color:var(--muted);text-decoration:none;margin-right:22px;font-size:14.5px}
   footer .links a:hover{color:var(--accent)}
@@ -215,10 +234,9 @@
     <nav>
       <a class="wordmark" href="/">MOVIE<span>SPACES</span></a>
       <div class="links">
-        <a href="#how">How it works</a>
-        <a href="#inside">Features</a>
         <a href="/about">About</a>
         <a href="/test">Beta test</a>
+        <a href="/projects">Projects</a>
         <a href="/support">Support</a>
       </div>
     </nav>
@@ -339,10 +357,24 @@
       <p class="fineline">Starting at the theaters we actually go to.</p>
     </section>
 
+    <section class="intermission">
+      <div class="clap-kick">INTERMISSION</div>
+      <p class="clap-sub">Every visitor gets to slate the shoot. Go ahead &mdash; clap it.</p>
+      <button class="clapper" id="clapper" type="button" aria-label="Clap the clapperboard">
+        <div class="clap-top"></div>
+        <div class="clap-board">
+          <div class="clap-take">TAKE <b id="takeCount">&hellip;</b></div>
+          <div class="clap-scene">MOVIESPACES &middot; SCENE: DFW &middot; DIR: EVERYONE</div>
+        </div>
+      </button>
+      <p class="clap-hint">One long movie, directed by everybody who stops by. <a class="clap-more" href="/clap">Full screen &rarr;</a></p>
+    </section>
+
     <footer>
       <div class="links">
         <a href="/about">About</a>
         <a href="/test">Beta test</a>
+        <a href="/projects">Projects</a>
         <a href="/privacy">Privacy</a>
         <a href="/terms">Terms</a>
         <a href="/support">Support</a>
@@ -350,5 +382,43 @@
       <div class="fine">&copy; 2026 MovieSpaces &middot; support@moviespaces.org</div>
     </footer>
   </div>
+<script>
+(function(){
+  var API="https://moviespaces.onrender.com/api/site/clapper";
+  var el=document.getElementById("takeCount"),board=document.getElementById("clapper");
+  var count=null,pending=0,flushTimer=null;
+  function render(){el.textContent=count==null?"1":count.toLocaleString()}
+  fetch(API).then(function(r){return r.json()}).then(function(d){
+    // The take being slated is the NEXT one — and a slow-arriving GET must
+    // never rewind taps already made locally.
+    var next=(d.count||0)+1+pending;
+    count=count==null?next:Math.max(count,next);
+    render();
+  }).catch(function(){if(count==null){count=1;render()}});
+  var inFlight=false;
+  function flush(){
+    if(!pending||inFlight)return;
+    var taps=Math.min(pending,50);
+    inFlight=true;
+    fetch(API,{method:"POST",headers:{"Content-Type":"application/json"},body:JSON.stringify({taps:taps})})
+      .then(function(r){if(!r.ok)throw new Error("status "+r.status);return r.json()})
+      .then(function(d){
+        pending-=taps; // only once the server actually has them
+        if(d&&typeof d.count==="number"){var next=d.count+1+pending;if(next>count){count=next;render()}}
+      })
+      .catch(function(){/* keep pending; the retry below re-sends */})
+      .finally(function(){
+        inFlight=false;
+        if(pending){clearTimeout(flushTimer);flushTimer=setTimeout(flush,1500)}
+      });
+  }
+  board.addEventListener("click",function(){
+    count=(count==null?1:count+1);pending++;render();
+    board.classList.remove("clack");void board.offsetWidth;board.classList.add("clack");
+    setTimeout(function(){board.classList.remove("clack")},120);
+    clearTimeout(flushTimer);flushTimer=setTimeout(flush,900);
+  });
+})();
+</script>
 </body>
 </html>

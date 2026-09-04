@@ -306,6 +306,25 @@ export default function CineMindScreen() {
             <Text style={styles.primaryButtonText}>Share Result</Text>
           </TouchableOpacity>
 
+          {/* The one moment CineMind has full attention is right after a
+              score — hand it sideways into the actual product. A line, not
+              a nag; no score-matching cleverness (that's a matching engine
+              we don't have the density to feed). */}
+          <TouchableOpacity
+            activeOpacity={0.85}
+            style={styles.crewBridge}
+            onPress={() => router.push("/match")}
+            accessibilityRole="button"
+            accessibilityLabel="Find a movie crew"
+          >
+            <Ionicons name="people-outline" size={17} color={Palette.accent} />
+            <View style={{ flex: 1 }}>
+              <Text style={styles.crewBridgeTitle}>Movies are better with people.</Text>
+              <Text style={styles.crewBridgeSub}>Pick a real showing near you — get a crew.</Text>
+            </View>
+            <Ionicons name="chevron-forward" size={16} color={Palette.textFaint} />
+          </TouchableOpacity>
+
           {stats && <CineMindStatsCard stats={stats} />}
           <LeaderboardLink onPress={() => setViewMode("leaderboard")} />
           <RouletteLink />
@@ -1118,6 +1137,19 @@ const styles = StyleSheet.create({
   },
   primaryButtonDisabled: { backgroundColor: Palette.fillStrong },
   primaryButtonText: { color: SpaceTheme.backgroundVoid, ...Type.body, fontWeight: "700" },
+  crewBridge: {
+    flexDirection: "row",
+    alignItems: "center",
+    gap: 12,
+    marginTop: 12,
+    padding: 14,
+    borderRadius: Radius.small,
+    borderWidth: 1,
+    borderColor: Palette.accentBorder,
+    backgroundColor: Palette.accentDim,
+  },
+  crewBridgeTitle: { ...Type.small, fontWeight: "700", color: Palette.text },
+  crewBridgeSub: { ...Type.caption, color: Palette.textMuted, marginTop: 1 },
   secondaryButton: {
     ...SpaceStyles.glassCard,
     flexDirection: "row",

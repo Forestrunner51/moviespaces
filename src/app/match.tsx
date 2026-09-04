@@ -22,7 +22,7 @@ import { SpaceStyles, Palette, Type, Display, Radius, Font } from "@/frontend/co
 import { useToast } from "@/frontend/components/toast";
 import { authFetch } from "@/frontend/services/api";
 import { resolveDisplayName } from "@/frontend/services/display-name";
-import { searchMovies, Movie, pickFilmForShowing, getNowPlaying } from "@/frontend/services/movies";
+import { searchMovies, Movie, getNowPlaying, resolveMarqueeTitle } from "@/frontend/services/movies";
 import { combineDateAndTime, formatEventDate, isPastDateTime } from "@/frontend/utils/event-date";
 import { POST_ACTIVITIES } from "@/frontend/constants/activities";
 import {
@@ -106,8 +106,7 @@ const formatTime = (d: Date) =>
 // IMDb id. A miss just means no poster and a title-based key.
 async function resolveFromShowing(title: string): Promise<PickedMovie> {
   try {
-    const outcome = await searchMovies(title);
-    const pick = pickFilmForShowing(outcome.results, title);
+    const pick = await resolveMarqueeTitle(title);
     if (pick) {
       const isExact = pick.title.trim().toLowerCase() === title.trim().toLowerCase();
       return { title, imdbId: isExact ? pick.imdbId : "", posterPath: pick.posterPath ?? null };

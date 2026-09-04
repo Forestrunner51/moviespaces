@@ -520,12 +520,12 @@ namespace Backend.Controllers
         // admin-secret check below ever runs, so no secret value can work.
         [HttpPost("catalog/seed")]
         [AllowAnonymous]
-        public async Task<IActionResult> SeedCatalog()
+        public async Task<IActionResult> SeedCatalog([FromQuery] bool refresh = false)
         {
             var authError = CheckAdminSecret();
             if (authError != null) return authError;
 
-            var (added, updated, failed) = await _catalog.SeedAsync(_db);
+            var (added, updated, failed) = await _catalog.SeedAsync(_db, refresh);
             return Ok(new { added, updated, failed, total = await _db.CineMindMovies.CountAsync() });
         }
 
@@ -533,12 +533,12 @@ namespace Backend.Controllers
         // separate endpoint since it's a genuinely separate catalog/table.
         [HttpPost("catalog/seed-tv")]
         [AllowAnonymous]
-        public async Task<IActionResult> SeedTvCatalog()
+        public async Task<IActionResult> SeedTvCatalog([FromQuery] bool refresh = false)
         {
             var authError = CheckAdminSecret();
             if (authError != null) return authError;
 
-            var (added, updated, failed) = await _catalog.SeedTvAsync(_db);
+            var (added, updated, failed) = await _catalog.SeedTvAsync(_db, refresh);
             return Ok(new { added, updated, failed, total = await _db.CineMindTvShows.CountAsync() });
         }
 
