@@ -12,6 +12,7 @@ namespace Backend.Controllers
     public class AccountController : ControllerBase
     {
         private readonly AppDbContext _db;
+        private readonly Backend.Services.PushNotificationService _pushNotifications;
         private readonly IHttpClientFactory _httpClientFactory;
         private readonly IConfiguration _configuration;
         private readonly ILogger<AccountController> _logger;
@@ -20,8 +21,10 @@ namespace Backend.Controllers
             AppDbContext db,
             IHttpClientFactory httpClientFactory,
             IConfiguration configuration,
+            Backend.Services.PushNotificationService pushNotifications,
             ILogger<AccountController> logger)
         {
+            _pushNotifications = pushNotifications;
             _db = db;
             _httpClientFactory = httpClientFactory;
             _configuration = configuration;
@@ -58,6 +61,20 @@ namespace Backend.Controllers
             }
 
             var hostedGroups = await _db.Groups.Where(g => g.UserId == userId).ToListAsync();
+            // Members' plans must not silently vanish: deleting the host's
+            // account deletes everything they host (5.1.1 completeness), so
+            // tell the people who confirmed those plans first. Passed and
+            // already-cancelled events skipped — nothing there to cancel.
+            foreach (var hosted in hostedGroups)
+            {
+                var isPast = hosted.ScreeningTime != null && hosted.ScreeningTime < DateTime.UtcNow;
+                if (isPast || hosted.Status == "cancelled") continue;
+                await _pushNotifications.NotifyMembersAsync(
+                    _db, hosted.Id,
+                    "❌ Space cancelled",
+                    $"{hosted.FilmName} was cancelled — the host closed their account.",
+                    excludeUserId: userId);
+            }
             _db.Groups.RemoveRange(hostedGroups);
 
             var memberships = await _db.GroupMembers.Where(m => m.UserId == userId).ToListAsync();

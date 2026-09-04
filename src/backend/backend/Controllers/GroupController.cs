@@ -367,6 +367,28 @@ namespace Backend.Controllers
                 ("Family & Animation Matinee", "FAMANI", "Family"),
             };
 
+            // Seeded clubs previously had NO owner row, meaning nobody could
+            // remove or ban a spammer from the app's busiest rooms — every
+            // member had to individually block them. The operator's Supabase
+            // user id (Render env Admin__OwnerUserId) becomes their host,
+            // wiring them into the existing remove/ban/rename tools. Applied
+            // to already-seeded rows too, so a re-run upgrades them.
+            var ownerUserId = configuration["Admin:OwnerUserId"];
+            var adopted = 0;
+            if (!string.IsNullOrWhiteSpace(ownerUserId))
+            {
+                var codes = defaults.Select(d => d.Item2).ToList();
+                var orphans = await _db.Groups
+                    .Where(g => g.IsPublic && g.MatchMovieKey == null
+                        && codes.Contains(g.SpaceCode) && g.UserId == "")
+                    .ToListAsync();
+                foreach (var orphan in orphans)
+                {
+                    orphan.UserId = ownerUserId;
+                    adopted++;
+                }
+            }
+
             var existingCodes = await _db.Groups
                 .Where(g => g.IsPublic)
                 .Select(g => g.SpaceCode)
@@ -379,6 +401,7 @@ namespace Backend.Controllers
 
                 var group = new Group
                 {
+                    UserId = ownerUserId,
                     HostName = "MovieSpaces",
                     FilmName = name,
                     Slug = GenerateSlug(name),
@@ -398,8 +421,8 @@ namespace Backend.Controllers
                 added++;
             }
 
-            if (added > 0) await _db.SaveChangesAsync();
-            return Ok(new { added, total = defaults.Length });
+            if (added > 0 || adopted > 0) await _db.SaveChangesAsync();
+            return Ok(new { added, adopted, total = defaults.Length });
         }
 
         // POST /api/group/community-clubs — anyone can create a public community
@@ -1468,6 +1491,16 @@ namespace Backend.Controllers
             var memberCount = await _db.GroupMembers.CountAsync(m => m.GroupId == id);
             if (memberCount >= group.MaxCapacity)
                 return BadRequest(new { error = "This Space is already full." });
+
+            // Cap accountless rows per Space: guests have no bannable
+            // identity, so without this a griefer with the link could fill
+            // every seat from incognito tabs and lock real members out.
+            // (Guests stay auto-confirmed — see the comment below; making
+            // them pending would stall the host's booking gate — so the cap
+            // is the actual defense, bounding the damage to 5 of the seats.)
+            var guestCount = await _db.GroupMembers.CountAsync(m => m.GroupId == id && m.UserId == "");
+            if (guestCount >= 5)
+                return BadRequest(new { error = "Guest spots for this Space are full — grab the app to join." });
 
             var member = new GroupMember
             {

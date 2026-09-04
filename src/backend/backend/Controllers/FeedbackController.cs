@@ -71,6 +71,59 @@ namespace Backend.Controllers
             return Ok(new { count = row?.Count ?? taps });
         }
 
+        // POST /api/site/report-hook — Supabase Database Webhook target for
+        // INSERTs on public.reports. Turns "reports land in a table nobody
+        // watches" into an email within seconds, which is what "timely action
+        // on objectionable content" (App Review 1.2) has to actually mean.
+        // Configure in Supabase: Database → Webhooks → reports/INSERT →
+        // POST this URL with header x-hook-secret = Render env
+        // Reports__HookSecret. 503 until both sides are configured.
+        [HttpPost("report-hook")]
+        [AllowAnonymous]
+        [EnableRateLimiting("guest-join")]
+        public async Task<IActionResult> ReportHook([FromBody] System.Text.Json.JsonElement payload)
+        {
+            var expected = _config["Reports:HookSecret"];
+            if (string.IsNullOrWhiteSpace(expected))
+                return StatusCode(503, new { error = "Reports:HookSecret is not configured." });
+            Request.Headers.TryGetValue("x-hook-secret", out var provided);
+            if (!System.Security.Cryptography.CryptographicOperations.FixedTimeEquals(
+                    System.Text.Encoding.UTF8.GetBytes(provided.ToString()),
+                    System.Text.Encoding.UTF8.GetBytes(expected)))
+                return Unauthorized(new { error = "Unauthorized" });
+
+            var apiKey = _config["Resend:ApiKey"];
+            if (string.IsNullOrWhiteSpace(apiKey))
+                return StatusCode(503, new { error = "Resend:ApiKey is not configured." });
+
+            string record;
+            try
+            {
+                record = System.Text.Json.JsonSerializer.Serialize(
+                    payload.TryGetProperty("record", out var r) ? r : payload,
+                    new System.Text.Json.JsonSerializerOptions { WriteIndented = true });
+            }
+            catch { record = payload.ToString(); }
+            if (record.Length > NoteCap) record = record[..NoteCap];
+
+            var to = _config["Feedback:To"] ?? "moviespaces.dev@gmail.com";
+            var client = _httpFactory.CreateClient();
+            client.DefaultRequestHeaders.Authorization = new("Bearer", apiKey);
+            using var resp = await client.PostAsJsonAsync("https://api.resend.com/emails", new
+            {
+                from = "MovieSpaces Moderation <feedback@moviespaces.org>",
+                to = new[] { to },
+                subject = "⚠️ New in-app report",
+                text = $"A report was just filed:\n\n{record}\n\nReview it in Supabase → reports.",
+            });
+            if (!resp.IsSuccessStatusCode)
+            {
+                _logger.LogError("Resend rejected report email: {Status}", (int)resp.StatusCode);
+                return StatusCode(502, new { error = "delivery failed" });
+            }
+            return Ok(new { sent = true });
+        }
+
         public record SiteFeedbackRequest(string? Note, string? Checklist, string? Contact, string? Website);
 
         [HttpPost("feedback")]
