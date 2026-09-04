@@ -24,6 +24,8 @@ Legend: `[ ]` todo · `[x]` done · `[~]` needs verify
 - [x] Supabase hand-applied migrations — owner confirmed all three ran:
       `20260825_profile_taste`, `20260829_blocks_and_friendship_hardening`,
       `20260902_blocked_peers_fn`
+- [ ] Hand-apply `20260904_chat_requires_confirmed.sql` (chat needs a
+      confirmed RSVP on hosted Spaces — enforced in RLS, not just the UI)
 - [ ] Seed, in order (curl commands in session notes / above). Re-runs now
       skip already-seeded rows (add `?refresh=true` to force a full refetch):
       1. `POST /api/group/community-spaces/seed` (genre clubs)
@@ -62,7 +64,8 @@ new-code addendum — none of it has ever been human-tested:
 - [ ] Group page: bubbles (Invite/Directions/Chat/Calendar) sit under the
       date block with the space code beneath; ticket toggle reads prominent
 - [ ] Hosted Space: unconfirmed member sees "confirm to unlock chat";
-      confirming unlocks it
+      confirming unlocks it; tapping a chat PUSH while unconfirmed shows an
+      empty chat whose sends fail with retry (server-enforced), not messages
 - [ ] CineMind: four challenges, mystery is pick-from-six; share link shows
       no Mystery TV row and correct /400 (TV-mystery days are OFF until the
       Phase-2 env flip)
