@@ -128,23 +128,24 @@
   .band .slogan-big{font-style:italic;font-size:clamp(22px,3.4vw,32px);color:var(--text)}
   .band .slogan-big em{color:var(--accent);font-style:italic}
 
-  /* --- intermission clapperboard --- */
-  .intermission{text-align:center;padding:64px 0 72px}
-  .clap-kick{font-family:'Bebas Neue',sans-serif;letter-spacing:3px;font-size:15px;color:var(--accent);margin-bottom:6px}
-  .clap-sub{color:var(--muted);font-size:15.5px;margin-bottom:26px}
-  .clapper{display:inline-block;cursor:pointer;user-select:none;-webkit-user-select:none;-webkit-tap-highlight-color:transparent;border:0;background:none;padding:0}
+  /* --- intermission: a slim mid-scroll band (an intermission happens
+     mid-show, not after the credits — it sat orphaned at the page bottom) --- */
+  .intermission{border-top:1px solid var(--border);border-bottom:1px solid var(--border);background:rgba(0,0,0,.18);
+    display:flex;align-items:center;justify-content:center;gap:34px;padding:30px 24px}
+  .clapper{cursor:pointer;user-select:none;-webkit-user-select:none;-webkit-tap-highlight-color:transparent;border:0;background:none;padding:0;flex:none}
   .clapper:active{transform:scale(.97)}
-  .clap-top{height:34px;width:230px;border-radius:8px 8px 0 0;margin-left:6px;
-    background:repeating-linear-gradient(115deg,#0d0906 0 24px,var(--accent) 24px 48px);
+  .clap-top{height:22px;width:158px;border-radius:6px 6px 0 0;margin-left:4px;
+    background:repeating-linear-gradient(115deg,#0d0906 0 16px,var(--accent) 16px 32px);
     border:1px solid var(--border2);transform-origin:8% 100%;transition:transform .09s ease-out}
   .clapper.clack .clap-top{transform:rotate(-16deg)}
-  .clap-board{width:242px;background:#0d0906;border:1px solid var(--border2);border-radius:0 0 10px 10px;padding:14px 16px 16px}
-  .clap-take{font-family:'Bebas Neue',sans-serif;font-size:40px;letter-spacing:2px;color:var(--text);line-height:1}
+  .clap-board{width:166px;background:#0d0906;border:1px solid var(--border2);border-radius:0 0 8px 8px;padding:10px 12px}
+  .clap-take{font-family:'Bebas Neue',sans-serif;font-size:26px;letter-spacing:1.5px;color:var(--text);line-height:1;white-space:nowrap}
   .clap-take b{color:var(--accent);font-weight:400}
-  .clap-scene{font-family:'Bebas Neue',sans-serif;font-size:12px;letter-spacing:2.5px;color:var(--faint);margin-top:8px;border-top:1px dashed var(--border2);padding-top:8px}
-  .clap-hint{color:var(--faint);font-size:13px;margin-top:14px}
-  .clap-more{color:var(--accent);text-decoration:none}
-  .clap-more:hover{text-decoration:underline}
+  .inter-copy{max-width:400px}
+  .inter-kick{font-family:'Bebas Neue',sans-serif;letter-spacing:3px;font-size:14px;color:var(--accent);margin-bottom:4px}
+  .inter-line{color:var(--muted);font-size:14.5px}
+  .inter-more{color:var(--accent);text-decoration:none;font-size:13.5px;font-weight:700}
+  .inter-more:hover{text-decoration:underline}
 
   footer{padding:36px 0 56px;display:flex;align-items:center;justify-content:space-between;gap:16px;flex-wrap:wrap;border-top:1px solid var(--border)}
   footer .links a{color:var(--muted);text-decoration:none;margin-right:22px;font-size:14.5px}
@@ -232,6 +233,7 @@
     .phone{width:270px}
     section{padding:48px 0}
     .steps,.grid,.stubs{margin-top:26px;gap:12px}
+    .intermission{flex-direction:column;gap:18px;text-align:center;padding:26px 18px}
     .stub{grid-template-columns:52px 1fr}
     .stub::before,.stub::after{left:43px}
     .stub .body{padding:18px}
@@ -352,6 +354,20 @@
       </div>
     </section>
 
+    <section class="intermission bleed" aria-label="Intermission">
+      <button class="clapper" id="clapper" type="button" aria-label="Clap the clapperboard">
+        <div class="clap-top"></div>
+        <div class="clap-board">
+          <div class="clap-take">TAKE <b id="takeCount">&hellip;</b></div>
+        </div>
+      </button>
+      <div class="inter-copy">
+        <div class="inter-kick">INTERMISSION</div>
+        <p class="inter-line">One long movie, directed by everybody who stops by. Clap the slate &mdash; it counts forever.</p>
+        <a class="inter-more" href="/clap">Full screen &rarr;</a>
+      </div>
+    </section>
+
     <section id="inside">
       <div class="sec-kick">WHAT'S INSIDE</div>
       <h2>Built for going out, not scrolling</h2>
@@ -381,18 +397,6 @@
       <p class="fineline">Starting at the theaters we actually go to.</p>
     </section>
 
-    <section class="intermission">
-      <div class="clap-kick">INTERMISSION</div>
-      <p class="clap-sub">Every visitor gets to slate the shoot. Go ahead &mdash; clap it.</p>
-      <button class="clapper" id="clapper" type="button" aria-label="Clap the clapperboard">
-        <div class="clap-top"></div>
-        <div class="clap-board">
-          <div class="clap-take">TAKE <b id="takeCount">&hellip;</b></div>
-          <div class="clap-scene">MOVIESPACES &middot; SCENE: EVERYWHERE &middot; DIR: EVERYONE</div>
-        </div>
-      </button>
-      <p class="clap-hint">One long movie, directed by everybody who stops by. <a class="clap-more" href="/clap">Full screen &rarr;</a></p>
-    </section>
 
     <footer>
       <div class="links">
