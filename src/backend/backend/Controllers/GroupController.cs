@@ -367,6 +367,28 @@ namespace Backend.Controllers
                 ("Family & Animation Matinee", "FAMANI", "Family"),
             };
 
+            // Seeded clubs previously had NO owner row, meaning nobody could
+            // remove or ban a spammer from the app's busiest rooms — every
+            // member had to individually block them. The operator's Supabase
+            // user id (Render env Admin__OwnerUserId) becomes their host,
+            // wiring them into the existing remove/ban/rename tools. Applied
+            // to already-seeded rows too, so a re-run upgrades them.
+            var ownerUserId = configuration["Admin:OwnerUserId"];
+            var adopted = 0;
+            if (!string.IsNullOrWhiteSpace(ownerUserId))
+            {
+                var codes = defaults.Select(d => d.Item2).ToList();
+                var orphans = await _db.Groups
+                    .Where(g => g.IsPublic && g.MatchMovieKey == null
+                        && codes.Contains(g.SpaceCode) && g.UserId == "")
+                    .ToListAsync();
+                foreach (var orphan in orphans)
+                {
+                    orphan.UserId = ownerUserId;
+                    adopted++;
+                }
+            }
+
             var existingCodes = await _db.Groups
                 .Where(g => g.IsPublic)
                 .Select(g => g.SpaceCode)
@@ -379,6 +401,7 @@ namespace Backend.Controllers
 
                 var group = new Group
                 {
+                    UserId = ownerUserId ?? "",
                     HostName = "MovieSpaces",
                     FilmName = name,
                     Slug = GenerateSlug(name),
@@ -398,8 +421,8 @@ namespace Backend.Controllers
                 added++;
             }
 
-            if (added > 0) await _db.SaveChangesAsync();
-            return Ok(new { added, total = defaults.Length });
+            if (added > 0 || adopted > 0) await _db.SaveChangesAsync();
+            return Ok(new { added, adopted, total = defaults.Length });
         }
 
         // POST /api/group/community-clubs — anyone can create a public community
@@ -753,6 +776,9 @@ namespace Backend.Controllers
 
         private async Task<IActionResult> SeatInCrewAsync(Group crew, string userId, string name, bool hasTicket, string[]? afterActivities)
         {
+            if (await _db.GroupBans.AnyAsync(b => b.GroupId == crew.Id && b.UserId == userId))
+                return BadRequest(new { error = "You were removed from this crew by its starter." });
+
             await using var tx = await _db.Database.BeginTransactionAsync();
             await LockGroupRowAsync(crew.Id);
             var seated = await _db.GroupMembers.CountAsync(m => m.GroupId == crew.Id);
@@ -1335,6 +1361,9 @@ namespace Backend.Controllers
             var tooLong = CheckLength(req.Name, GroupFieldLimits.Name, "Your name");
             if (tooLong != null) return BadRequest(new { error = tooLong });
 
+            if (await _db.GroupBans.AnyAsync(b => b.GroupId == id && b.UserId == userId))
+                return BadRequest(new { error = "You were removed from this Space by the host." });
+
             // Count and insert in one transaction so two simultaneous joins
             // can't both see "one seat left". The unique (GroupId, UserId)
             // index is the backstop for the duplicate-join race the
@@ -1463,6 +1492,16 @@ namespace Backend.Controllers
             if (memberCount >= group.MaxCapacity)
                 return BadRequest(new { error = "This Space is already full." });
 
+            // Cap accountless rows per Space: guests have no bannable
+            // identity, so without this a griefer with the link could fill
+            // every seat from incognito tabs and lock real members out.
+            // (Guests stay auto-confirmed — see the comment below; making
+            // them pending would stall the host's booking gate — so the cap
+            // is the actual defense, bounding the damage to 5 of the seats.)
+            var guestCount = await _db.GroupMembers.CountAsync(m => m.GroupId == id && m.UserId == "");
+            if (guestCount >= 5)
+                return BadRequest(new { error = "Guest spots for this Space are full — grab the app to join." });
+
             var member = new GroupMember
             {
                 GroupId = id,
@@ -1582,6 +1621,21 @@ namespace Backend.Controllers
                 .FirstOrDefaultAsync();
             var isHost = group.UserId == senderId;
             if (!isHost && memberName == null) return Forbid();
+            // Same gate as chat itself (and the RLS function): a pending RSVP
+            // on a hosted Space can't read/write the chat, so it must not be
+            // able to broadcast "new message" pushes either — this endpoint
+            // was the raw-API bypass class the RLS migration exists to close.
+            if (!isHost)
+            {
+                var isClubGroup = group.IsPublic && group.MatchMovieKey == null;
+                var concluded = group.ScreeningTime != null && group.ScreeningTime < DateTime.UtcNow;
+                if (group.MatchMovieKey == null && !isClubGroup && !concluded)
+                {
+                    var confirmedMember = await _db.GroupMembers.AnyAsync(m =>
+                        m.GroupId == id && m.UserId == senderId && m.Confirmed);
+                    if (!confirmedMember) return Forbid();
+                }
+            }
 
             // The name shown is the one this server already holds for the
             // sender in this Space (their membership row, or HostName), not
@@ -1770,6 +1824,13 @@ namespace Backend.Controllers
             if (req.TotalCostCents.HasValue && req.TotalCostCents.Value < 0)
                 return BadRequest(new { error = "Cost can't be negative." });
 
+            // A crew's plan is LOCKED once it exists: people took seats for
+            // THIS showing — moving it out from under them breaks the thing
+            // they joined. (A legacy crew with no ScreeningTime may still set
+            // one; every crew since the showing-first flow is born with one.)
+            if (group.MatchMovieKey != null && group.ScreeningTime != null)
+                return BadRequest(new { error = "A crew's showing is locked — it's the plan everyone joined. Start a new crew for a different showing." });
+
             // Same rule as MatchForMovie: a Space can't be rescheduled into
             // the past (the open feed would hide it and the reminder would
             // never fire, so the only effect would be confusion).
@@ -1879,6 +1940,19 @@ namespace Backend.Controllers
             if (member.UserId == group.UserId) return BadRequest(new { error = "The host can't be removed. Use Hand Off Ownership instead." });
 
             _db.GroupMembers.Remove(member);
+            // Removal sticks for CREWS (the match flow would otherwise re-seat
+            // them on the next tap) and CLUBS (a removed spammer walking back
+            // in defeats the only moderation clubs have). Plain hosted Spaces
+            // skip the ban: a mis-tap there shouldn't be a permanent exile,
+            // the web-guest path can't check identity anyway, and there is
+            // no unban tool yet.
+            var bannable = group.MatchMovieKey != null || group.IsPublic;
+            if (bannable
+                && !string.IsNullOrEmpty(member.UserId)
+                && !await _db.GroupBans.AnyAsync(b => b.GroupId == id && b.UserId == member.UserId))
+            {
+                _db.GroupBans.Add(new GroupBan { GroupId = id, UserId = member.UserId });
+            }
             await _db.SaveChangesAsync();
 
             return Ok();

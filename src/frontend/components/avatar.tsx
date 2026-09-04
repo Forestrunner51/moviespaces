@@ -1,4 +1,7 @@
-import { View, Image, StyleSheet } from "react-native";
+import { View, StyleSheet } from "react-native";
+// expo-image, not RN Image: disk-cached, so the same avatar isn't
+// re-downloaded per screen (Supabase egress is the metered resource).
+import { Image } from "expo-image";
 import { Text } from "@/frontend/components/scaled-text";
 import { Palette, Radius } from "@/frontend/constants/theme";
 

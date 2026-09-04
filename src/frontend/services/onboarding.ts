@@ -1,3 +1,4 @@
+import { track } from "@/frontend/services/analytics";
 import AsyncStorage from "@react-native-async-storage/async-storage";
 import { router } from "expo-router";
 import { consumePendingRedirect } from "@/frontend/services/pending-redirect";
@@ -31,6 +32,15 @@ export async function markOnboarded() {
 }
 
 export async function completeOnboarding() {
+  // Fires on every sign-in of an already-onboarded device too (auth calls
+  // it defensively) — only count the FIRST completion or the metric is
+  // really "sign-ins".
+  try {
+    const already = await AsyncStorage.getItem(ONBOARDED_KEY);
+    if (!already) track("onboarding_complete");
+  } catch {
+    /* counting is best-effort */
+  }
   await AsyncStorage.setItem(ONBOARDED_KEY, "1");
   router.replace(consumePendingRedirect() ?? "/");
 }

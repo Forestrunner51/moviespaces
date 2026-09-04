@@ -22,6 +22,7 @@ import { useProfiles } from "@/frontend/hooks/use-profiles";
 import { formatEventDate } from "@/frontend/utils/event-date";
 import { EVENT_CATEGORIES, eventCategoryOf } from "@/frontend/constants/event-categories";
 import { authFetch } from "@/frontend/services/api";
+import { track } from "@/frontend/services/analytics";
 import { resolveDisplayName } from "@/frontend/services/display-name";
 import { useToast } from "@/frontend/components/toast";
 
@@ -92,6 +93,7 @@ function FeedCard({ space }: { space: NearbySpace }) {
         showToast(body?.error || "Couldn't join right now — try again.");
         return;
       }
+      if (isCrew) track("crew_joined");
       router.push({ pathname: "/group", params: { groupId: space.id, matched: "joined" } });
     } catch {
       showToast("Network error — please try again.");

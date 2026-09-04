@@ -64,9 +64,17 @@ namespace Backend.Services
             }
         }
 
+        // A failed run leaves yesterday's newest ScrapedAtUtc in place, which
+        // made "is a scrape due" true again 15 minutes later — on a day the
+        // source is blocking us, that's ~5,000 requests hammering a site
+        // already saying no. One attempt per 4h is the ceiling regardless of
+        // outcome (a success makes the due-check false anyway).
+        private DateTime _lastAttemptUtc = DateTime.MinValue;
+
         private async Task<bool> IsScrapeDueAsync(CancellationToken ct)
         {
             var now = DateTime.UtcNow;
+            if (now - _lastAttemptUtc < TimeSpan.FromHours(4)) return false;
             if (now.Hour < ScrapeHourUtc)
             {
                 // Before today's scrape window — but if the table is entirely
@@ -91,6 +99,8 @@ namespace Backend.Services
 
         public async Task RunScrapeAsync(CancellationToken ct)
         {
+            _lastAttemptUtc = DateTime.UtcNow;
+
             // Comma-separated metro slugs (Cinema Clock URL form, e.g.
             // "dallas-tx,houston-tx"). Growing coverage = editing this env
             // var, no deploy. Legacy single-city key kept as fallback.
@@ -117,6 +127,15 @@ namespace Backend.Services
             }
             slugs = slugs.Distinct().ToList();
 
+            if (slugs.Count == 0 && cities.Length > 0)
+            {
+                // Every metro directory failed — that's a block or a redesign,
+                // not flaky pages, and it must reach Sentry as an error.
+                _logger.LogError(
+                    "Showtimes: directory returned no theaters for ANY of {Count} cities — likely blocked or redesigned.",
+                    cities.Length);
+            }
+
             // Captured before any theater is written this run, so every theater
             // refreshed below gets a ScrapedAtUtc >= this. Anything still older
             // afterwards is a theater this run didn't touch — purged at the end.
@@ -124,6 +143,7 @@ namespace Backend.Services
 
             var succeeded = 0;
             var failed = 0;
+            var failedSlugs = new List<string>();
 
             foreach (var slug in slugs)
             {
@@ -137,7 +157,19 @@ namespace Backend.Services
                         // site's structure changed. Counted and logged loudly
                         // below rather than silently producing empty data.
                         failed++;
+                        failedSlugs.Add(slug);
                         _logger.LogWarning("Showtimes page for {Slug} did not parse.", slug);
+                        continue;
+                    }
+                    if (theater.Showings.Count == 0)
+                    {
+                        // Identity parsed but ZERO showings: for an open
+                        // theater that's the times-markup-changed shape, and
+                        // writing it would wipe the theater's cache while the
+                        // run reports success. Keep yesterday's rows instead.
+                        failed++;
+                        failedSlugs.Add(slug);
+                        _logger.LogWarning("Showtimes page for {Slug} parsed but held 0 showings — keeping previous rows.", slug);
                         continue;
                     }
 
@@ -147,6 +179,7 @@ namespace Backend.Services
                 catch (Exception ex) when (ex is not OperationCanceledException)
                 {
                     failed++;
+                    failedSlugs.Add(slug);
                     _logger.LogWarning(ex, "Showtimes scrape failed for {Slug}.", slug);
                 }
             }
@@ -177,8 +210,11 @@ namespace Backend.Services
             {
                 using var scope = _scopeFactory.CreateScope();
                 var db = scope.ServiceProvider.GetRequiredService<AppDbContext>();
+                // Failed slugs keep their previous rows — the purge exists to
+                // drop theaters that VANISHED from the directory, not ones we
+                // merely couldn't refresh today.
                 var removed = await db.ScrapedShowtimes
-                    .Where(s => s.ScrapedAtUtc < scrapeStart)
+                    .Where(s => s.ScrapedAtUtc < scrapeStart && !failedSlugs.Contains(s.TheaterSlug))
                     .ExecuteDeleteAsync(ct);
                 if (removed > 0)
                     _logger.LogInformation("Showtimes: purged {Count} stale rows from earlier scrapes.", removed);

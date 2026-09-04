@@ -13,6 +13,7 @@ import { Starfield } from "@/frontend/components/starfield";
 import { SpaceStyles, Palette, Type, Display, Radius } from "@/frontend/constants/theme";
 import { useToast } from "@/frontend/components/toast";
 import { authFetch } from "@/frontend/services/api";
+import { track } from "@/frontend/services/analytics";
 import { resolveDisplayName } from "@/frontend/services/display-name";
 import { getDeviceLocation } from "@/frontend/services/nearby-theaters";
 
@@ -71,6 +72,7 @@ export default function CreateClubScreen() {
         showToast(body?.error || "Couldn't create the club. Please try again.");
         return;
       }
+      track("club_created");
       router.replace({ pathname: "/group", params: { groupId: body.groupId } });
     } catch {
       showToast("Network error — please try again.");

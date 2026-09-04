@@ -11,6 +11,7 @@ import {
   type NativeSyntheticEvent,
 } from "react-native";
 import { Text, TextInput } from "@/frontend/components/scaled-text";
+import { track } from "@/frontend/services/analytics";
 import { FilmLoader } from "@/frontend/components/film-loader";
 import { useLocalSearchParams, Stack } from "expo-router";
 import { Ionicons } from "@expo/vector-icons";
@@ -93,6 +94,9 @@ const MessageRow = memo(function MessageRow({
 });
 
 export default function GroupChatScreen() {
+  useEffect(() => {
+    track("chat_opened");
+  }, []);
   const { showToast } = useToast();
   const { id, type, title, showTime, showDate, seasonEpisodeInfo } = useLocalSearchParams<{
     id: string;

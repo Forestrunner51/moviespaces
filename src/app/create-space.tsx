@@ -20,10 +20,11 @@ import * as ImagePicker from "expo-image-picker";
 import { uploadImage } from "@/frontend/services/image-upload";
 import { Ionicons } from "@expo/vector-icons";
 import { authFetch } from "@/frontend/services/api";
+import { track } from "@/frontend/services/analytics";
 import { supabase } from "@/frontend/config/supabase";
 import { Starfield } from "@/frontend/components/starfield";
 import { MoviePoster } from "@/frontend/components/movie-poster";
-import { SpaceStyles, Palette, Type } from "@/frontend/constants/theme";
+import { SpaceStyles, Palette, Type, Radius } from "@/frontend/constants/theme";
 import { POST_ACTIVITIES } from "@/frontend/constants/activities";
 import { useFriends } from "@/frontend/hooks/use-friends";
 import { useToast } from "@/frontend/components/toast";
@@ -83,6 +84,8 @@ export default function CreateSpaceScreen() {
   // Explore/Home's browse feed, and joining requires the SpaceCode (enforced
   // server-side in JoinGroup/JoinGroupWeb, not just hidden from browsing).
   const [isPrivate, setIsPrivate] = useState(false);
+  const [crewSteerDismissed, setCrewSteerDismissed] = useState(false);
+  const steerShownTracked = useRef(false);
   // Locked when arriving from rent-a-theater.tsx's guided flow with a
   // specific theater already picked — not a blanket lock on every private
   // rental, since someone starting a rental from scratch still needs to
@@ -122,6 +125,14 @@ export default function CreateSpaceScreen() {
   // Google Places result.
   type VenueMode = "theater" | "home";
   const [venueMode, setVenueMode] = useState<VenueMode>("theater");
+  const steerVisible =
+    spaceType === "public_gathering" && venueMode === "theater" && !isPrivate && !crewSteerDismissed;
+  useEffect(() => {
+    if (steerVisible && !steerShownTracked.current) {
+      steerShownTracked.current = true;
+      track("steer_shown");
+    }
+  }, [steerVisible]);
   const [totalCost, setTotalCost] = useState("");
   const [maxCapacity, setMaxCapacity] = useState("");
   const [bookingUrl, setBookingUrl] = useState("");
@@ -611,6 +622,7 @@ export default function CreateSpaceScreen() {
 
       const data = await res.json();
       await sendFriendInvites(data.groupId);
+      track("space_created");
       creatingRef.current = false;
       setCreating(false);
       router.replace({
@@ -747,6 +759,55 @@ export default function CreateSpaceScreen() {
           {/* Theater screenings: everything (theater, film, date, time) comes
               from the showtimes picker in one flow — the venue/movie/date
               fields below are the Watch Party path only. */}
+          {/* Crew-first steer: a PUBLIC gathering at a THEATER is exactly
+              what Movie Crews are for (locked showing, cap 6, instant chat)
+              — the permission holes all live on the hosted side. Dismissible:
+              hosting public at a theater stays possible, and the override
+              rate is the data that decides whether to hard-scope it later. */}
+          {steerVisible && (
+            <View style={styles.crewSteer}>
+              <Text style={styles.crewSteerTitle}>Meeting strangers at a theater? That&rsquo;s a Movie Crew.</Text>
+              <Text style={styles.crewSteerBody}>
+                Locked showing, up to 6 people, chat opens the moment someone joins.
+              </Text>
+              <View style={styles.crewSteerActions}>
+                <TouchableOpacity
+                  activeOpacity={0.85}
+                  style={styles.crewSteerPrimary}
+                  onPress={() => {
+                    track("steer_find_crew");
+                    router.replace("/match");
+                  }}
+                  accessibilityRole="button"
+                >
+                  <Text style={styles.crewSteerPrimaryText}>Find a crew</Text>
+                </TouchableOpacity>
+                <TouchableOpacity
+                  activeOpacity={0.85}
+                  style={styles.crewSteerSecondary}
+                  onPress={() => {
+                    track("steer_invite_only");
+                    setIsPrivate(true);
+                  }}
+                  accessibilityRole="button"
+                >
+                  <Text style={styles.crewSteerSecondaryText}>Make it invite-only</Text>
+                </TouchableOpacity>
+              </View>
+              <TouchableOpacity
+                activeOpacity={0.7}
+                onPress={() => {
+                  track("steer_override");
+                  setCrewSteerDismissed(true);
+                }}
+                hitSlop={8}
+                accessibilityRole="button"
+              >
+                <Text style={styles.crewSteerDismiss}>Host it public anyway</Text>
+              </TouchableOpacity>
+            </View>
+          )}
+
           {spaceType === "public_gathering" && (
             <ShowtimePicker selection={showtimeSelection} onSelect={handleShowtimeSelected} />
           )}
@@ -1741,6 +1802,35 @@ const styles = StyleSheet.create({
   afterChipEmoji: { ...Type.small },
   afterChipText: { ...Type.small, fontWeight: "600", color: Palette.textMuted},
   afterChipTextActive: { color: Palette.accent },
+  crewSteer: {
+    borderWidth: 1,
+    borderColor: Palette.accentBorder,
+    backgroundColor: Palette.accentDim,
+    borderRadius: Radius.medium,
+    padding: 16,
+    marginBottom: 18,
+  },
+  crewSteerTitle: { ...Type.body, fontWeight: "700", color: Palette.text },
+  crewSteerBody: { ...Type.small, color: Palette.textMuted, marginTop: 4, marginBottom: 12 },
+  crewSteerActions: { flexDirection: "row", gap: 10 },
+  crewSteerPrimary: {
+    flex: 1,
+    backgroundColor: Palette.accent,
+    borderRadius: Radius.small,
+    paddingVertical: 11,
+    alignItems: "center",
+  },
+  crewSteerPrimaryText: { ...Type.small, color: Palette.base, fontWeight: "700" },
+  crewSteerSecondary: {
+    flex: 1,
+    borderWidth: 1,
+    borderColor: Palette.accentBorder,
+    borderRadius: Radius.small,
+    paddingVertical: 11,
+    alignItems: "center",
+  },
+  crewSteerSecondaryText: { ...Type.small, color: Palette.accent, fontWeight: "700" },
+  crewSteerDismiss: { ...Type.caption, color: Palette.textFaint, textDecorationLine: "underline", textAlign: "center", marginTop: 12 },
   notesInput: { minHeight: 60, textAlignVertical: "top" },
   customActivityRow: { flexDirection: "row", gap: 8, alignItems: "center", marginBottom: 12 },
   customActivityInput: { flex: 1, marginBottom: 0 },

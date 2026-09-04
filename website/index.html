@@ -4,7 +4,6 @@
 <meta charset="utf-8">
 <meta name="viewport" content="width=device-width, initial-scale=1">
 <meta name="theme-color" content="#16100D">
-<meta name="impact-site-verification" value="5ad48d4b-cdef-4e72-b821-7739fe0b5a4a">
 <title>MovieSpaces — We believe movies are a social event</title>
 <meta name="description" content="Pick a real showing near you and get grouped with up to five other people going to it. Host movie nights. Make some new friends.">
 <link rel="canonical" href="https://moviespaces.org/">
@@ -71,6 +70,15 @@
   .cta{display:inline-flex;align-items:center;gap:10px;background:var(--accent);color:var(--base);font-weight:700;font-size:16px;padding:14px 26px;border-radius:999px;text-decoration:none;box-shadow:0 8px 30px rgba(239,138,60,.25)}
   .cta svg{flex:none}
   .cta-note{color:var(--faint);font-size:14px}
+  .notify{margin-top:22px;max-width:430px}
+  .notify-line{color:var(--muted);font-size:15px;margin-bottom:10px}
+  .notify-line b{color:var(--text)}
+  .notify-row{display:flex;gap:8px}
+  .notify-row input[type=email]{flex:1;min-width:0;background:var(--raised);border:1px solid var(--border2);border-radius:999px;color:var(--text);font-family:Karla,sans-serif;font-size:15px;padding:12px 18px}
+  .notify-row input[type=email]:focus{outline:none;border-color:var(--accent-border)}
+  .notify-row button{background:var(--accent);color:var(--base);border:0;border-radius:999px;font-family:Karla,sans-serif;font-weight:700;font-size:15px;padding:12px 20px;cursor:pointer;white-space:nowrap}
+  .notify-row button:disabled{opacity:.6;cursor:default}
+  .notify-done{color:var(--positive);font-size:14.5px;font-weight:700;margin-top:10px}
 
   /* phone mockup, pure CSS */
   .phone-col{display:flex;justify-content:center}
@@ -120,28 +128,32 @@
   .band .slogan-big{font-style:italic;font-size:clamp(22px,3.4vw,32px);color:var(--text)}
   .band .slogan-big em{color:var(--accent);font-style:italic}
 
-  /* --- intermission clapperboard --- */
-  .intermission{text-align:center;padding:64px 0 72px}
-  .clap-kick{font-family:'Bebas Neue',sans-serif;letter-spacing:3px;font-size:15px;color:var(--accent);margin-bottom:6px}
-  .clap-sub{color:var(--muted);font-size:15.5px;margin-bottom:26px}
-  .clapper{display:inline-block;cursor:pointer;user-select:none;-webkit-user-select:none;-webkit-tap-highlight-color:transparent;border:0;background:none;padding:0}
+  /* --- intermission: a slim mid-scroll band (an intermission happens
+     mid-show, not after the credits — it sat orphaned at the page bottom) --- */
+  .intermission{border-top:1px solid var(--border);border-bottom:1px solid var(--border);background:rgba(0,0,0,.18);
+    display:flex;align-items:center;justify-content:center;gap:34px;padding:30px 24px}
+  .clapper{cursor:pointer;user-select:none;-webkit-user-select:none;-webkit-tap-highlight-color:transparent;border:0;background:none;padding:0;flex:none}
   .clapper:active{transform:scale(.97)}
-  .clap-top{height:34px;width:230px;border-radius:8px 8px 0 0;margin-left:6px;
-    background:repeating-linear-gradient(115deg,#0d0906 0 24px,var(--accent) 24px 48px);
+  .clap-top{height:22px;width:158px;border-radius:6px 6px 0 0;margin-left:4px;
+    background:repeating-linear-gradient(115deg,#0d0906 0 16px,var(--accent) 16px 32px);
     border:1px solid var(--border2);transform-origin:8% 100%;transition:transform .09s ease-out}
   .clapper.clack .clap-top{transform:rotate(-16deg)}
-  .clap-board{width:242px;background:#0d0906;border:1px solid var(--border2);border-radius:0 0 10px 10px;padding:14px 16px 16px}
-  .clap-take{font-family:'Bebas Neue',sans-serif;font-size:40px;letter-spacing:2px;color:var(--text);line-height:1}
+  .clap-board{width:166px;background:#0d0906;border:1px solid var(--border2);border-radius:0 0 8px 8px;padding:10px 12px}
+  .clap-take{font-family:'Bebas Neue',sans-serif;font-size:26px;letter-spacing:1.5px;color:var(--text);line-height:1;white-space:nowrap}
   .clap-take b{color:var(--accent);font-weight:400}
-  .clap-scene{font-family:'Bebas Neue',sans-serif;font-size:12px;letter-spacing:2.5px;color:var(--faint);margin-top:8px;border-top:1px dashed var(--border2);padding-top:8px}
-  .clap-hint{color:var(--faint);font-size:13px;margin-top:14px}
-  .clap-more{color:var(--accent);text-decoration:none}
-  .clap-more:hover{text-decoration:underline}
+  .inter-copy{max-width:400px}
+  .inter-kick{font-family:'Bebas Neue',sans-serif;letter-spacing:3px;font-size:14px;color:var(--accent);margin-bottom:4px}
+  .inter-line{color:var(--muted);font-size:14.5px}
+  .inter-more{color:var(--accent);text-decoration:none;font-size:13.5px;font-weight:700}
+  .inter-more:hover{text-decoration:underline}
 
   footer{padding:36px 0 56px;display:flex;align-items:center;justify-content:space-between;gap:16px;flex-wrap:wrap;border-top:1px solid var(--border)}
   footer .links a{color:var(--muted);text-decoration:none;margin-right:22px;font-size:14.5px}
   footer .links a:hover{color:var(--accent)}
   footer .fine{color:var(--faint);font-size:13.5px}
+  footer .socials{display:flex;gap:14px;align-items:center}
+  footer .socials a{color:var(--muted);display:flex}
+  footer .socials a:hover{color:var(--accent)}
 
   /* --- film grain over the hero --- */
   .hero-wrap{position:relative}
@@ -188,7 +200,7 @@
   .stub h3{font-family:'Bebas Neue',sans-serif;font-weight:400;font-size:28px;letter-spacing:1px;line-height:1;margin-bottom:8px}
   .stub p{color:var(--muted);font-size:15px}
 
-  /* --- Dallas closer --- */
+  /* --- slogan closer --- */
   .band .place{font-family:'Bebas Neue',sans-serif;letter-spacing:3px;font-size:15px;color:var(--accent);margin-bottom:12px}
   .band .attribution{font-family:'Bebas Neue',sans-serif;letter-spacing:2px;font-size:15px;color:var(--muted);margin-top:14px}
   .band .fineline{color:var(--faint);margin-top:10px;font-size:15px}
@@ -213,11 +225,15 @@
     .sub{font-size:16.5px}
     /* full-width CTA reads as a button, not a pill lost in space */
     .cta-row{flex-direction:column;align-items:stretch;gap:10px}
+    .notify{max-width:none}
+    .notify-row{flex-direction:column}
+    .notify-row button{padding:13px}
     .cta{justify-content:center}
     .cta-note{text-align:center}
     .phone{width:270px}
     section{padding:48px 0}
     .steps,.grid,.stubs{margin-top:26px;gap:12px}
+    .intermission{flex-direction:column;gap:18px;text-align:center;padding:26px 18px}
     .stub{grid-template-columns:52px 1fr}
     .stub::before,.stub::after{left:43px}
     .stub .body{padding:18px}
@@ -253,8 +269,19 @@
             <svg width="18" height="18" viewBox="0 0 24 24" fill="none"><path d="M12 2C6.5 2 2 6.5 2 12s4.5 10 10 10 10-4.5 10-10S17.5 2 12 2Zm-2 14.5v-9l7 4.5-7 4.5Z" fill="currentColor"/></svg>
             Coming soon to the App Store
           </a>
-          <span class="cta-note">iPhone · free · First crews forming in Dallas this fall.</span>
+          <span class="cta-note">iPhone · free · First crews forming this fall.</span>
         </div>
+        <form class="notify" id="notifyForm" autocomplete="on">
+          <p class="notify-line">MovieSpaces launches this fall. <b>Get the link first.</b></p>
+          <div class="notify-row">
+            <input type="email" id="notifyEmail" name="email" placeholder="you@email.com" required
+                   autocomplete="email" inputmode="email" aria-label="Email address">
+            <input type="text" id="notifyWebsite" tabindex="-1" autocomplete="off" aria-hidden="true"
+                   style="position:absolute;left:-9999px" placeholder="website">
+            <button type="submit" id="notifyBtn">Notify me</button>
+          </div>
+          <p class="notify-done" id="notifyDone" hidden>🎬 You&rsquo;re on the list — see you opening night.</p>
+        </form>
       </div>
       <div class="phone-col">
         <div class="phone" aria-hidden="true">
@@ -309,7 +336,7 @@
           <div class="sign">
             <div>
               <div class="name">OLAOLUWA KAYODE</div>
-              <div class="role">Founder, MovieSpaces &middot; Dallas, TX</div>
+              <div class="role">Founder, MovieSpaces</div>
             </div>
           </div>
         </div>
@@ -324,6 +351,20 @@
         <div class="step"><div class="n">1</div><h3>Pick a showing</h3><p>Real theaters, real times, near you — or name a place for a watch party.</p></div>
         <div class="step"><div class="n">2</div><h3>Get grouped</h3><p>You're seated with up to five other people going to the same showing. Small on purpose.</p></div>
         <div class="step"><div class="n">3</div><h3>Plan it together</h3><p>Chat opens instantly. Flag your ticket, vote what you're up for after — drinks, food, the spoiler debrief.</p></div>
+      </div>
+    </section>
+
+    <section class="intermission bleed" aria-label="Intermission">
+      <button class="clapper" id="clapper" type="button" aria-label="Clap the clapperboard">
+        <div class="clap-top"></div>
+        <div class="clap-board">
+          <div class="clap-take">TAKE <b id="takeCount">&hellip;</b></div>
+        </div>
+      </button>
+      <div class="inter-copy">
+        <div class="inter-kick">INTERMISSION</div>
+        <p class="inter-line">One long movie, directed by everybody who stops by. Clap the slate &mdash; it counts forever.</p>
+        <a class="inter-more" href="/clap">Full screen &rarr;</a>
       </div>
     </section>
 
@@ -351,24 +392,11 @@
     </section>
 
     <section class="band bleed">
-      <div class="place">BUILT IN DALLAS</div>
       <p class="slogan-big">"We believe movies are a <em>social event</em>."</p>
       <p class="attribution">&mdash; Olaoluwa Kayode, founder</p>
       <p class="fineline">Starting at the theaters we actually go to.</p>
     </section>
 
-    <section class="intermission">
-      <div class="clap-kick">INTERMISSION</div>
-      <p class="clap-sub">Every visitor gets to slate the shoot. Go ahead &mdash; clap it.</p>
-      <button class="clapper" id="clapper" type="button" aria-label="Clap the clapperboard">
-        <div class="clap-top"></div>
-        <div class="clap-board">
-          <div class="clap-take">TAKE <b id="takeCount">&hellip;</b></div>
-          <div class="clap-scene">MOVIESPACES &middot; SCENE: DFW &middot; DIR: EVERYONE</div>
-        </div>
-      </button>
-      <p class="clap-hint">One long movie, directed by everybody who stops by. <a class="clap-more" href="/clap">Full screen &rarr;</a></p>
-    </section>
 
     <footer>
       <div class="links">
@@ -379,10 +407,45 @@
         <a href="/terms">Terms</a>
         <a href="/support">Support</a>
       </div>
+      <div class="socials">
+        <a href="https://instagram.com/moviespacesapp" aria-label="MovieSpaces on Instagram" target="_blank" rel="noopener">
+          <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><rect x="2.5" y="2.5" width="19" height="19" rx="5.5"/><circle cx="12" cy="12" r="4.5"/><circle cx="17.6" cy="6.4" r="1.3" fill="currentColor" stroke="none"/></svg>
+        </a>
+        <a href="https://www.tiktok.com/@moviespacesapp" aria-label="MovieSpaces on TikTok" target="_blank" rel="noopener">
+          <svg width="18" height="18" viewBox="0 0 24 24" fill="currentColor"><path d="M16.6 3c.4 2.1 1.8 3.6 3.9 3.9v3c-1.5 0-2.9-.5-3.9-1.3v6.6c0 3.4-2.7 6-6 6-3.3 0-6-2.6-6-6 0-3.3 2.7-6 6-6 .3 0 .7 0 1 .1v3.1c-.3-.1-.7-.2-1-.2-1.6 0-3 1.4-3 3 0 1.7 1.4 3 3 3s3-1.3 3-3V3h3z"/></svg>
+        </a>
+        <a href="https://www.youtube.com/@moviespacesapp" aria-label="MovieSpaces on YouTube" target="_blank" rel="noopener">
+          <svg width="19" height="19" viewBox="0 0 24 24" fill="currentColor"><path d="M22.5 7.2a2.8 2.8 0 0 0-2-2C18.9 4.8 12 4.8 12 4.8s-6.9 0-8.5.4a2.8 2.8 0 0 0-2 2C1.1 8.8 1.1 12 1.1 12s0 3.2.4 4.8a2.8 2.8 0 0 0 2 2c1.6.4 8.5.4 8.5.4s6.9 0 8.5-.4a2.8 2.8 0 0 0 2-2c.4-1.6.4-4.8.4-4.8s0-3.2-.4-4.8zM9.8 15.3V8.7l5.8 3.3-5.8 3.3z"/></svg>
+        </a>
+      </div>
       <div class="fine">&copy; 2026 MovieSpaces &middot; support@moviespaces.org</div>
     </footer>
   </div>
 <script>
+(function(){
+  var form=document.getElementById("notifyForm");
+  if(form){
+    form.addEventListener("submit",function(e){
+      e.preventDefault();
+      var email=document.getElementById("notifyEmail").value.trim();
+      var btn=document.getElementById("notifyBtn");
+      if(!email)return;
+      btn.disabled=true;btn.textContent="Adding\u2026";
+      fetch("https://moviespaces.onrender.com/api/site/notify",{
+        method:"POST",headers:{"Content-Type":"application/json"},
+        body:JSON.stringify({email:email,website:document.getElementById("notifyWebsite").value})
+      }).then(function(r){
+        if(!r.ok)throw new Error("status "+r.status);
+        document.getElementById("notifyDone").hidden=false;
+        form.querySelector(".notify-row").hidden=true;
+        document.querySelector(".notify-line").hidden=true;
+      }).catch(function(){
+        btn.disabled=false;btn.textContent="Notify me";
+        alert("Couldn't save that — try again in a moment?");
+      });
+    });
+  }
+})();
 (function(){
   var API="https://moviespaces.onrender.com/api/site/clapper";
   var el=document.getElementById("takeCount"),board=document.getElementById("clapper");

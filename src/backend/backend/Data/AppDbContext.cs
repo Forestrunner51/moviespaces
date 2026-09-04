@@ -31,6 +31,9 @@ public class AppDbContext : DbContext
     public DbSet<CineMindReminderLog> CineMindReminderLog => Set<CineMindReminderLog>();
     public DbSet<RouletteSpinHistory> RouletteSpinHistory => Set<RouletteSpinHistory>();
     public DbSet<SiteCounter> SiteCounters => Set<SiteCounter>();
+    public DbSet<GroupBan> GroupBans => Set<GroupBan>();
+    public DbSet<AppEvent> AppEvents => Set<AppEvent>();
+    public DbSet<LaunchSignup> LaunchSignups => Set<LaunchSignup>();
 
     // Nightly-scraped showtimes cache (see ShowtimesScraperService). Wiped and
     // refilled per theater on each scrape run; nothing else writes here.

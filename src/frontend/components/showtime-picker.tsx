@@ -56,6 +56,10 @@ const normalizeTitle = (t: string) =>
 export function ShowtimePicker({ selection, onSelect, filterTitle }: Props) {
   const [theaters, setTheaters] = useState<ShowtimeTheater[] | null>(null);
   const [stale, setStale] = useState(false);
+  // lastUpdatedUtc with an empty list = the feed HAS data history but
+  // everything aged out (broken scraper), which is a different story than
+  // "we don't cover your area".
+  const [hadDataBefore, setHadDataBefore] = useState(false);
   const [loadError, setLoadError] = useState(false);
   const [theater, setTheater] = useState<ShowtimeTheater | null>(null);
   const [day, setDay] = useState<TheaterShowtimesDay | null>(null);
@@ -120,6 +124,7 @@ export function ShowtimePicker({ selection, onSelect, filterTitle }: Props) {
           setHasLocation(!!loc);
           setTheaters(list);
           setStale(isStale(result.lastUpdatedUtc));
+          setHadDataBefore(result.lastUpdatedUtc != null);
           // Editing an existing showing: land on its theater and day so the
           // times are one tap away. Match by slug, else by name (a group row
           // stores the theater's name, not its slug). Search the full
@@ -168,12 +173,18 @@ export function ShowtimePicker({ selection, onSelect, filterTitle }: Props) {
       <View style={styles.emptyCard}>
         <Ionicons name="film-outline" size={22} color={Palette.textMuted} />
         <Text style={styles.emptyTitle}>
-          {loadError ? "Couldn't load showtimes" : "No theaters near you yet"}
+          {loadError
+            ? "Couldn't load showtimes"
+            : hadDataBefore
+              ? "Showtimes are temporarily unavailable"
+              : "No theaters near you yet"}
         </Text>
         <Text style={styles.emptyText}>
           {loadError
             ? "Please check your connection and try again."
-            : "Theater showtimes are rolling out area by area. Host a Watch Party instead, or check back soon."}
+            : hadDataBefore
+              ? "Our showtime feed is catching up — check back shortly, or host a Watch Party instead."
+              : "Theater showtimes are rolling out area by area. Host a Watch Party instead, or check back soon."}
         </Text>
       </View>
     );

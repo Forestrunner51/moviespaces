@@ -65,14 +65,23 @@ export async function uploadImage(
   bucket: string,
   path: string,
   localUri: string,
-  options: { upsert?: boolean; maxSide?: number } = {},
+  options: { upsert?: boolean; maxSide?: number; cacheControl?: string } = {},
 ): Promise<string> {
   const uri = await downscale(localUri, options.maxSide ?? 1600);
   const arrayBuffer = await readAsArrayBuffer(uri);
 
   const { error: uploadError } = await supabase.storage
     .from(bucket)
-    .upload(path, arrayBuffer, { contentType: "image/jpeg", upsert: options.upsert ?? false });
+    .upload(path, arrayBuffer, {
+      contentType: "image/jpeg",
+      upsert: options.upsert ?? false,
+      // Replacements always change the URL, so long TTLs are egress savings —
+      // but DELETION doesn'''t change the URL, and Supabase'''s CDN doesn'''t purge
+      // on delete. Avatars are faces with a 5.1.1(v) "stops resolving after
+      // account deletion" obligation, so they get one day; space photos
+      // (scenery, new filename per upload) keep the year.
+      cacheControl: options.cacheControl ?? "31536000",
+    });
   if (uploadError) throw uploadError;
 
   const { data } = supabase.storage.from(bucket).getPublicUrl(path);

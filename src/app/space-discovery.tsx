@@ -15,7 +15,8 @@ import { MoviePoster } from "@/frontend/components/movie-poster";
 import { SpaceStyles, Palette, Type, Display, Radius } from "@/frontend/constants/theme";
 import { useToast } from "@/frontend/components/toast";
 import { authFetch } from "@/frontend/services/api";
-import { markOnboarded } from "@/frontend/services/onboarding";
+import { track } from "@/frontend/services/analytics";
+import { completeOnboarding } from "@/frontend/services/onboarding";
 import { formatEventDate } from "@/frontend/utils/event-date";
 import { getDeviceLocation, type Coordinates } from "@/frontend/services/nearby-theaters";
 import { distanceMiles, formatMilesAway } from "@/frontend/utils/distance";
@@ -233,6 +234,7 @@ export default function SpaceDiscoveryScreen() {
         { method: "POST", body: JSON.stringify({ name: "" }) },
       );
       if (res.ok) {
+        track("club_joined");
         setSpaces((prev) => prev.map((s) => (s.id === space.id ? { ...s, isJoined: true } : s)));
       } else {
         // Was silent — a first-run user tapping Join on flaky signal saw
@@ -248,17 +250,17 @@ export default function SpaceDiscoveryScreen() {
   };
 
   const handleContinue = async () => {
-    // Onboarding is DONE here — the flag is written now, so quitting during
-    // the optional tour epilogue can't replay the whole flow next session.
-    // The tour just handles the final routing into the app.
+    // Last onboarding stop (the tour ran BEFORE this screen). The flag was
+    // already written at the taste step; completeOnboarding re-writes it
+    // harmlessly and routes into the app.
     setFinishing(true);
     try {
-      await markOnboarded();
+      await completeOnboarding();
     } catch {
-      // Storage hiccup: still proceed — the tour's finish calls
-      // completeOnboarding, which writes the same flag again.
+      // Storage hiccup: never strand someone on the last onboarding screen —
+      // get them into the app; the flag rewrites next launch.
+      router.replace("/");
     } finally {
-      router.push({ pathname: "/tour", params: { onboarding: "1" } });
       setFinishing(false);
     }
   };
@@ -278,8 +280,8 @@ export default function SpaceDiscoveryScreen() {
         )}
         <Text style={styles.title}>Clubs &amp; Crews</Text>
         <Text style={styles.subtitle}>
-          {genres
-            ? "Matching your picks — join any that look good."
+          {isOnboarding
+            ? "Matched to your picks. Clubs are open rooms of movie people — join any. Crews are real plans you can hop into later."
             : "Clubs are where you find your people. Crews are real plans — pick one and go."}
         </Text>
 
@@ -459,7 +461,11 @@ export default function SpaceDiscoveryScreen() {
             </View>
           ))}
 
-        {isOnboarding && (
+      </ScrollView>
+      {/* Pinned, not the last item in the scroll: testers didn't know to
+          scroll past every club to find the way forward. */}
+      {isOnboarding && (
+        <View style={styles.continueBar}>
           <TouchableOpacity
             activeOpacity={0.85}
             style={[styles.continueButton, finishing && styles.continueButtonDisabled]}
@@ -472,8 +478,8 @@ export default function SpaceDiscoveryScreen() {
               <Text style={styles.continueButtonText}>Continue</Text>
             )}
           </TouchableOpacity>
-        )}
-      </ScrollView>
+        </View>
+      )}
     </Starfield>
   );
 }
@@ -577,6 +583,14 @@ const styles = StyleSheet.create({
   retryButton: { alignSelf: "center", paddingVertical: 8, paddingHorizontal: 16 },
   retryButtonText: { ...Type.small, color: Palette.accent, fontWeight: "700" },
   emptyText: { ...Type.small, color: Palette.textMuted, textAlign: "center" },
+  continueBar: {
+    paddingHorizontal: 16,
+    paddingTop: 10,
+    paddingBottom: 34,
+    borderTopWidth: 1,
+    borderTopColor: Palette.border,
+    backgroundColor: Palette.base,
+  },
   continueButton: {
     backgroundColor: Palette.accent,
     borderRadius: Radius.medium,

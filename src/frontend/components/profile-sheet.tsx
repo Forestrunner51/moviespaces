@@ -1,6 +1,7 @@
 import { createContext, useCallback, useContext, useEffect, useState, type ReactNode } from "react";
 import { Modal, ScrollView, StyleSheet, TouchableOpacity, View } from "react-native";
 import { Text } from "@/frontend/components/scaled-text";
+import { track } from "@/frontend/services/analytics";
 import { router } from "expo-router";
 import { Ionicons } from "@expo/vector-icons";
 import { supabase } from "@/frontend/config/supabase";
@@ -39,7 +40,10 @@ export function useProfileSheet() {
 export function ProfileSheetProvider({ children }: { children: ReactNode }) {
   const [userId, setUserId] = useState<string | null>(null);
   const openProfile = useCallback((id: string) => {
-    if (id) setUserId(id);
+    if (id) {
+      track("profile_sheet_opened");
+      setUserId(id);
+    }
   }, []);
 
   return (

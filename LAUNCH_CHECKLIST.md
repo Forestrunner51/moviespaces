@@ -24,6 +24,10 @@ Legend: `[ ]` todo · `[x]` done · `[~]` needs verify
 - [x] Supabase hand-applied migrations — owner confirmed all three ran:
       `20260825_profile_taste`, `20260829_blocks_and_friendship_hardening`,
       `20260902_blocked_peers_fn`
+- [ ] Hand-apply `20260904_chat_requires_confirmed.sql` **v2** — v1 had
+      wrong column casing and ERRORED on apply; if you ran it, it did
+      nothing. Re-run the current file (chat needs a confirmed RSVP on
+      hosted Spaces, enforced in RLS)
 - [ ] Seed, in order (curl commands in session notes / above). Re-runs now
       skip already-seeded rows (add `?refresh=true` to force a full refetch):
       1. `POST /api/group/community-spaces/seed` (genre clubs)
@@ -35,6 +39,15 @@ Legend: `[ ]` todo · `[x]` done · `[~]` needs verify
 - [ ] Feedback pipeline env vars on Render (site notes → email):
       `Resend__ApiKey` (+ optional `Feedback__To`); CORS for the site is now
       baked into code, no env var needed
+- [ ] Moderation env vars on Render: `Admin__OwnerUserId` (= YOUR Supabase
+      auth user id — makes you host/mod of the 7 seeded genre clubs; re-run
+      the club seed after setting it, response shows `adopted: 7`) and
+      `Reports__HookSecret` (any random string)
+- [ ] Supabase → Database → Webhooks: on `reports` INSERT → POST
+      `https://moviespaces.onrender.com/api/site/report-hook` with header
+      `x-hook-secret` = that same secret → every report emails you in seconds
+- [ ] Verify `Sentry__Dsn` is SET on Render (blank in appsettings by design)
+      — without it the scraper's new block/parse alerts go nowhere
 
 ## PHASE 2 — Build → TestFlight
 - [ ] `npm run ship` (does: local production build → `eas submit`)
@@ -47,8 +60,10 @@ Legend: `[ ]` todo · `[x]` done · `[~]` needs verify
 ## PHASE 3 — Device QA (the real gate; ~1–2 evenings, needs a second account)
 Run `moviespaces.org/test` end to end (33 flows, ~30 min), then this
 new-code addendum — none of it has ever been human-tested:
-- [ ] Onboarding: genres → taste (keyboard never covers search) → clubs →
-      tour → land Home; **swipe-back cannot re-enter onboarding**
+- [ ] Onboarding: genres → taste (keyboard never covers search) → tour →
+      clubs & crews (Continue is PINNED, no scrolling needed) → land Home;
+      **swipe-back cannot re-enter onboarding**; force-quit mid-tour doesn't
+      replay onboarding
 - [ ] Profile sheet: tap a crew seat / chat avatar / feed host → sheet shows
       top-3 & bottom-3; Add Friend → Requested; Message when friends;
       **long-press on a chat avatar still opens Report/Block**
@@ -60,7 +75,8 @@ new-code addendum — none of it has ever been human-tested:
 - [ ] Group page: bubbles (Invite/Directions/Chat/Calendar) sit under the
       date block with the space code beneath; ticket toggle reads prominent
 - [ ] Hosted Space: unconfirmed member sees "confirm to unlock chat";
-      confirming unlocks it
+      confirming unlocks it; tapping a chat PUSH while unconfirmed shows an
+      empty chat whose sends fail with retry (server-enforced), not messages
 - [ ] CineMind: four challenges, mystery is pick-from-six; share link shows
       no Mystery TV row and correct /400 (TV-mystery days are OFF until the
       Phase-2 env flip)
@@ -69,7 +85,15 @@ new-code addendum — none of it has ever been human-tested:
 - [ ] Push: tap a chat push with app closed → lands in that chat; sign out →
       pushes stop
 - [ ] Ugly pass: airplane mode (Retry states, not fake-empty), cold-start
-      location indoors, largest text size, delete a throwaway account
+      location indoors, largest text size
+- [ ] Deletion live-test (review-sensitive): delete a throwaway account that
+      HAS an avatar, a hosted Space with a member, and a DM thread → returns
+      200 (not 500), the other account sees the Space-cancelled push, the
+      profile/messages vanish, and the old avatar URL stops resolving
+      (may take up to 24h — CDN cache TTL; the storage object itself is
+      gone immediately)
+- [ ] Analytics sanity: after the QA pass, `GET /api/events/summary?days=1`
+      (x-admin-secret) shows the events you just generated
 - [ ] SSO on the TestFlight build: Apple + Google round-trip
 
 ## PHASE 4 — App Store Connect
