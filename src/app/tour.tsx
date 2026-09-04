@@ -13,7 +13,6 @@ import { router, useLocalSearchParams } from "expo-router";
 import { Ionicons } from "@expo/vector-icons";
 import { Starfield } from "@/frontend/components/starfield";
 import { Palette, Type, Display, Radius } from "@/frontend/constants/theme";
-import { completeOnboarding } from "@/frontend/services/onboarding";
 
 // The 60-second tour: one card per surface, in the order a first night out
 // actually uses them. Reached two ways — the tail of onboarding (finishing
@@ -57,7 +56,7 @@ const PAGES: {
 ];
 
 export default function TourScreen() {
-  const { onboarding } = useLocalSearchParams<{ onboarding?: string }>();
+  const { onboarding, genres } = useLocalSearchParams<{ onboarding?: string; genres?: string }>();
   const isOnboarding = onboarding === "1";
   const { width } = useWindowDimensions();
   const [page, setPage] = useState(0);
@@ -68,9 +67,15 @@ export default function TourScreen() {
     if (p !== page) setPage(p);
   };
 
-  const finish = async () => {
-    if (isOnboarding) await completeOnboarding();
-    else if (router.canGoBack()) router.back();
+  const finish = () => {
+    // Onboarding order is genres → taste → TOUR → clubs & crews: finishing
+    // (or skipping) lands on the join screen the tour just explained.
+    if (isOnboarding) {
+      router.replace({
+        pathname: "/space-discovery",
+        params: { genres: genres ?? "", onboarding: "1" },
+      });
+    } else if (router.canGoBack()) router.back();
     else router.replace("/");
   };
 

@@ -15,6 +15,7 @@ import { Starfield } from "@/frontend/components/starfield";
 import { MoviePoster } from "@/frontend/components/movie-poster";
 import { SpaceStyles, Palette, Type, Radius, Font } from "@/frontend/constants/theme";
 import { supabase } from "@/frontend/config/supabase";
+import { markOnboarded } from "@/frontend/services/onboarding";
 import { searchMovies, Movie } from "@/frontend/services/movies";
 
 // Second onboarding step (genres → HERE → club discovery): top-3 movies you
@@ -155,8 +156,14 @@ export default function OnboardingTasteScreen() {
   const [hates, setHates] = useState<Pick[]>([]);
   const [saving, setSaving] = useState(false);
 
-  const next = () =>
-    router.push({ pathname: "/space-discovery", params: { genres: genres ?? "", onboarding: "1" } });
+  // Tour BEFORE the clubs/crews join screen: testers hit "join a club or
+  // crew" without knowing what either was. The 60-second tour is the
+  // explainer, so it has to come first. Onboarding is effectively done here
+  // (the flag is written now), so quitting mid-tour can't replay the flow.
+  const next = () => {
+    markOnboarded().catch(() => {});
+    router.push({ pathname: "/tour", params: { onboarding: "1", genres: genres ?? "" } });
+  };
 
   const saveAndContinue = async () => {
     if (saving) return;
