@@ -51,7 +51,7 @@ namespace Backend.Controllers
         public record TrackRequest(string? Name);
 
         [HttpPost("")]
-        [EnableRateLimiting("write-heavy")]
+        [EnableRateLimiting("events")]
         public async Task<IActionResult> Track([FromBody] TrackRequest req)
         {
             var userId = GetUserId();

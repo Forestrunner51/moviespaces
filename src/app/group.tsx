@@ -600,7 +600,12 @@ export default function GroupScreen() {
   useEffect(() => {
     if (openEdit !== "1" || !group || !currentUserId || autoOpenedEdit.current) return;
     const member = group.members?.some((m) => m.userId === currentUserId);
-    const mayEdit = group.userId === currentUserId || (!!group.matchMovieKey && !!member);
+    // Mirrors canEdit below: a crew with a plan is LOCKED — auto-opening the
+    // edit sheet would present a Save that can only 400.
+    const crewPlanned = !!group.matchMovieKey && (!!group.screeningTime || !!group.cinemaName);
+    const mayEdit =
+      (group.userId === currentUserId && !group.matchMovieKey) ||
+      (!!group.matchMovieKey && !!member && !crewPlanned);
     if (!mayEdit || group.status === "cancelled") return;
     autoOpenedEdit.current = true;
     openEditModal();
@@ -942,8 +947,12 @@ export default function GroupScreen() {
   // eslint-disable-next-line react-hooks/purity -- relative labels ("Tonight",
   // "In 3 days") are read off the real current time, same as hasPassed above.
   const eventDate = formatEventDate(group.screeningTime, group.showDate, group.showTime);
+  // eventConcluded, NOT hasPassed: the RLS unlock requires a real
+  // ScreeningTime in the past — hasPassed's createdAt fallback would show
+  // an unlocked Chat that the server then rejects for legacy no-time Spaces.
+  const eventConcluded = !!group.screeningTime && new Date(group.screeningTime).getTime() < nowMs;
   const chatUnlocked =
-    isHost || (isMember && (isCrew || isClub || !!myMember?.confirmed || hasPassed));
+    isHost || (isMember && (isCrew || isClub || !!myMember?.confirmed || eventConcluded));
 
   return (
     <Starfield>

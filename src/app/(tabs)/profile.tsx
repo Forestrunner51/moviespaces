@@ -219,8 +219,7 @@ export default function ProfileScreen() {
         // fetch(uri).blob() on React Native.
         const publicUrl = await uploadImage("avatars", `${userId}.jpg`, pendingAvatarUri, {
           upsert: true,
-          maxSide: 512,
-        });
+          maxSide: 512, cacheControl: "86400" });
         // Cache-bust so the new image actually shows instead of a stale CDN copy.
         avatarUrl = `${publicUrl}?t=${Date.now()}`;
       }

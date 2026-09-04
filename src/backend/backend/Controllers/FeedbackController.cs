@@ -48,7 +48,7 @@ namespace Backend.Controllers
         // renders on the public landing page.
         [HttpGet("clapper")]
         [AllowAnonymous]
-        [EnableRateLimiting("guest-join")]
+        [EnableRateLimiting("site-clapper")]
         public async Task<IActionResult> GetClapper()
         {
             var row = await _db.SiteCounters.AsNoTracking().FirstOrDefaultAsync(c => c.Key == ClapperKey);
@@ -60,7 +60,7 @@ namespace Backend.Controllers
         // (per-IP) keeps a script from inflating the count too hilariously.
         [HttpPost("clapper")]
         [AllowAnonymous]
-        [EnableRateLimiting("guest-join")]
+        [EnableRateLimiting("site-clapper")]
         public async Task<IActionResult> TapClapper([FromBody] ClapperTapRequest? req)
         {
             var taps = Math.Clamp(req?.Taps ?? 1, 1, MaxTapsPerRequest);
@@ -79,7 +79,7 @@ namespace Backend.Controllers
         // 200 (idempotent — "you're on the list" either way).
         [HttpPost("notify")]
         [AllowAnonymous]
-        [EnableRateLimiting("guest-join")]
+        [EnableRateLimiting("site-notify")]
         public async Task<IActionResult> Notify([FromBody] NotifyRequest req)
         {
             if (!string.IsNullOrWhiteSpace(req.Website)) return Ok(new { ok = true }); // honeypot

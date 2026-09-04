@@ -401,7 +401,7 @@ namespace Backend.Controllers
 
                 var group = new Group
                 {
-                    UserId = ownerUserId,
+                    UserId = ownerUserId ?? "",
                     HostName = "MovieSpaces",
                     FilmName = name,
                     Slug = GenerateSlug(name),
@@ -1621,6 +1621,21 @@ namespace Backend.Controllers
                 .FirstOrDefaultAsync();
             var isHost = group.UserId == senderId;
             if (!isHost && memberName == null) return Forbid();
+            // Same gate as chat itself (and the RLS function): a pending RSVP
+            // on a hosted Space can't read/write the chat, so it must not be
+            // able to broadcast "new message" pushes either — this endpoint
+            // was the raw-API bypass class the RLS migration exists to close.
+            if (!isHost)
+            {
+                var isClubGroup = group.IsPublic && group.MatchMovieKey == null;
+                var concluded = group.ScreeningTime != null && group.ScreeningTime < DateTime.UtcNow;
+                if (group.MatchMovieKey == null && !isClubGroup && !concluded)
+                {
+                    var confirmedMember = await _db.GroupMembers.AnyAsync(m =>
+                        m.GroupId == id && m.UserId == senderId && m.Confirmed);
+                    if (!confirmedMember) return Forbid();
+                }
+            }
 
             // The name shown is the one this server already holds for the
             // sender in this Space (their membership row, or HostName), not
@@ -1925,9 +1940,15 @@ namespace Backend.Controllers
             if (member.UserId == group.UserId) return BadRequest(new { error = "The host can't be removed. Use Hand Off Ownership instead." });
 
             _db.GroupMembers.Remove(member);
-            // Removal sticks: without this, the match flow would re-seat a
-            // removed member in the same open crew on their next tap.
-            if (!string.IsNullOrEmpty(member.UserId)
+            // Removal sticks for CREWS (the match flow would otherwise re-seat
+            // them on the next tap) and CLUBS (a removed spammer walking back
+            // in defeats the only moderation clubs have). Plain hosted Spaces
+            // skip the ban: a mis-tap there shouldn't be a permanent exile,
+            // the web-guest path can't check identity anyway, and there is
+            // no unban tool yet.
+            var bannable = group.MatchMovieKey != null || group.IsPublic;
+            if (bannable
+                && !string.IsNullOrEmpty(member.UserId)
                 && !await _db.GroupBans.AnyAsync(b => b.GroupId == id && b.UserId == member.UserId))
             {
                 _db.GroupBans.Add(new GroupBan { GroupId = id, UserId = member.UserId });

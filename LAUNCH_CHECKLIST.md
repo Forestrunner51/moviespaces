@@ -24,8 +24,10 @@ Legend: `[ ]` todo · `[x]` done · `[~]` needs verify
 - [x] Supabase hand-applied migrations — owner confirmed all three ran:
       `20260825_profile_taste`, `20260829_blocks_and_friendship_hardening`,
       `20260902_blocked_peers_fn`
-- [ ] Hand-apply `20260904_chat_requires_confirmed.sql` (chat needs a
-      confirmed RSVP on hosted Spaces — enforced in RLS, not just the UI)
+- [ ] Hand-apply `20260904_chat_requires_confirmed.sql` **v2** — v1 had
+      wrong column casing and ERRORED on apply; if you ran it, it did
+      nothing. Re-run the current file (chat needs a confirmed RSVP on
+      hosted Spaces, enforced in RLS)
 - [ ] Seed, in order (curl commands in session notes / above). Re-runs now
       skip already-seeded rows (add `?refresh=true` to force a full refetch):
       1. `POST /api/group/community-spaces/seed` (genre clubs)
@@ -87,7 +89,9 @@ new-code addendum — none of it has ever been human-tested:
 - [ ] Deletion live-test (review-sensitive): delete a throwaway account that
       HAS an avatar, a hosted Space with a member, and a DM thread → returns
       200 (not 500), the other account sees the Space-cancelled push, the
-      profile/messages vanish, and the old avatar URL 404s
+      profile/messages vanish, and the old avatar URL stops resolving
+      (may take up to 24h — CDN cache TTL; the storage object itself is
+      gone immediately)
 - [ ] Analytics sanity: after the QA pass, `GET /api/events/summary?days=1`
       (x-admin-secret) shows the events you just generated
 - [ ] SSO on the TestFlight build: Apple + Google round-trip

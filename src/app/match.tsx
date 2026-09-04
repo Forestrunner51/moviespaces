@@ -327,7 +327,8 @@ export default function MatchScreen() {
         return;
       }
       const matched = data.created ? "created" : data.joined ? "joined" : "already";
-      track(matched === "created" ? "crew_created" : "crew_joined");
+      if (matched === "created") track("crew_created");
+      else if (matched === "joined") track("crew_joined"); // "already" is a no-op re-tap, not a join
       router.replace({ pathname: "/group", params: { groupId: data.groupId, matched } });
     } catch {
       showToast("Network error — please try again.");

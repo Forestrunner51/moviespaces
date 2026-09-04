@@ -355,7 +355,7 @@ export default function CineMindScreen() {
   
           <Text style={styles.puzzleNumber}>CineMind #{puzzle.puzzleNumber}</Text>
           <CoachTip id="cinemind-intro" icon="bulb-outline">
-            Five film challenges, once a day. Fewer guesses means more points — and don&apos;t
+            Four film challenges, once a day. Fewer guesses means more points — and don&apos;t
             forget to come back tomorrow to keep your streak.
           </CoachTip>
           <View style={styles.progressRow}>

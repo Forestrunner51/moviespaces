@@ -256,6 +256,10 @@ export default function SpaceDiscoveryScreen() {
     setFinishing(true);
     try {
       await completeOnboarding();
+    } catch {
+      // Storage hiccup: never strand someone on the last onboarding screen —
+      // get them into the app; the flag rewrites next launch.
+      router.replace("/");
     } finally {
       setFinishing(false);
     }

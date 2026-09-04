@@ -1,4 +1,8 @@
 -- Hand-applied via the Supabase SQL editor (no CLI-tracked migrations).
+-- FIXED 2026-09-04 (v2): the first version referenced the PascalCase
+-- property names for match_movie_key / is_public / screening_time, but
+-- those map to snake_case columns — the CREATE errored, so if you tried
+-- v1 the rule never landed. Re-run this version.
 -- Idempotent: create or replace.
 --
 -- Group chat now requires being MARKED GOING for hosted Spaces — the client
@@ -36,9 +40,9 @@ as $$
           and gm.user_id = auth.uid()::text
           and (
             gm."Confirmed"
-            or g."MatchMovieKey" is not null
-            or (g."IsPublic" and g."MatchMovieKey" is null)
-            or (g."ScreeningTime" is not null and g."ScreeningTime" < now())
+            or g.match_movie_key is not null
+            or (g.is_public and g.match_movie_key is null)
+            or (g.screening_time is not null and g.screening_time < now())
           )
       )
     else false

@@ -196,6 +196,30 @@ builder.Services.AddRateLimiter(options =>
             PermitLimit = 30,
             Window = TimeSpan.FromMinutes(1),
         }));
+
+    // The site's toy counter shares no bucket with anything that matters —
+    // clapper mashing must never 429 the launch-signup form (both used to
+    // ride guest-join and drained one 30/min window per IP).
+    options.AddPolicy("site-clapper", http =>
+        RateLimitPartition.GetFixedWindowLimiter(LimitPartitionKey(http), _ => new FixedWindowRateLimiterOptions
+        {
+            PermitLimit = 90,
+            Window = TimeSpan.FromMinutes(1),
+        }));
+    options.AddPolicy("site-notify", http =>
+        RateLimitPartition.GetFixedWindowLimiter(LimitPartitionKey(http), _ => new FixedWindowRateLimiterOptions
+        {
+            PermitLimit = 10,
+            Window = TimeSpan.FromMinutes(1),
+        }));
+    // Analytics chatter gets its own generous bucket so it neither drops the
+    // events the decision rules need nor drains write-heavy for real pushes.
+    options.AddPolicy("events", http =>
+        RateLimitPartition.GetFixedWindowLimiter(LimitPartitionKey(http), _ => new FixedWindowRateLimiterOptions
+        {
+            PermitLimit = 120,
+            Window = TimeSpan.FromMinutes(1),
+        }));
 });
 // ---------------------
 

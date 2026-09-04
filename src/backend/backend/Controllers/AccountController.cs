@@ -65,6 +65,14 @@ namespace Backend.Controllers
             }
 
             var hostedGroups = await _db.Groups.Where(g => g.UserId == userId).ToListAsync();
+            // Community clubs are ROOMS, not the host's event — they outlive
+            // their owner. Deleting the operator's account must not vaporize
+            // the seeded genre clubs (or a big user-created club): clubs are
+            // orphaned back to ownerless instead of deleted; the ownership
+            // pointer is the only personal data the club row holds.
+            var clubs = hostedGroups.Where(g => g.IsPublic && g.MatchMovieKey == null).ToList();
+            foreach (var club in clubs) club.UserId = "";
+            hostedGroups = hostedGroups.Except(clubs).ToList();
             // Members' plans must not silently vanish: deleting the host's
             // account deletes everything they host (5.1.1 completeness), so
             // tell the people who confirmed those plans first. Passed and
