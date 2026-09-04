@@ -21,6 +21,7 @@ import { ShowtimePicker, ShowtimeSelection } from "@/frontend/components/showtim
 import { SpaceStyles, Palette, Type, Display, Radius, Font } from "@/frontend/constants/theme";
 import { useToast } from "@/frontend/components/toast";
 import { authFetch } from "@/frontend/services/api";
+import { track } from "@/frontend/services/analytics";
 import { resolveDisplayName } from "@/frontend/services/display-name";
 import { searchMovies, Movie, getNowPlaying, resolveMarqueeTitle } from "@/frontend/services/movies";
 import { combineDateAndTime, formatEventDate, isPastDateTime } from "@/frontend/utils/event-date";
@@ -326,6 +327,7 @@ export default function MatchScreen() {
         return;
       }
       const matched = data.created ? "created" : data.joined ? "joined" : "already";
+      track(matched === "created" ? "crew_created" : "crew_joined");
       router.replace({ pathname: "/group", params: { groupId: data.groupId, matched } });
     } catch {
       showToast("Network error — please try again.");

@@ -9,6 +9,7 @@ import {
   type NativeScrollEvent,
 } from "react-native";
 import { Text } from "@/frontend/components/scaled-text";
+import { track } from "@/frontend/services/analytics";
 import { router, useLocalSearchParams } from "expo-router";
 import { Ionicons } from "@expo/vector-icons";
 import { Starfield } from "@/frontend/components/starfield";
@@ -90,7 +91,15 @@ export default function TourScreen() {
   return (
     <Starfield>
       <View style={styles.container}>
-        <TouchableOpacity onPress={finish} hitSlop={10} style={styles.skip} accessibilityRole="button">
+        <TouchableOpacity
+          onPress={() => {
+            if (isOnboarding) track("tour_skipped");
+            finish();
+          }}
+          hitSlop={10}
+          style={styles.skip}
+          accessibilityRole="button"
+        >
           <Text style={styles.skipText}>{isOnboarding ? "Skip" : "Close"}</Text>
         </TouchableOpacity>
 

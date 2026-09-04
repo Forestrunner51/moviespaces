@@ -20,6 +20,7 @@ import * as ImagePicker from "expo-image-picker";
 import { uploadImage } from "@/frontend/services/image-upload";
 import { Ionicons } from "@expo/vector-icons";
 import { authFetch } from "@/frontend/services/api";
+import { track } from "@/frontend/services/analytics";
 import { supabase } from "@/frontend/config/supabase";
 import { Starfield } from "@/frontend/components/starfield";
 import { MoviePoster } from "@/frontend/components/movie-poster";
@@ -84,6 +85,7 @@ export default function CreateSpaceScreen() {
   // server-side in JoinGroup/JoinGroupWeb, not just hidden from browsing).
   const [isPrivate, setIsPrivate] = useState(false);
   const [crewSteerDismissed, setCrewSteerDismissed] = useState(false);
+  const steerShownTracked = useRef(false);
   // Locked when arriving from rent-a-theater.tsx's guided flow with a
   // specific theater already picked — not a blanket lock on every private
   // rental, since someone starting a rental from scratch still needs to
@@ -123,6 +125,14 @@ export default function CreateSpaceScreen() {
   // Google Places result.
   type VenueMode = "theater" | "home";
   const [venueMode, setVenueMode] = useState<VenueMode>("theater");
+  const steerVisible =
+    spaceType === "public_gathering" && venueMode === "theater" && !isPrivate && !crewSteerDismissed;
+  useEffect(() => {
+    if (steerVisible && !steerShownTracked.current) {
+      steerShownTracked.current = true;
+      track("steer_shown");
+    }
+  }, [steerVisible]);
   const [totalCost, setTotalCost] = useState("");
   const [maxCapacity, setMaxCapacity] = useState("");
   const [bookingUrl, setBookingUrl] = useState("");
@@ -612,6 +622,7 @@ export default function CreateSpaceScreen() {
 
       const data = await res.json();
       await sendFriendInvites(data.groupId);
+      track("space_created");
       creatingRef.current = false;
       setCreating(false);
       router.replace({
@@ -753,7 +764,7 @@ export default function CreateSpaceScreen() {
               — the permission holes all live on the hosted side. Dismissible:
               hosting public at a theater stays possible, and the override
               rate is the data that decides whether to hard-scope it later. */}
-          {spaceType === "public_gathering" && venueMode === "theater" && !isPrivate && !crewSteerDismissed && (
+          {steerVisible && (
             <View style={styles.crewSteer}>
               <Text style={styles.crewSteerTitle}>Meeting strangers at a theater? That&rsquo;s a Movie Crew.</Text>
               <Text style={styles.crewSteerBody}>
@@ -763,7 +774,10 @@ export default function CreateSpaceScreen() {
                 <TouchableOpacity
                   activeOpacity={0.85}
                   style={styles.crewSteerPrimary}
-                  onPress={() => router.replace("/match")}
+                  onPress={() => {
+                    track("steer_find_crew");
+                    router.replace("/match");
+                  }}
                   accessibilityRole="button"
                 >
                   <Text style={styles.crewSteerPrimaryText}>Find a crew</Text>
@@ -771,7 +785,10 @@ export default function CreateSpaceScreen() {
                 <TouchableOpacity
                   activeOpacity={0.85}
                   style={styles.crewSteerSecondary}
-                  onPress={() => setIsPrivate(true)}
+                  onPress={() => {
+                    track("steer_invite_only");
+                    setIsPrivate(true);
+                  }}
                   accessibilityRole="button"
                 >
                   <Text style={styles.crewSteerSecondaryText}>Make it invite-only</Text>
@@ -779,7 +796,10 @@ export default function CreateSpaceScreen() {
               </View>
               <TouchableOpacity
                 activeOpacity={0.7}
-                onPress={() => setCrewSteerDismissed(true)}
+                onPress={() => {
+                  track("steer_override");
+                  setCrewSteerDismissed(true);
+                }}
                 hitSlop={8}
                 accessibilityRole="button"
               >

@@ -10,6 +10,7 @@ import {
   Platform,
 } from "react-native";
 import { Text } from "@/frontend/components/scaled-text";
+import { track } from "@/frontend/services/analytics";
 import { router } from "expo-router";
 import { Ionicons } from "@expo/vector-icons";
 import { Starfield } from "@/frontend/components/starfield";
@@ -185,6 +186,7 @@ export default function CineMindScreen() {
       );
       setResult(graded);
       setPhase("results");
+      track("puzzle_submitted");
       // After the result is on screen, not before — stats are supplementary
       // and shouldn't delay showing someone their score.
       setStats(await fetchStats());
@@ -313,7 +315,10 @@ export default function CineMindScreen() {
           <TouchableOpacity
             activeOpacity={0.85}
             style={styles.crewBridge}
-            onPress={() => router.push("/match")}
+            onPress={() => {
+              track("cinemind_bridge_tap");
+              router.push("/match");
+            }}
             accessibilityRole="button"
             accessibilityLabel="Find a movie crew"
           >

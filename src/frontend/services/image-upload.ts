@@ -72,7 +72,14 @@ export async function uploadImage(
 
   const { error: uploadError } = await supabase.storage
     .from(bucket)
-    .upload(path, arrayBuffer, { contentType: "image/jpeg", upsert: options.upsert ?? false });
+    .upload(path, arrayBuffer, {
+      contentType: "image/jpeg",
+      upsert: options.upsert ?? false,
+      // A year: replacements always change the URL (avatars append ?t=, space
+      // photos get new filenames), so long TTLs are pure egress savings — the
+      // default 1h had every device re-downloading every face hourly.
+      cacheControl: "31536000",
+    });
   if (uploadError) throw uploadError;
 
   const { data } = supabase.storage.from(bucket).getPublicUrl(path);

@@ -1,3 +1,4 @@
+import { track } from "@/frontend/services/analytics";
 import AsyncStorage from "@react-native-async-storage/async-storage";
 import { router } from "expo-router";
 import { consumePendingRedirect } from "@/frontend/services/pending-redirect";
@@ -31,6 +32,7 @@ export async function markOnboarded() {
 }
 
 export async function completeOnboarding() {
+  track("onboarding_complete");
   await AsyncStorage.setItem(ONBOARDED_KEY, "1");
   router.replace(consumePendingRedirect() ?? "/");
 }

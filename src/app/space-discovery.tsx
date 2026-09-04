@@ -15,6 +15,7 @@ import { MoviePoster } from "@/frontend/components/movie-poster";
 import { SpaceStyles, Palette, Type, Display, Radius } from "@/frontend/constants/theme";
 import { useToast } from "@/frontend/components/toast";
 import { authFetch } from "@/frontend/services/api";
+import { track } from "@/frontend/services/analytics";
 import { completeOnboarding } from "@/frontend/services/onboarding";
 import { formatEventDate } from "@/frontend/utils/event-date";
 import { getDeviceLocation, type Coordinates } from "@/frontend/services/nearby-theaters";
@@ -233,6 +234,7 @@ export default function SpaceDiscoveryScreen() {
         { method: "POST", body: JSON.stringify({ name: "" }) },
       );
       if (res.ok) {
+        track("club_joined");
         setSpaces((prev) => prev.map((s) => (s.id === space.id ? { ...s, isJoined: true } : s)));
       } else {
         // Was silent — a first-run user tapping Join on flaky signal saw
