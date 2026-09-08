@@ -28,6 +28,11 @@ Legend: `[ ]` todo · `[x]` done · `[~]` needs verify
       wrong column casing and ERRORED on apply; if you ran it, it did
       nothing. Re-run the current file (chat needs a confirmed RSVP on
       hosted Spaces, enforced in RLS)
+- [ ] Hand-apply `20260905_realtime_chat.sql` — adds `group_messages` and
+      `messages` to the `supabase_realtime` publication so chat gets live
+      inserts. Safe before the new build ships: old builds keep polling at
+      4s; the new build polls at 4s until its subscription is healthy, then
+      every 30s as a safety net. Idempotent
 - [ ] Seed, in order (curl commands in session notes / above). Re-runs now
       skip already-seeded rows (add `?refresh=true` to force a full refetch):
       1. `POST /api/group/community-spaces/seed` (genre clubs)
@@ -84,6 +89,11 @@ new-code addendum — none of it has ever been human-tested:
       recently met, profile sheets), can't re-request
 - [ ] Push: tap a chat push with app closed → lands in that chat; sign out →
       pushes stop
+- [ ] Realtime chat: two accounts in one Space chat → a message lands on the
+      other phone within ~1s (not the old ~4s); background one phone, send
+      from the other, foreground → message is there; airplane mode on one
+      phone, send from the other, reconnect → message catches up. Same three
+      checks on a DM thread
 - [ ] Ugly pass: airplane mode (Retry states, not fake-empty), cold-start
       location indoors, largest text size
 - [ ] Deletion live-test (review-sensitive): delete a throwaway account that

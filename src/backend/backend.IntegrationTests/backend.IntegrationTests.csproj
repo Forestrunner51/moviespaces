@@ -1,0 +1,43 @@
+<Project Sdk="Microsoft.NET.Sdk">
+
+  <!-- Integration tests that need a REAL Postgres: the seat-taking row lock
+       under concurrent joins, and the Supabase RLS function that gates group
+       chat by reading EF-owned tables. Neither is testable in backend.Tests,
+       which is deliberately pure logic.
+
+       Where the database comes from (see PostgresFixture):
+         1. MOVIESPACES_TEST_PG=<Npgsql connection string>  — use that server
+            (must be a superuser login; the tests create roles and schemas).
+         2. Otherwise a throwaway postgres:16 container via Testcontainers,
+            when a Docker daemon is reachable.
+         3. Otherwise every test here is SKIPPED, not failed — so
+            `npm run check` still needs no live infrastructure. -->
+
+  <PropertyGroup>
+    <TargetFramework>net10.0</TargetFramework>
+    <ImplicitUsings>enable</ImplicitUsings>
+    <Nullable>enable</Nullable>
+    <IsPackable>false</IsPackable>
+  </PropertyGroup>
+
+  <ItemGroup>
+    <PackageReference Include="Microsoft.AspNetCore.Mvc.Testing" Version="10.0.9" />
+    <PackageReference Include="Microsoft.NET.Test.Sdk" Version="17.14.1" />
+    <PackageReference Include="Testcontainers.PostgreSql" Version="4.14.0" />
+    <PackageReference Include="xunit" Version="2.9.3" />
+    <PackageReference Include="xunit.runner.visualstudio" Version="3.1.4" />
+
+    <!-- Same pins as backend.Tests, for the same MSB3277 reason. -->
+    <PackageReference Include="Microsoft.EntityFrameworkCore" Version="10.0.8" />
+    <PackageReference Include="Microsoft.EntityFrameworkCore.Relational" Version="10.0.8" />
+  </ItemGroup>
+
+  <ItemGroup>
+    <Using Include="Xunit" />
+  </ItemGroup>
+
+  <ItemGroup>
+    <ProjectReference Include="..\backend\backend.csproj" />
+  </ItemGroup>
+
+</Project>

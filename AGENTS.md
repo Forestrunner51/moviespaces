@@ -20,7 +20,14 @@ https://docs.expo.dev/versions/v56.0.0/ over training knowledge.
   right and wasn't. Don't report something as working because it looks like it
   should.
 - **`npm run check` before considering any change done** — tsc + eslint +
-  `dotnet test` (42 backend tests). Needs no live infrastructure.
+  `dotnet test` (80 pure-logic tests in `backend.Tests`, plus 11 integration
+  tests in `backend.IntegrationTests`). Needs no live infrastructure: the
+  integration tests use a throwaway Postgres container when a Docker daemon
+  is reachable (or the server in `MOVIESPACES_TEST_PG`) and are SKIPPED
+  otherwise. They cover the join row-lock under concurrency and the Supabase
+  chat RLS function, and they apply every `supabase/migrations/*.sql` file
+  in order — so a Supabase SQL file that doesn't parse fails the suite.
+  Set `MOVIESPACES_SKIP_INTEGRATION=1` to force the skip.
 - **Schema changes: enumerate every write path.** Adding a column constraint
   has twice now broken endpoints that weren't the one being edited (the
   `varchar(n)` length caps missed `EditGroup`, `UpdateBookingUrl`, and

@@ -10,6 +10,8 @@
   <ItemGroup>
     <!-- Lets backend.Tests unit-test internal pure helpers (e.g. Expo ticket parsing). -->
     <InternalsVisibleTo Include="backend.Tests" />
+    <!-- WebApplicationFactory<Program> needs the top-level-statements Program class, which is internal. -->
+    <InternalsVisibleTo Include="backend.IntegrationTests" />
   </ItemGroup>
 
   <ItemGroup>
