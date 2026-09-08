@@ -18,6 +18,13 @@ Legend: `[ ]` todo · `[x]` done · `[~]` needs verify
 
 ## PHASE 1 — Deploy & data (an hour, gates everything)
 - [x] All code merged to `main` (through the mixed-mystery/TV-catalog batch, 2026‑09‑04)
+- [ ] **Merge + deploy the 09-05/09-08 branch work first** — it carries the
+      `EnableRlsOnRemainingTables` EF migration (runs at boot) that closes
+      Supabase advisor's four CRITICAL "RLS Disabled in Public" findings:
+      AppEvents, GroupBans, LaunchSignups (has emails), SiteCounters were
+      readable with the public anon key. Verify after deploy: advisor shows
+      0 issues, and `curl .../rest/v1/SiteCounters?select=*` with the anon
+      key returns `[]`
 - [~] Render deploy of that merge finished — verify via the seed-tv response
       (`total: 72` = new code; ~30 = still deploying) and the boot log
       (a failed EF migration now aborts boot on purpose)

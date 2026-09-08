@@ -28,6 +28,12 @@ https://docs.expo.dev/versions/v56.0.0/ over training knowledge.
   chat RLS function, and they apply every `supabase/migrations/*.sql` file
   in order — so a Supabase SQL file that doesn't parse fails the suite.
   Set `MOVIESPACES_SKIP_INTEGRATION=1` to force the skip.
+- **Every new EF table needs `ENABLE ROW LEVEL SECURITY` in its migration.**
+  Supabase auto-exposes every `public` table through PostgREST with the
+  app's anon key; RLS with no policies is what locks it out (the .NET
+  connection is the owner and bypasses it). This was missed three times
+  (07-31, 08-18, 09-04 batches). `RlsCoverageTests` now fails the build for
+  any EF-model table without it.
 - **Schema changes: enumerate every write path.** Adding a column constraint
   has twice now broken endpoints that weren't the one being edited (the
   `varchar(n)` length caps missed `EditGroup`, `UpdateBookingUrl`, and
