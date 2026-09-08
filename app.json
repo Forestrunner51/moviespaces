@@ -74,7 +74,13 @@
           "locationWhenInUsePermission": "Allow MovieSpaces to use your location to find nearby theaters."
         }
       ],
-      "expo-notifications",
+      [
+        "expo-notifications",
+        {
+          "icon": "./assets/images/notification-icon.png",
+          "color": "#EF8A3C"
+        }
+      ],
       [
         "expo-calendar",
         {

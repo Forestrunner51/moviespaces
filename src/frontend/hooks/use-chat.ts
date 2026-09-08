@@ -3,6 +3,7 @@ import { supabase } from "@/frontend/config/supabase";
 import { authFetch } from "@/frontend/services/api";
 import { loadBlockedIds } from "@/frontend/services/moderation";
 import { useForegroundPoll } from "@/frontend/hooks/use-foreground-poll";
+import { useRealtimeInserts } from "@/frontend/hooks/use-realtime-inserts";
 
 export interface Message {
   id: string;
@@ -28,6 +29,11 @@ const UUID_RE = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/
 // thread deeper than this is rare, and the previous behaviour (re-download
 // everything every 4s) was the actual problem.
 const INITIAL_PAGE = 100;
+
+// See use-group-chat.ts: 4s is the pre-Realtime cadence and the fallback;
+// while the live subscription is healthy polling is only a safety net.
+const POLL_MS_FALLBACK = 4000;
+const POLL_MS_WITH_REALTIME = 30000;
 
 // Appends `incoming` server rows onto `prev`, dropping any whose id is already
 // present (the row we optimistically inserted and then confirmed, or an
@@ -123,9 +129,36 @@ export function useChat(chatTargetId: string) {
     }
   };
 
-  // Poll instead of using Supabase Realtime — but only while foregrounded, so
-  // a DM left open in the background stops hitting Supabase every 4s.
-  useForegroundPoll(fetchHistory, 4000, Boolean(currentUserId && validTargetId), validTargetId);
+  // Live inserts addressed to me. Realtime allows one filter, so this listens
+  // to every incoming DM and keeps only the open thread's; RLS (friends-only,
+  // block-aware) decides what the socket delivers at all. My own sends are
+  // already on screen optimistically and confirmed by insert().select(), so
+  // only the other side's rows need the socket.
+  const live = useRealtimeInserts<Message>({
+    table: "messages",
+    filter: currentUserId ? `receiver_id=eq.${currentUserId}` : undefined,
+    enabled: Boolean(currentUserId && validTargetId),
+    onInsert: (row) => {
+      if (row.sender_id !== activeTargetRef.current) return;
+      if (blockedIdsRef.current.has(row.sender_id)) return;
+      setMessages((prev) => mergeMessages(prev, [row]));
+      const mark = newestSeenRef.current;
+      if (mark.key === row.sender_id && (!mark.at || row.created_at > mark.at)) {
+        newestSeenRef.current = { key: row.sender_id, at: row.created_at };
+      }
+    },
+  });
+
+  // Polling stays underneath Realtime — only while foregrounded, so a DM left
+  // open in the background stops hitting Supabase — and stretches out while
+  // the subscription is healthy. Changing the interval restarts the poll with
+  // an immediate tick: the catch-up read after any (dis)connect.
+  useForegroundPoll(
+    fetchHistory,
+    live ? POLL_MS_WITH_REALTIME : POLL_MS_FALLBACK,
+    Boolean(currentUserId && validTargetId),
+    validTargetId,
+  );
 
   // Marks this DM read, and keeps it marked as new messages arrive while the
   // screen is open. Marking only on mount (the original approach, and what

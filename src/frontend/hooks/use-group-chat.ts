@@ -2,11 +2,18 @@ import { useState, useEffect, useRef } from "react";
 import { supabase } from "@/frontend/config/supabase";
 import { authFetch } from "@/frontend/services/api";
 import { useForegroundPoll } from "@/frontend/hooks/use-foreground-poll";
+import { useRealtimeInserts } from "@/frontend/hooks/use-realtime-inserts";
 import { mergeMessages } from "@/frontend/hooks/use-chat";
 
 // Newest rows loaded on open; later polls fetch only what's newer. See
 // use-chat.ts for the same scheme.
 const INITIAL_PAGE = 100;
+
+// Poll cadence: 4s is what the chat ran on before Realtime; it stays the
+// fallback whenever the live subscription isn't healthy. While it IS healthy,
+// polling is only a safety net for a missed event, so it stretches out.
+const POLL_MS_FALLBACK = 4000;
+const POLL_MS_WITH_REALTIME = 30000;
 
 // Only "group" is ever written now — the "crowdfund" group_type value in the
 // DB check constraint is a leftover from the removed Stripe-based feature,
@@ -144,12 +151,43 @@ export function useGroupChat(groupType: GroupChatType, groupId: string) {
     }
   };
 
+  // Live inserts for this Space. RLS decides what the socket delivers (the
+  // same is_group_message_member rule a query goes through); the filter only
+  // keeps other Spaces' traffic off the wire. Each row is enriched with the
+  // sender's profile and merged exactly as a poll result would be — including
+  // the id-based dedupe against our own optimistic bubble, whichever of the
+  // insert().select() response or the socket event lands first.
+  const appendLive = async (row: GroupMessage & { group_type?: string; group_id?: string }) => {
+    const chatKey = `${row.group_type ?? groupType}:${row.group_id ?? groupId}`;
+    if (chatKey !== activeKeyRef.current) return;
+    const [enriched] = await withSenderInfo([row]);
+    if (chatKey !== activeKeyRef.current) return;
+    setMessages((prev) => mergeMessages(prev, [enriched]));
+    // Advance the poll's high-water mark so the next tick doesn't re-fetch
+    // this row — but only if the mark already belongs to this chat;
+    // otherwise fetchHistory's "switched" reset must run first.
+    const mark = newestSeenRef.current;
+    if (mark.key === chatKey && (!mark.at || row.created_at > mark.at)) {
+      newestSeenRef.current = { key: chatKey, at: row.created_at };
+    }
+  };
+  const live = useRealtimeInserts<GroupMessage & { group_type: string; group_id: string }>({
+    table: "group_messages",
+    filter: `group_id=eq.${groupId}`,
+    enabled: Boolean(currentUserId && groupId),
+    onInsert: (row) => {
+      appendLive(row).catch((err) => console.warn("Live group message dropped:", err));
+    },
+  });
+
   // Foreground-only: a backgrounded chat screen used to keep polling every 4s
   // indefinitely. Fires immediately on mount and again on resume, so the
-  // behaviour on screen is unchanged — see useForegroundPoll.
+  // behaviour on screen is unchanged — see useForegroundPoll. The interval
+  // depends on whether Realtime is up; changing it restarts the poll with an
+  // immediate tick, which is the catch-up read after any (dis)connect.
   useForegroundPoll(
     fetchHistory,
-    4000,
+    live ? POLL_MS_WITH_REALTIME : POLL_MS_FALLBACK,
     Boolean(currentUserId && groupId),
     `${groupType}:${groupId}`,
   );
