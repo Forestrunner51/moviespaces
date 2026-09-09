@@ -84,6 +84,12 @@ new-code addendum — none of it has ever been human-tested:
       confirm with the showing intact
 - [ ] Clubs & Crews Discover: search, every chip, Near me distances, Preview,
       create a local club, rename it
+- [ ] Club photo: create a club WITH a photo → it shows on the club page and
+      the Discover card; as host tap the club poster → pick a new one → it
+      updates; a non-host member sees no camera badge and cannot change it;
+      a club with no photo still shows genre art
+- [ ] Watch party date: the picker now allows up to 90 days out (was 14) —
+      scroll to a date ~2 months ahead and confirm it commits and saves
 - [ ] Group page: bubbles (Invite/Directions/Chat/Calendar) sit under the
       date block with the space code beneath; ticket toggle reads prominent
 - [ ] Hosted Space: unconfirmed member sees "confirm to unlock chat";

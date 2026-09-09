@@ -48,11 +48,19 @@ const formatDate = (d: Date) =>
 const formatTime = (d: Date) =>
   d.toLocaleTimeString(undefined, { hour: "numeric", minute: "2-digit", hour12: true });
 
+// How far ahead a watch party can be scheduled. Was 14 days, back when this
+// screen only meant "rent a theater" and the window matched how chains take
+// reservations. The screen now covers bars, community spaces and someone's
+// living room, where a fortnight is arbitrary — a premiere night planned a
+// month out simply couldn't be created, and the picker reads as stuck at the
+// ceiling rather than saying why.
+const BOOKING_WINDOW_DAYS = 90;
+
 // A function, not a module-scope constant: module scope is evaluated once at
-// bundle load, so on an app left warm for days the picker's 14-day window
-// kept shrinking relative to `minimumDate={new Date()}` until nothing was
+// bundle load, so on an app left warm for days the picker's window kept
+// shrinking relative to `minimumDate={new Date()}` until nothing was
 // selectable.
-const maxBookingDate = () => new Date(Date.now() + 14 * 24 * 60 * 60 * 1000);
+const maxBookingDate = () => new Date(Date.now() + BOOKING_WINDOW_DAYS * 24 * 60 * 60 * 1000);
 
 export default function CreateSpaceScreen() {
   // Bottom-sheet padding for the three picker modals — without it their last
@@ -250,6 +258,14 @@ export default function CreateSpaceScreen() {
 
   const [datePickerVisible, setDatePickerVisible] = useState(false);
   const [dateValue, setDateValue] = useState<Date | null>(null);
+  // Captured when the picker opens, then held stable while it's open. Both
+  // halves matter: computing these inline in JSX handed the native spinner a
+  // brand-new min/max Date object on every render — including the re-render
+  // each scroll triggers — which can reset the wheel mid-gesture; hoisting
+  // them to module scope instead would reintroduce the stale-window bug the
+  // comment on maxBookingDate describes. Set in the same handler that opens
+  // the picker, so they are always present by the time it renders.
+  const [dateBounds, setDateBounds] = useState<{ min: Date; max: Date } | null>(null);
   const [timePickerVisible, setTimePickerVisible] = useState(false);
   const [timeValue, setTimeValue] = useState<Date | null>(null);
   // Derived, not stored — no effect/cascading render needed.
@@ -1035,6 +1051,7 @@ export default function CreateSpaceScreen() {
                 setDateValue(initial);
                 setShowDate(formatDate(initial));
               }
+              setDateBounds({ min: new Date(), max: maxBookingDate() });
               setDatePickerVisible(true);
             }}
           >
@@ -1048,8 +1065,8 @@ export default function CreateSpaceScreen() {
               style={styles.pickerNativeTime}
               value={dateValue ?? new Date()}
               mode="date"
-              minimumDate={new Date()}
-              maximumDate={maxBookingDate()}
+              minimumDate={dateBounds?.min}
+              maximumDate={dateBounds?.max}
               display={Platform.OS === "ios" ? "spinner" : "default"}
               themeVariant="dark"
               onValueChange={onDateChange}

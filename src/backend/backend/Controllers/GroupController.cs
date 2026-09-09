@@ -57,6 +57,20 @@ namespace Backend.Controllers
         // BookingUrl is opened directly in members' in-app browsers, so it
         // must be a real absolute http(s) URL — never a javascript:, file:,
         // or custom scheme, and never a relative fragment.
+        // A club photo is rendered in an <Image> on the club page and every
+        // Discover card, so it gets the same http/https rule BookingUrl does
+        // (which is opened in an in-app browser) — anything else is either
+        // unrenderable or a scheme we don't want to hand a WebView. Returns an
+        // error message, or null when the value is fine. Blank is fine: it
+        // means "clear it".
+        private static string? ClubPhotoError(string url)
+        {
+            if (url.Length == 0) return null;
+            var lenError = CheckLength(url, GroupFieldLimits.Url, "The photo link");
+            if (lenError != null) return lenError;
+            return IsWebUrl(url) ? null : "That photo link isn't a valid web URL.";
+        }
+
         private static bool IsWebUrl(string value) =>
             Uri.TryCreate(value, UriKind.Absolute, out var uri)
             && (uri.Scheme == Uri.UriSchemeHttp || uri.Scheme == Uri.UriSchemeHttps);
@@ -464,6 +478,10 @@ namespace Backend.Controllers
             var cleanName = _profanityFilter.CleanOrFallback(name, "Movie Club");
             var cleanHost = _profanityFilter.CleanOrFallback(req.HostName ?? "", "A Movie Fan");
 
+            var photoUrl = (req.PhotoUrl ?? "").Trim();
+            var photoError = ClubPhotoError(photoUrl);
+            if (photoError != null) return BadRequest(new { error = photoError });
+
             var club = new Group
             {
                 Slug = GenerateSlug(cleanName),
@@ -476,6 +494,11 @@ namespace Backend.Controllers
                 SpaceType = "public_gathering",
                 MaxCapacity = 5000,
                 ScreeningTime = null,
+                // A club has no film, so PosterPath is free to hold the club's
+                // own cover image. Every surface that already renders a
+                // Space's poster picks it up with no change; left null, the
+                // genre-derived film poster fills in (see PosterForClub).
+                PosterPath = photoUrl.Length > 0 ? photoUrl : null,
                 // Optional "local club" pin: both coords or neither, and only
                 // plausible ones. Reuses the theater coordinate columns —
                 // clubs never have a theater, so there's no collision.
@@ -486,6 +509,43 @@ namespace Backend.Controllers
             _db.Groups.Add(club);
             await _db.SaveChangesAsync();
             return Ok(new { groupId = club.Id });
+        }
+
+        // POST /api/group/{id}/club-photo — set or clear a club's cover image.
+        //
+        // Host-only: a club is a room with thousands of members, and its photo
+        // is the most visible thing about it in Discover, so this is the same
+        // authority that can already rename it or ban from it. Seeded genre
+        // clubs are owned by Admin__OwnerUserId (see the seed endpoint), so
+        // the operator can brand those too.
+        //
+        // The image itself never passes through this API. The client uploads
+        // straight to Supabase Storage (space-photos, scoped by Storage RLS to
+        // the uploader's own folder) and sends only the resulting public URL,
+        // exactly as a Space cover photo already works.
+        [HttpPost("{id}/club-photo")]
+        [EnableRateLimiting("write-heavy")]
+        public async Task<IActionResult> UpdateClubPhoto(Guid id, [FromBody] ClubPhotoRequest req)
+        {
+            var userId = GetUserId();
+            if (string.IsNullOrEmpty(userId)) return Unauthorized(new { error = "Unauthorized" });
+
+            var club = await _db.Groups.FindAsync(id);
+            if (club == null) return NotFound();
+            // Crews are IsPublic too but aren't clubs — their poster is the
+            // film's real art and must not be overwritten by a member.
+            if (!club.IsPublic || club.MatchMovieKey != null)
+                return BadRequest(new { error = "Only community clubs have a club photo." });
+            if (club.UserId != userId)
+                return StatusCode(403, new { error = "Only the club's host can change its photo." });
+
+            var url = (req.PhotoUrl ?? "").Trim();
+            var photoError = ClubPhotoError(url);
+            if (photoError != null) return BadRequest(new { error = photoError });
+
+            club.PosterPath = url.Length > 0 ? url : null;
+            await _db.SaveChangesAsync();
+            return Ok(new { photoUrl = club.PosterPath });
         }
 
         // POST /api/group/match — Match mode: pick a movie you want to see and
@@ -830,7 +890,8 @@ namespace Backend.Controllers
                     g.Members.Count,
                     g.Members.Any(m => m.UserId == userId),
                     g.UserId == userId,
-                    g.TheaterLatitude, g.TheaterLongitude))
+                    g.TheaterLatitude, g.TheaterLongitude,
+                    g.PosterPath))
                 .ToListAsync();
             var clubs = requested.Count == 0
                 ? allPublicClubs
@@ -876,6 +937,8 @@ namespace Backend.Controllers
             }
             string? PosterForClub(ClubRow club)
             {
+                // A host-set club photo always wins over the genre fallback.
+                if (!string.IsNullOrWhiteSpace(club.PhotoUrl)) return club.PhotoUrl;
                 if (club.GenreCategory != null
                     && postersByGenre.TryGetValue(club.GenreCategory, out var posters)
                     && posters.Count > 0)
@@ -2076,7 +2139,12 @@ namespace Backend.Controllers
 
     // Anyone-can-create community club: just a name + genre. HostName is the
     // creator's display name for the "created by" label (falls back if blank).
-    public record CreateClubRequest(string Name, string? GenreCategory, string? HostName, double? Latitude, double? Longitude);
+    // PhotoUrl is optional: a club with none falls back to the genre-derived
+    // film poster Discover computes (see PosterForClub).
+    public record CreateClubRequest(string Name, string? GenreCategory, string? HostName, double? Latitude, double? Longitude, string? PhotoUrl = null);
+
+    // Null or empty clears the club photo, restoring the genre fallback.
+    public record ClubPhotoRequest(string? PhotoUrl);
 
     // Match mode: the movie you want to see. ImdbId when picked from search
     // (exact match key), PosterPath for the group card, HostName for membership.
@@ -2130,6 +2198,6 @@ namespace Backend.Controllers
 
     // Slim projection DiscoverCommunitySpaces reads instead of whole Groups
     // with their member lists.
-    public record ClubRow(Guid Id, string DisplayName, string? SpaceCode, string? GenreCategory, int MemberCount, bool IsJoined, bool IsMine, double? Latitude, double? Longitude);
+    public record ClubRow(Guid Id, string DisplayName, string? SpaceCode, string? GenreCategory, int MemberCount, bool IsJoined, bool IsMine, double? Latitude, double? Longitude, string? PhotoUrl);
     public record TransferOwnershipRequest(string NewHostUserId);
 }
