@@ -41,6 +41,7 @@ import { Avatar, AvatarStack } from "@/frontend/components/avatar";
 import { useProfiles } from "@/frontend/hooks/use-profiles";
 import { useProfileSheet } from "@/frontend/components/profile-sheet";
 import { useForegroundPoll } from "@/frontend/hooks/use-foreground-poll";
+import { registerForPushNotifications } from "@/frontend/services/push-notifications";
 import { ShowtimePicker, ShowtimeSelection } from "@/frontend/components/showtime-picker";
 import { formatEventDate, isPastDateTime } from "@/frontend/utils/event-date";
 import { membershipLabel } from "@/frontend/constants/theater-memberships";
@@ -129,6 +130,14 @@ export default function GroupScreen() {
   // The "you're in" moment (Strava's kudos, Kaya's "nice send"): shown once
   // on arrival from a join, dismissible, gone on the next visit.
   const [celebrate, setCelebrate] = useState(matched === "created" || matched === "joined");
+  // The push-permission ask lives here, not at sign-in: right after joining
+  // or starting something is when "we'll tell you when your crew chats" is
+  // self-evident. No-ops once the OS has an answer.
+  useEffect(() => {
+    if (matched === "created" || matched === "joined") {
+      registerForPushNotifications().catch(() => {});
+    }
+  }, [matched]);
   const [loading, setLoading] = useState(true);
   // Why `group` is null after the first load: a 404 (gone/never existed) vs
   // a network or server failure worth retrying. Cleared on any success.
@@ -420,6 +429,7 @@ export default function GroupScreen() {
         const body = await res.json().catch(() => null);
         throw new Error(body?.error || "Couldn't join this Space. Please try again.");
       }
+      registerForPushNotifications().catch(() => {});
       await fetchGroup();
     } catch (err: any) {
       showToast(err.message || "Couldn't join this Space. Please try again.");
@@ -1145,20 +1155,34 @@ export default function GroupScreen() {
                   max={5}
                 />
               )}
-              <TouchableOpacity
-                activeOpacity={0.85}
-                style={styles.celebrateChat}
-                onPress={() =>
-                  router.push({
-                    pathname: "/group-chat/[id]",
-                    params: { id: group.id, type: "group", title: group.filmName, showTime: group.showTime, showDate: group.showDate },
-                  })
-                }
-                accessibilityRole="button"
-              >
-                <Ionicons name="chatbubbles" size={15} color={Palette.base} />
-                <Text style={styles.celebrateChatText}>Say hi 👋</Text>
-              </TouchableOpacity>
+              {/* Alone in it (a fresh Space or crew of one): "Say hi" would
+                  open an empty chat, so the useful next step is inviting. */}
+              {groupMembers.length <= 1 ? (
+                <TouchableOpacity
+                  activeOpacity={0.85}
+                  style={styles.celebrateChat}
+                  onPress={shareLink}
+                  accessibilityRole="button"
+                >
+                  <Ionicons name="share-outline" size={15} color={Palette.base} />
+                  <Text style={styles.celebrateChatText}>Invite people</Text>
+                </TouchableOpacity>
+              ) : (
+                <TouchableOpacity
+                  activeOpacity={0.85}
+                  style={styles.celebrateChat}
+                  onPress={() =>
+                    router.push({
+                      pathname: "/group-chat/[id]",
+                      params: { id: group.id, type: "group", title: group.filmName, showTime: group.showTime, showDate: group.showDate },
+                    })
+                  }
+                  accessibilityRole="button"
+                >
+                  <Ionicons name="chatbubbles" size={15} color={Palette.base} />
+                  <Text style={styles.celebrateChatText}>Say hi 👋</Text>
+                </TouchableOpacity>
+              )}
             </View>
           </View>
         )}
@@ -1413,7 +1437,7 @@ export default function GroupScreen() {
         </View>
         {isMember && !chatUnlocked && (
           <Text style={styles.chatLockedHint}>
-            Confirm you&apos;re going to unlock the group chat.
+            Tap I&apos;m going to unlock the group chat.
           </Text>
         )}
         {!!group?.spaceCode && !hasPassed && (
@@ -1668,7 +1692,7 @@ export default function GroupScreen() {
           myMember.confirmed ? (
             <ActionButton
               icon="checkmark-done-outline"
-              label="You're Confirmed — Tap to Cancel"
+              label="You're going — can't make it?"
               onPress={() => handleCancelAttendance(myMember.id)}
               loading={confirming}
               style={styles.confirmedButton}
@@ -1678,7 +1702,7 @@ export default function GroupScreen() {
           ) : (
             <ActionButton
               icon="checkmark-circle-outline"
-              label="Confirm You're Going"
+              label="I'm going"
               onPress={() => handleConfirmAttendance(myMember.id)}
               loading={confirming}
               style={styles.confirmButton}

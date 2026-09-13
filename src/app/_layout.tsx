@@ -1,7 +1,7 @@
 // Must load before supabase-js constructs its client. See the module itself
 // for why this is guarded rather than an unconditional polyfill import.
 import { hasRandomValuesNativeModule } from "@/frontend/services/random-values-polyfill";
-import { DarkTheme, ThemeProvider, Stack, router, usePathname } from "expo-router";
+import { DarkTheme, ThemeProvider, Stack, router, usePathname, useGlobalSearchParams } from "expo-router";
 import type { ErrorBoundaryProps } from "expo-router";
 import { useEffect, useRef, useState } from "react";
 import { StyleSheet, TouchableOpacity, View } from "react-native";
@@ -86,9 +86,15 @@ function Layout() {
   // effect, not during render — mutating a ref directly in the render body
   // breaks under concurrent rendering / StrictMode's double-invoke.
   const pathnameRef = useRef(pathname);
+  // A private Space's invite link carries its credential as ?code= — and
+  // usePathname() has no query string, so stashing the pathname alone sent a
+  // signed-out invitee to a private Space they could no longer join (403).
+  const { code: codeParam } = useGlobalSearchParams<{ code?: string }>();
+  const codeRef = useRef<string | undefined>(undefined);
   useEffect(() => {
     pathnameRef.current = pathname;
-  }, [pathname]);
+    codeRef.current = typeof codeParam === "string" && codeParam ? codeParam : undefined;
+  }, [pathname, codeParam]);
 
   // A Space invite link (the only deep-link target this app registers) can
   // open the app before the user is signed in. Stash where they were headed
@@ -96,7 +102,10 @@ function Layout() {
   // the home tab.
   const stashDeepLinkAndRedirectToAuth = () => {
     if (pathnameRef.current?.startsWith("/space/")) {
-      setPendingRedirect(pathnameRef.current as any);
+      const code = codeRef.current;
+      setPendingRedirect(
+        (code ? `${pathnameRef.current}?code=${encodeURIComponent(code)}` : pathnameRef.current) as any,
+      );
     }
     router.replace("/auth");
   };
@@ -133,7 +142,8 @@ function Layout() {
     if (session) {
       // Registration is best-effort by contract (see its own comment) — a
       // rejection here must never become an unhandled one at app launch.
-      registerForPushNotifications().catch(() => {});
+      // No prompt here: the permission ask waits for the first join (group.tsx).
+      registerForPushNotifications({ prompt: false }).catch(() => {});
     }
   }, [session]);
 

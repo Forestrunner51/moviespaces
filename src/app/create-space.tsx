@@ -643,7 +643,9 @@ export default function CreateSpaceScreen() {
       setCreating(false);
       router.replace({
         pathname: "/group",
-        params: { groupId: data.groupId, hostName: hostName.trim() },
+        // matched → the "You started it." card, which is also where the
+        // push-permission ask happens (see group.tsx).
+        params: { groupId: data.groupId, hostName: hostName.trim(), matched: "created" },
       });
     } catch (err: any) {
       creatingRef.current = false;

@@ -120,7 +120,10 @@ async function resolveFromShowing(title: string): Promise<PickedMovie> {
 
 export default function MatchScreen() {
   const { showToast } = useToast();
-  const [stage, setStage] = useState<Stage>("kind");
+  // Opens straight on the theater showing picker — the common case, one tap
+  // shorter. Venue crews are a link from there; "kind" is only reached via
+  // the breadcrumb's Change.
+  const [stage, setStage] = useState<Stage>("pickShowing");
   const [kind, setKind] = useState<CrewKind>("theater");
   const [movie, setMovie] = useState<PickedMovie | null>(null);
   const [showtime, setShowtime] = useState<ShowtimeSelection | null>(null);
@@ -380,13 +383,13 @@ export default function MatchScreen() {
     // Cancel any showing-title lookup in flight — see resolveSeq.
     resolveSeq.current += 1;
     setResolving(false);
-    if (stage === "kind") {
+    if (stage === "pickShowing") {
       if (router.canGoBack()) router.back();
       else router.replace("/(tabs)/explore");
     } else if (stage === "film" && repickRef.current) {
       repickRef.current = false;
       setStage("confirm");
-    } else if (stage === "pickShowing" || stage === "film") setStage("kind");
+    } else if (stage === "kind" || stage === "film") pickKind("theater");
     else if (stage === "confirm") setStage("pickShowing");
     else if (stage === "crews") setStage("film");
     else if (stage === "venueShowing") setStage(crews && crews.length > 0 ? "crews" : "film");
@@ -506,11 +509,19 @@ export default function MatchScreen() {
         {/* ── theater 2. pick a real showing ────────────────────── */}
         {stage === "pickShowing" && (
           <>
-            {crumbs}
             <Text style={styles.title}>Pick a showing</Text>
             <Text style={styles.subtitle}>
-              Theater, then day, then what&apos;s playing — only films actually in theaters near you.
+              You&apos;re grouped with up to {MATCH_CREW_SIZE - 1} others going to it. Theater, then
+              day, then what&apos;s playing.
             </Text>
+            <TouchableOpacity
+              onPress={() => pickKind("venue")}
+              hitSlop={6}
+              accessibilityRole="button"
+              accessibilityLabel="Watching at a venue instead? Start a watch party crew"
+            >
+              <Text style={styles.wrongFilmLink}>Watching at someone&apos;s place or a bar instead?</Text>
+            </TouchableOpacity>
             <ScrollView keyboardShouldPersistTaps="handled" contentContainerStyle={{ paddingBottom: 60 }}>
               <ShowtimePicker selection={showtime} onSelect={onShowingPicked} />
               {resolving && <FilmLoader line="Matching the marquee to the movie…" style={{ marginTop: 16 }} />}

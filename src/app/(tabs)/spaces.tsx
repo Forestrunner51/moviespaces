@@ -260,7 +260,13 @@ export default function MySpacesScreen() {
             <TouchableOpacity
               activeOpacity={0.8}
               style={styles.headerCreateButton}
-              onPress={() => router.push(tab === "rent" ? "/rent-a-theater" : "/create-space")}
+              onPress={() =>
+                router.push(
+                  tab === "rent"
+                    ? { pathname: "/create-space", params: { spaceType: "private_rental" } }
+                    : "/create-space",
+                )
+              }
             >
               <Ionicons
                 name={tab === "rent" ? "storefront-outline" : "add-circle-outline"}

@@ -1393,7 +1393,9 @@ namespace Backend.Controllers
                 .FirstOrDefaultAsync(m => m.GroupId == id && m.UserId == userId);
             if (existing != null)
             {
-                return Ok(new { memberId = existing.Id });
+                // alreadyMember lets join.tsx skip the "You're in." card when
+                // someone re-opens an invite to a Space they're already in.
+                return Ok(new { memberId = existing.Id, alreadyMember = true });
             }
 
             // Real access control, not just "hidden from Explore" — a known
@@ -1442,12 +1444,13 @@ namespace Backend.Controllers
                 GroupId = id,
                 Name = _profanityFilter.CleanOrFallback(req.Name, "A Movie Fan"),
                 UserId = userId,
-                // Taking a crew seat IS the commitment — SeatInCrewAsync and
-                // the open feed's Confirmed-count capacity guard both treat it
-                // that way, so an unconfirmed crew member would let a "full"
-                // crew keep passing the guard (and Home show 7 of 6 seats).
-                // Hosted Spaces keep the explicit confirm step.
-                Confirmed = group.MatchMovieKey != null
+                // Joining IS the commitment, for crews and hosted Spaces alike
+                // (web guests via join-web already were). A separate
+                // "Confirm You're Going" tap after "Join" was pure friction,
+                // and the open feed's Confirmed-count capacity guard needs
+                // joined == counted anyway. "Can't make it" (unconfirm) is
+                // still there for members who back out without leaving.
+                Confirmed = true
             };
 
             _db.GroupMembers.Add(member);

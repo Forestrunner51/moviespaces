@@ -17,7 +17,6 @@ import { SpaceStyles, Palette, Type, Display, Font, Radius } from "@/frontend/co
 import { MoviePoster } from "@/frontend/components/movie-poster";
 import { Avatar, AvatarStack } from "@/frontend/components/avatar";
 import { useProfileSheet } from "@/frontend/components/profile-sheet";
-import { CoachTip } from "@/frontend/components/coach-tip";
 import { useProfiles } from "@/frontend/hooks/use-profiles";
 import { formatEventDate } from "@/frontend/utils/event-date";
 import { EVENT_CATEGORIES, eventCategoryOf } from "@/frontend/constants/event-categories";
@@ -348,11 +347,6 @@ export default function HomeScreen() {
           <Text style={styles.headline}>{headline}</Text>
         </View>
 
-        <CoachTip id="home-welcome" icon="hand-left-outline">
-          Welcome! Start by joining a screening near you, or create your own — your Spaces,
-          clubs, and the daily CineMind puzzle all live in the tabs below.
-        </CoachTip>
-
         {/* The hero is the one thing on Home the tab bar can't reach: get
             seated with strangers for a film. Your own plans live in My
             Spaces — Home is for finding the next one. */}
@@ -394,13 +388,13 @@ export default function HomeScreen() {
             </View>
             <Text style={styles.hostTitle}>At a theater</Text>
             <Text style={styles.hostBody}>
-              Pick a real showing near you and open it up — friends or anyone can join.
+              You pick the showing and run the plan. Invite friends or open it to anyone.
             </Text>
           </TouchableOpacity>
           <TouchableOpacity
             activeOpacity={0.85}
             style={styles.hostCard}
-            onPress={() => router.push("/rent-a-theater")}
+            onPress={() => router.push({ pathname: "/create-space", params: { spaceType: "private_rental" } })}
             accessibilityRole="button"
             accessibilityLabel="Host at your own place"
           >

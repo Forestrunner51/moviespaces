@@ -20,7 +20,12 @@ export async function areNotificationsEnabled(): Promise<boolean> {
 // booking confirmation) via Expo's push API. Silently no-ops on failure —
 // notification delivery is a nice-to-have, never something that should
 // block or error out the rest of the app.
-export async function registerForPushNotifications(): Promise<void> {
+//
+// `prompt: false` (app launch) only registers a device that already granted
+// permission — it never shows the iOS dialog. iOS allows one ask per install,
+// so it's spent at a moment the reason is obvious: right after joining or
+// starting a crew/Space (group.tsx), or the Settings toggle.
+export async function registerForPushNotifications({ prompt = true }: { prompt?: boolean } = {}): Promise<void> {
   // Simulators/emulators can never obtain a real push token (no APNs
   // entitlement is possible without a real device), so don't even try —
   // avoids a guaranteed-to-fail attempt and its console warning every launch.
@@ -42,6 +47,7 @@ export async function registerForPushNotifications(): Promise<void> {
     const { status: existingStatus } = await Notifications.getPermissionsAsync();
     let finalStatus = existingStatus;
     if (existingStatus !== "granted") {
+      if (!prompt) return;
       const { status } = await Notifications.requestPermissionsAsync();
       finalStatus = status;
     }

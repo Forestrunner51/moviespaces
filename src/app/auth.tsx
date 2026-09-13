@@ -16,8 +16,21 @@ import { useRouter } from "expo-router";
 import { Starfield } from "@/frontend/components/starfield";
 import { SpaceStyles, Palette, Type, Display, Radius } from "@/frontend/constants/theme";
 import { signInWithGoogle, signInWithApple, isAppleSignInAvailable } from "@/frontend/services/sso";
-import { hasOnboardedInterests, completeOnboarding } from "@/frontend/services/onboarding";
+import {
+  hasOnboardedInterests,
+  completeOnboarding,
+  skipOnboardingForInvite,
+} from "@/frontend/services/onboarding";
 import { useToast } from "@/frontend/components/toast";
+
+// A new account normally gets the genre-picker onboarding — unless it arrived
+// via a Space invite link, in which case the Space is the point and four
+// onboarding screens stand between them and the friend who invited them.
+async function startOnboarding(router: ReturnType<typeof useRouter>) {
+  if (!(await skipOnboardingForInvite())) {
+    router.replace("/onboarding-interests");
+  }
+}
 
 // Routes to the one-time genre-picker onboarding flow instead of straight
 // into the app, unless this device has already been through it. Both branches
@@ -29,7 +42,7 @@ async function afterAuthSuccess(router: ReturnType<typeof useRouter>) {
   if (await hasOnboardedInterests()) {
     await completeOnboarding();
   } else {
-    router.replace("/onboarding-interests");
+    await startOnboarding(router);
   }
 }
 
@@ -50,6 +63,11 @@ export default function AuthScreen() {
   const [loading, setLoading] = useState(false);
   const [ssoLoading, setSsoLoading] = useState<"google" | "apple" | null>(null);
   const [appleAvailable, setAppleAvailable] = useState(false);
+  // SSO-first: the email form stays folded behind "Continue with email" so a
+  // first-time visitor sees one-tap sign-in, not a login form they can't use
+  // yet. Without SSO there's nothing to fold it behind.
+  const [showEmailForm, setShowEmailForm] = useState(false);
+  const emailOpen = !showSso || showEmailForm;
 
   useEffect(() => {
     isAppleSignInAvailable().then(setAppleAvailable);
@@ -74,7 +92,7 @@ export default function AuthScreen() {
     const createdAt = user?.created_at ? new Date(user.created_at).getTime() : 0;
     const isNewAccount = createdAt > 0 && Date.now() - createdAt < 2 * 60 * 1000;
     if (isNewAccount) {
-      router.replace("/onboarding-interests");
+      await startOnboarding(router);
       return;
     }
     await afterAuthSuccess(router);
@@ -133,7 +151,7 @@ export default function AuthScreen() {
         // that flag is per-device, so the second account created on a phone
         // used to skip onboarding entirely.
         await AsyncStorage.setItem("userName", name.trim());
-        router.replace("/onboarding-interests");
+        await startOnboarding(router);
       } else {
         // Email confirmation is ON — no session yet; the account isn't usable
         // until they click the link we just emailed. Without handling this,
@@ -182,7 +200,11 @@ export default function AuthScreen() {
         <Text style={styles.header}>MovieSpaces</Text>
         <Text style={styles.slogan}>We believe movies are a social event.</Text>
         <Text style={styles.subHeader}>
-          {isSignUp ? "Create a new account" : "Sign in to your account"}
+          {!emailOpen
+            ? "Sign in or create an account"
+            : isSignUp
+              ? "Create a new account"
+              : "Sign in to your account"}
         </Text>
 
         {showSso && appleAvailable && (
@@ -210,7 +232,23 @@ export default function AuthScreen() {
           </TouchableOpacity>
         )}
 
-        {showSso && (
+        {!emailOpen && (
+          <TouchableOpacity
+            activeOpacity={0.8}
+            style={styles.googleButton}
+            onPress={() => {
+              // New visitors are who this screen is for; the Sign In toggle
+              // is right under the form for returning email users.
+              setIsSignUp(true);
+              setShowEmailForm(true);
+            }}
+            disabled={ssoLoading !== null}
+          >
+            <Text style={styles.googleButtonText}>Continue with email</Text>
+          </TouchableOpacity>
+        )}
+
+        {emailOpen && showSso && (
           <View style={styles.dividerRow}>
             <View style={styles.dividerLine} />
             <Text style={styles.dividerText}>OR</Text>
@@ -218,6 +256,7 @@ export default function AuthScreen() {
           </View>
         )}
 
+        {emailOpen && (<>
         {isSignUp && (
           <TextInput
             style={styles.input}
@@ -280,10 +319,12 @@ export default function AuthScreen() {
             <Text style={styles.forgotText}>Forgot password?</Text>
           </TouchableOpacity>
         )}
+        </>)}
 
-        {isSignUp && (
-          <Text style={styles.legalText}>
-            By registering, you agree to our{" "}
+        {/* Always shown — SSO buttons can create an account from any state
+            of this screen, including email sign-in mode. */}
+        <Text style={styles.legalText}>
+            By using MovieSpaces, you agree to our{" "}
             <Text style={styles.legalLink} onPress={() => router.push("/legal/terms")}>
               Terms of Service
             </Text>{" "}
@@ -293,7 +334,6 @@ export default function AuthScreen() {
             </Text>
             .
           </Text>
-        )}
       </ScrollView>
       </KeyboardAvoidingView>
     </Starfield>

@@ -12,6 +12,10 @@ export function setPendingRedirect(href: Href) {
   pendingRedirect = href;
 }
 
+export function hasPendingRedirect(): boolean {
+  return pendingRedirect !== null;
+}
+
 export function consumePendingRedirect(): Href | null {
   const href = pendingRedirect;
   pendingRedirect = null;
