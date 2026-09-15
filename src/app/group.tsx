@@ -12,6 +12,7 @@ import {
   KeyboardAvoidingView,
   Platform,
   Linking,
+  ActivityIndicator,
 } from "react-native";
 import { Text, TextInput } from "@/frontend/components/scaled-text";
 import { FilmLoader } from "@/frontend/components/film-loader";
@@ -20,6 +21,8 @@ import AsyncStorage from "@react-native-async-storage/async-storage";
 import DateTimePicker from "@react-native-community/datetimepicker";
 import * as WebBrowser from "expo-web-browser";
 import * as Calendar from "expo-calendar";
+import * as ImagePicker from "expo-image-picker";
+import { uploadImage } from "@/frontend/services/image-upload";
 import { supabase } from "@/frontend/config/supabase";
 import { Ionicons } from "@expo/vector-icons";
 import { Starfield } from "@/frontend/components/starfield";
@@ -38,6 +41,7 @@ import { Avatar, AvatarStack } from "@/frontend/components/avatar";
 import { useProfiles } from "@/frontend/hooks/use-profiles";
 import { useProfileSheet } from "@/frontend/components/profile-sheet";
 import { useForegroundPoll } from "@/frontend/hooks/use-foreground-poll";
+import { registerForPushNotifications } from "@/frontend/services/push-notifications";
 import { ShowtimePicker, ShowtimeSelection } from "@/frontend/components/showtime-picker";
 import { formatEventDate, isPastDateTime } from "@/frontend/utils/event-date";
 import { membershipLabel } from "@/frontend/constants/theater-memberships";
@@ -102,6 +106,10 @@ interface Group {
 
 export default function GroupScreen() {
   const { showToast } = useToast();
+  // Declared up here, not next to the club-photo handler below: that code
+  // lives after this component's `if (!group)` early return, and a hook
+  // called there would be conditional.
+  const [uploadingClubPhoto, setUploadingClubPhoto] = useState(false);
   const { openProfile } = useProfileSheet();
   const { groupId, code, matched, openEdit } = useLocalSearchParams<{
     groupId: string;
@@ -122,6 +130,14 @@ export default function GroupScreen() {
   // The "you're in" moment (Strava's kudos, Kaya's "nice send"): shown once
   // on arrival from a join, dismissible, gone on the next visit.
   const [celebrate, setCelebrate] = useState(matched === "created" || matched === "joined");
+  // The push-permission ask lives here, not at sign-in: right after joining
+  // or starting something is when "we'll tell you when your crew chats" is
+  // self-evident. No-ops once the OS has an answer.
+  useEffect(() => {
+    if (matched === "created" || matched === "joined") {
+      registerForPushNotifications().catch(() => {});
+    }
+  }, [matched]);
   const [loading, setLoading] = useState(true);
   // Why `group` is null after the first load: a 404 (gone/never existed) vs
   // a network or server failure worth retrying. Cleared on any success.
@@ -413,6 +429,7 @@ export default function GroupScreen() {
         const body = await res.json().catch(() => null);
         throw new Error(body?.error || "Couldn't join this Space. Please try again.");
       }
+      registerForPushNotifications().catch(() => {});
       await fetchGroup();
     } catch (err: any) {
       showToast(err.message || "Couldn't join this Space. Please try again.");
@@ -913,6 +930,55 @@ export default function GroupScreen() {
   // event furniture (showtime, tickets, calendar, hangout-after, booking)
   // stays off and the screen is members + chat + invite.
   const isClub = group.isPublic && !group.matchMovieKey && !!group.genreCategory;
+
+  // A club's host can replace its cover art. Clubs have no film, so the
+  // poster slot is theirs; every other Space type shows real film art or its
+  // category icon and must not be overwritten here. Upload goes straight to
+  // Supabase Storage (own-folder scoped) and only the URL reaches the API.
+  const canEditClubPhoto = isClub && isHost;
+  const handlePickClubPhoto = async () => {
+    const permission = await ImagePicker.requestMediaLibraryPermissionsAsync();
+    if (!permission.granted) {
+      showToast("Allow photo access to change the club photo.");
+      return;
+    }
+    const result = await ImagePicker.launchImageLibraryAsync({
+      mediaTypes: ImagePicker.MediaTypeOptions.Images,
+      allowsEditing: true,
+      aspect: [2, 3],
+      quality: 0.7,
+    });
+    if (result.canceled || !result.assets[0]) return;
+
+    setUploadingClubPhoto(true);
+    try {
+      const {
+        data: { user },
+      } = await supabase.auth.getUser();
+      if (!user) throw new Error("You need to be signed in to upload a photo.");
+      const url = await uploadImage(
+        "space-photos",
+        `${user.id}/club-${Date.now()}.jpg`,
+        result.assets[0].uri,
+      );
+      const res = await authFetch(
+        `${process.env.EXPO_PUBLIC_API_URL}/api/group/${group.id}/club-photo`,
+        { method: "POST", body: JSON.stringify({ PhotoUrl: url }) },
+      );
+      const body = await res.json().catch(() => null);
+      if (!res.ok) {
+        showToast(body?.error || "Couldn't save that photo. Please try again.");
+        return;
+      }
+      // Reflect it now rather than waiting up to 5s for the next poll.
+      setGroup((prev) => (prev ? { ...prev, posterPath: url } : prev));
+      showToast("Club photo updated.");
+    } catch (err: any) {
+      showToast(err?.message || "Couldn't upload that photo. Please try again.");
+    } finally {
+      setUploadingClubPhoto(false);
+    }
+  };
   const crewHasPlan = !!group.screeningTime || !!group.cinemaName;
   // Crews: the plan is locked once it exists — the showing IS what everyone
   // joined. Only a legacy crew with no plan can still set one; hosted Spaces
@@ -979,11 +1045,34 @@ export default function GroupScreen() {
           </View>
         )}
         <View style={styles.hero}>
-          <MoviePoster
-            uri={group.posterPath}
-            width={92}
-            fallbackIcon={EVENT_CATEGORIES[eventCategoryOf(group.spaceType, group.eventCategory)].icon}
-          />
+          {canEditClubPhoto ? (
+            <TouchableOpacity
+              activeOpacity={0.8}
+              onPress={handlePickClubPhoto}
+              disabled={uploadingClubPhoto}
+              accessibilityRole="button"
+              accessibilityLabel={group.posterPath ? "Change club photo" : "Add a club photo"}
+            >
+              <MoviePoster
+                uri={group.posterPath}
+                width={92}
+                fallbackIcon={EVENT_CATEGORIES[eventCategoryOf(group.spaceType, group.eventCategory)].icon}
+              />
+              <View style={styles.clubPhotoBadge}>
+                {uploadingClubPhoto ? (
+                  <ActivityIndicator size="small" color={Palette.base} />
+                ) : (
+                  <Ionicons name="camera" size={14} color={Palette.base} />
+                )}
+              </View>
+            </TouchableOpacity>
+          ) : (
+            <MoviePoster
+              uri={group.posterPath}
+              width={92}
+              fallbackIcon={EVENT_CATEGORIES[eventCategoryOf(group.spaceType, group.eventCategory)].icon}
+            />
+          )}
           <View style={styles.heroInfo}>
             <Text style={styles.title}>
               {group.filmName}
@@ -1066,20 +1155,34 @@ export default function GroupScreen() {
                   max={5}
                 />
               )}
-              <TouchableOpacity
-                activeOpacity={0.85}
-                style={styles.celebrateChat}
-                onPress={() =>
-                  router.push({
-                    pathname: "/group-chat/[id]",
-                    params: { id: group.id, type: "group", title: group.filmName, showTime: group.showTime, showDate: group.showDate },
-                  })
-                }
-                accessibilityRole="button"
-              >
-                <Ionicons name="chatbubbles" size={15} color={Palette.base} />
-                <Text style={styles.celebrateChatText}>Say hi 👋</Text>
-              </TouchableOpacity>
+              {/* Alone in it (a fresh Space or crew of one): "Say hi" would
+                  open an empty chat, so the useful next step is inviting. */}
+              {groupMembers.length <= 1 ? (
+                <TouchableOpacity
+                  activeOpacity={0.85}
+                  style={styles.celebrateChat}
+                  onPress={shareLink}
+                  accessibilityRole="button"
+                >
+                  <Ionicons name="share-outline" size={15} color={Palette.base} />
+                  <Text style={styles.celebrateChatText}>Invite people</Text>
+                </TouchableOpacity>
+              ) : (
+                <TouchableOpacity
+                  activeOpacity={0.85}
+                  style={styles.celebrateChat}
+                  onPress={() =>
+                    router.push({
+                      pathname: "/group-chat/[id]",
+                      params: { id: group.id, type: "group", title: group.filmName, showTime: group.showTime, showDate: group.showDate },
+                    })
+                  }
+                  accessibilityRole="button"
+                >
+                  <Ionicons name="chatbubbles" size={15} color={Palette.base} />
+                  <Text style={styles.celebrateChatText}>Say hi 👋</Text>
+                </TouchableOpacity>
+              )}
             </View>
           </View>
         )}
@@ -1334,7 +1437,7 @@ export default function GroupScreen() {
         </View>
         {isMember && !chatUnlocked && (
           <Text style={styles.chatLockedHint}>
-            Confirm you&apos;re going to unlock the group chat.
+            Tap I&apos;m going to unlock the group chat.
           </Text>
         )}
         {!!group?.spaceCode && !hasPassed && (
@@ -1589,7 +1692,7 @@ export default function GroupScreen() {
           myMember.confirmed ? (
             <ActionButton
               icon="checkmark-done-outline"
-              label="You're Confirmed — Tap to Cancel"
+              label="You're going — can't make it?"
               onPress={() => handleCancelAttendance(myMember.id)}
               loading={confirming}
               style={styles.confirmedButton}
@@ -1599,7 +1702,7 @@ export default function GroupScreen() {
           ) : (
             <ActionButton
               icon="checkmark-circle-outline"
-              label="Confirm You're Going"
+              label="I'm going"
               onPress={() => handleConfirmAttendance(myMember.id)}
               loading={confirming}
               style={styles.confirmButton}
@@ -1916,6 +2019,21 @@ const styles = StyleSheet.create({
   notFoundText: { color: SpaceTheme.mutedOrbit, ...Type.body },
   modalPastHint: { ...Type.caption, color: Palette.danger, marginTop: 6, marginBottom: 4 },
   hero: { flexDirection: "row", gap: 14, marginBottom: 20, alignItems: "flex-start" },
+  // Sits on the poster's bottom-right corner to signal it's tappable —
+  // without it a club host has no cue that the art can be replaced.
+  clubPhotoBadge: {
+    position: "absolute",
+    right: -4,
+    bottom: -4,
+    width: 26,
+    height: 26,
+    borderRadius: 13,
+    backgroundColor: Palette.accent,
+    alignItems: "center",
+    justifyContent: "center",
+    borderWidth: 2,
+    borderColor: Palette.base,
+  },
   editButton: { padding: 4 },
   heroInfo: { flex: 1, justifyContent: "center" },
   title: { ...Display.heading, color: Palette.text },

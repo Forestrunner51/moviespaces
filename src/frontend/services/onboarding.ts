@@ -1,7 +1,7 @@
 import { track } from "@/frontend/services/analytics";
 import AsyncStorage from "@react-native-async-storage/async-storage";
 import { router } from "expo-router";
-import { consumePendingRedirect } from "@/frontend/services/pending-redirect";
+import { consumePendingRedirect, hasPendingRedirect } from "@/frontend/services/pending-redirect";
 
 // Tracked client-side (AsyncStorage), not server-side — there's no Users
 // table this app owns to put an "onboarded" flag on; auth is Supabase's.
@@ -29,6 +29,22 @@ export async function clearOnboardingFlag() {
 // mid-tour can't send the next session back through the whole flow.
 export async function markOnboarded() {
   await AsyncStorage.setItem(ONBOARDED_KEY, "1");
+}
+
+// A new account that arrived via a Space invite link goes straight to that
+// Space instead of through onboarding. The flag is written so onboarding
+// doesn't ambush them on a later sign-in; clubs stay reachable from Explore.
+// Deliberately not counted as onboarding_complete. Returns false (and does
+// nothing) when there's no invite waiting.
+export async function skipOnboardingForInvite(): Promise<boolean> {
+  if (!hasPendingRedirect()) return false;
+  try {
+    await markOnboarded();
+  } catch {
+    /* storage hiccup — still honor the invite */
+  }
+  router.replace(consumePendingRedirect() ?? "/");
+  return true;
 }
 
 export async function completeOnboarding() {

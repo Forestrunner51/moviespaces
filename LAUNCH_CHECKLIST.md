@@ -76,6 +76,21 @@ new-code addendum — none of it has ever been human-tested:
       clubs & crews (Continue is PINNED, no scrolling needed) → land Home;
       **swipe-back cannot re-enter onboarding**; force-quit mid-tour doesn't
       replay onboarding
+- [ ] Low-friction pass (09-13): signed out, tap a Space invite link → sign
+      up (email AND Apple) → lands **directly in that Space**, no onboarding;
+      repeat with a **PRIVATE** Space's link (has `?code=`) → Join works (was
+      a 403 before 09-13: the code was dropped across sign-in); re-open an
+      invite you already joined → no "You're in." card;
+      auth screen shows only Apple / Google / "Continue with email" until
+      tapped (opens in sign-up mode; "Sign In" toggle works; demo-account
+      login still fine); Find a crew opens on **Pick a showing** — the venue
+      link goes to film search, Back from there returns to the picker, Back
+      from the picker leaves the screen; breadcrumb "Change" still works
+- [ ] Push ask (09-13), on a FRESH install: sign-up + onboarding show **no**
+      notification prompt; the prompt appears on the "You're in." card after
+      the first crew join/start, or right after "Join This Space"; after
+      "Allow", a chat push arrives. Home has no welcome tip; "At your place"
+      (Home and My Spaces) opens the Create form directly, no venue list
 - [ ] Profile sheet: tap a crew seat / chat avatar / feed host → sheet shows
       top-3 & bottom-3; Add Friend → Requested; Message when friends;
       **long-press on a chat avatar still opens Report/Block**
@@ -84,10 +99,18 @@ new-code addendum — none of it has ever been human-tested:
       confirm with the showing intact
 - [ ] Clubs & Crews Discover: search, every chip, Near me distances, Preview,
       create a local club, rename it
+- [ ] Club photo: create a club WITH a photo → it shows on the club page and
+      the Discover card; as host tap the club poster → pick a new one → it
+      updates; a non-host member sees no camera badge and cannot change it;
+      a club with no photo still shows genre art
+- [ ] Watch party date: the picker now allows up to 90 days out (was 14) —
+      scroll to a date ~2 months ahead and confirm it commits and saves
 - [ ] Group page: bubbles (Invite/Directions/Chat/Calendar) sit under the
       date block with the space code beneath; ticket toggle reads prominent
-- [ ] Hosted Space: unconfirmed member sees "confirm to unlock chat";
-      confirming unlocks it; tapping a chat PUSH while unconfirmed shows an
+- [ ] Hosted Space: "Join This Space" makes you **going immediately** (chat
+      unlocked, no second confirm tap — needs the 09-13 backend deploy);
+      "You're going — can't make it?" drops you to pending and shows "Tap
+      I'm going to unlock the group chat"; "I'm going" re-unlocks it; tapping a chat PUSH while unconfirmed shows an
       empty chat whose sends fail with retry (server-enforced), not messages
 - [ ] CineMind: four challenges, mystery is pick-from-six; share link shows
       no Mystery TV row and correct /400 (TV-mystery days are OFF until the

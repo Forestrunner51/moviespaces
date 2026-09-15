@@ -9,6 +9,10 @@ import {
 import { Text, TextInput } from "@/frontend/components/scaled-text";
 import { router } from "expo-router";
 import { Ionicons } from "@expo/vector-icons";
+import * as ImagePicker from "expo-image-picker";
+import { MoviePoster } from "@/frontend/components/movie-poster";
+import { uploadImage } from "@/frontend/services/image-upload";
+import { supabase } from "@/frontend/config/supabase";
 import { Starfield } from "@/frontend/components/starfield";
 import { SpaceStyles, Palette, Type, Display, Radius } from "@/frontend/constants/theme";
 import { useToast } from "@/frontend/components/toast";
@@ -43,6 +47,46 @@ export default function CreateClubScreen() {
   // Pin the club to the creator's rough location so "Near me" in Discover can
   // surface it. Off by default — a club about a genre isn't inherently local.
   const [localClub, setLocalClub] = useState(false);
+  // Optional club cover. Left unset, the server falls back to a film poster
+  // from the club's genre, so this is a nicety rather than a required field.
+  const [photoUrl, setPhotoUrl] = useState<string | null>(null);
+  const [uploadingPhoto, setUploadingPhoto] = useState(false);
+
+  // Same flow as a Space cover photo: upload straight to Supabase Storage
+  // under the uploader's own folder (Storage RLS scopes writes that way), and
+  // hand the backend only the resulting public URL.
+  const handlePickPhoto = async () => {
+    const permission = await ImagePicker.requestMediaLibraryPermissionsAsync();
+    if (!permission.granted) {
+      showToast("Allow photo access to add a club photo.");
+      return;
+    }
+    const result = await ImagePicker.launchImageLibraryAsync({
+      mediaTypes: ImagePicker.MediaTypeOptions.Images,
+      allowsEditing: true,
+      aspect: [2, 3],
+      quality: 0.7,
+    });
+    if (result.canceled || !result.assets[0]) return;
+
+    setUploadingPhoto(true);
+    try {
+      const {
+        data: { user },
+      } = await supabase.auth.getUser();
+      if (!user) throw new Error("You need to be signed in to upload a photo.");
+      const url = await uploadImage(
+        "space-photos",
+        `${user.id}/club-${Date.now()}.jpg`,
+        result.assets[0].uri,
+      );
+      setPhotoUrl(url);
+    } catch (err: any) {
+      showToast(err?.message || "Couldn't upload that photo. Please try again.");
+    } finally {
+      setUploadingPhoto(false);
+    }
+  };
 
   const handleCreate = async () => {
     const trimmed = name.trim();
@@ -51,6 +95,12 @@ export default function CreateClubScreen() {
       return;
     }
     if (creating) return;
+    // An upload still in flight would be dropped by the create call below,
+    // silently losing the photo the user just picked.
+    if (uploadingPhoto) {
+      showToast("Hang on — your photo is still uploading.");
+      return;
+    }
     setCreating(true);
     try {
       const hostName = await resolveDisplayName();
@@ -65,6 +115,7 @@ export default function CreateClubScreen() {
           HostName: hostName,
           Latitude: loc?.latitude ?? null,
           Longitude: loc?.longitude ?? null,
+          PhotoUrl: photoUrl,
         }),
       });
       const body = await res.json().catch(() => null);
@@ -122,6 +173,26 @@ export default function CreateClubScreen() {
             </TouchableOpacity>
           ))}
         </View>
+
+        <TouchableOpacity
+          activeOpacity={0.8}
+          style={styles.photoRow}
+          onPress={handlePickPhoto}
+          disabled={uploadingPhoto}
+          accessibilityRole="button"
+          accessibilityLabel={photoUrl ? "Change club photo" : "Add a club photo"}
+        >
+          <MoviePoster uri={photoUrl} width={56} fallbackIcon="camera-outline" />
+          <View style={{ flex: 1 }}>
+            <Text style={styles.photoLabel}>
+              {photoUrl ? "Change club photo" : "Add a club photo (optional)"}
+            </Text>
+            <Text style={styles.photoHint}>
+              Shown on the club and in Discover. Without one, we pick art from the genre.
+            </Text>
+          </View>
+          {uploadingPhoto && <ActivityIndicator color={Palette.accent} />}
+        </TouchableOpacity>
 
         <TouchableOpacity
           activeOpacity={0.85}
@@ -198,6 +269,16 @@ const styles = StyleSheet.create({
     marginBottom: 20,
   },
   localRowActive: { borderColor: Palette.accentBorder },
+  photoRow: {
+    ...SpaceStyles.field,
+    flexDirection: "row",
+    alignItems: "center",
+    gap: 12,
+    padding: 12,
+    marginBottom: 20,
+  },
+  photoLabel: { ...Type.small, color: Palette.text, fontWeight: "700", marginBottom: 2 },
+  photoHint: { ...Type.caption, color: Palette.textMuted, lineHeight: 16 },
   localTitle: { ...Type.small, color: Palette.text, fontWeight: "700" },
   localTitleActive: { color: Palette.accent },
   localSub: { ...Type.caption, color: Palette.textMuted, marginTop: 1 },

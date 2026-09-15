@@ -62,11 +62,17 @@ export default function JoinScreen() {
           body: JSON.stringify({ name, spaceCode: code ?? null }),
         });
         if (cancelled) return;
-        if (!res.ok) {
-          const body = await res.json().catch(() => null);
+        const body = await res.json().catch(() => null);
+        if (cancelled) return;
+        // 409 is the duplicate-join race losing to itself — they ARE in.
+        const alreadyMember = res.status === 409 || !!body?.alreadyMember;
+        if (!res.ok && !alreadyMember) {
           throw new Error(body?.error || "Couldn't join this Space. Please try again.");
         }
-        router.replace({ pathname: "/group", params: { groupId, hostName: "" } });
+        router.replace({
+          pathname: "/group",
+          params: { groupId, hostName: "", matched: alreadyMember ? "already" : "joined" },
+        });
       } catch (err: any) {
         if (!cancelled) setErrorText(err.message || "Please try again.");
       }

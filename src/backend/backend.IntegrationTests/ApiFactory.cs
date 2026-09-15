@@ -56,12 +56,33 @@ public sealed class ApiFactory : WebApplicationFactory<Program>
         });
     }
 
-    // A client that acts as `userId` on every request.
+    // A client that acts as `userId` on every request, from its own IP.
+    //
+    // The IP matters. Program.cs runs the rate limiter BEFORE authentication,
+    // so every caller is partitioned by remote address, and TestServer gives
+    // every request the same (null) one — which put all of a test class's
+    // requests in one bucket and made the 10/min "write-heavy" policy start
+    // returning 429 partway through a run. That is not what these tests are
+    // asserting, and it made them order-dependent.
+    //
+    // Rather than switch the limiter off (which would stop exercising the
+    // real middleware pipeline), give each simulated user its own address —
+    // which is also what fifteen strangers racing for a crew seat actually
+    // look like. Program.cs clears the known-proxy list and trusts one
+    // forwarded hop, so X-Forwarded-For is what UseForwardedHeaders reads.
     public HttpClient ClientFor(string userId)
     {
         var client = CreateClient();
         client.DefaultRequestHeaders.Add(UserHeader, userId);
+        client.DefaultRequestHeaders.Add("X-Forwarded-For", IpFor(userId));
         return client;
+    }
+
+    // Deterministic per user id, inside the 10.0.0.0/8 private range.
+    private static string IpFor(string userId)
+    {
+        var hash = System.Security.Cryptography.SHA256.HashData(System.Text.Encoding.UTF8.GetBytes(userId));
+        return $"10.{hash[0]}.{hash[1]}.{(hash[2] == 0 ? 1 : hash[2])}";
     }
 }
 
