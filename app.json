@@ -64,14 +64,19 @@
       [
         "expo-image-picker",
         {
-          "photosPermission": "Allow MovieSpaces to access your photos so you can set a profile picture."
+          "photosPermission": "Allow MovieSpaces to access your photos so you can set a profile picture.",
+          "cameraPermission": "MovieSpaces does not use your camera. Profile and Space photos are chosen from your photo library.",
+          "microphonePermission": "MovieSpaces does not record audio. This entry is required by the photo picker used for profile pictures."
         }
       ],
       "@react-native-community/datetimepicker",
       [
         "expo-location",
         {
-          "locationWhenInUsePermission": "Allow MovieSpaces to use your location to find nearby theaters."
+          "locationWhenInUsePermission": "Allow MovieSpaces to use your location to find nearby theaters.",
+          "locationAlwaysPermission": false,
+          "locationAlwaysAndWhenInUsePermission": false,
+          "motionUsagePermission": "MovieSpaces does not use motion or fitness data. This entry is required by the location feature that finds theaters near you."
         }
       ],
       [
@@ -84,7 +89,8 @@
       [
         "expo-calendar",
         {
-          "calendarPermission": "Allow MovieSpaces to add watch parties to your calendar."
+          "calendarPermission": "Allow MovieSpaces to add watch parties to your calendar.",
+          "remindersPermission": "MovieSpaces does not read or create reminders. It only adds events you choose to your calendar."
         }
       ],
       "expo-apple-authentication",

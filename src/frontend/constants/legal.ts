@@ -15,7 +15,7 @@
 // LegalController.cs, which serves the public HTML versions that App Store
 // Connect and Google Play require. THERE IS NO SHARED SOURCE — change one,
 // change the other, or the in-app and hosted policies silently diverge.
-export const LEGAL_LAST_UPDATED = "August 8, 2026";
+export const LEGAL_LAST_UPDATED = "September 15, 2026";
 
 // Rights requests, deletion requests, DMCA notices and support all land here.
 // Must be a real, monitored inbox on the domain — if it bounces, the app is
@@ -89,7 +89,7 @@ export const TERMS_SECTIONS: LegalSection[] = [
   {
     heading: "Termination",
     body:
-      `You can delete your account at any time from Profile → Delete Account, or by emailing ${SUPPORT_EMAIL}. We may suspend or terminate accounts that violate these Terms, abuse other users, misuse the reporting or blocking system, or create legal risk for us or other users. Sections that by their nature should survive termination — content licenses already granted for content you haven't deleted, disclaimers, limitation of liability, indemnification, and governing law — survive.`,
+      `You can delete your account at any time from Profile → Settings → Delete Account, or by emailing ${SUPPORT_EMAIL}. We may suspend or terminate accounts that violate these Terms, abuse other users, misuse the reporting or blocking system, or create legal risk for us or other users. Sections that by their nature should survive termination — content licenses already granted for content you haven't deleted, disclaimers, limitation of liability, indemnification, and governing law — survive.`,
   },
   {
     heading: "Disclaimers",
@@ -136,7 +136,7 @@ export const PRIVACY_SECTIONS: LegalSection[] = [
   {
     heading: "What We Collect",
     body:
-      `Account information: your email address, display name, username, and profile photo. You sign in with an email address and password, handled through Supabase Auth, which stores your password in hashed form we never see. If we later offer sign-in with Apple or Google, we would receive your email address and name from that provider — never your password. Content you create: Spaces you host or join, group chat messages, direct messages, hangout notes, and the theater memberships you select. Your friend connections and the block and report records you create. Device location, only if you grant permission, used to find nearby theaters and show distances — we use it in the moment and don't build a location history. A push notification token, only if you grant permission, so we can send booking updates, reminders, and new-message alerts. Technical data collected automatically when the app talks to our servers: IP address, device and operating system type, app version, and timestamps, kept in server logs. Diagnostics: crash reports and error traces, including the device model, OS version, and app state at the time of the error, collected through Sentry so we can fix bugs.`,
+      `Account information: your email address, display name, username, and profile photo. You can sign in with an email address and password, handled through Supabase Auth, which stores your password in hashed form we never see. If you sign in with Apple or Google instead, we receive your email address and name from that provider (Apple lets you hide your real email) — never your password. Content you create: Spaces you host or join, group chat messages, direct messages, hangout notes, and the theater memberships you select. Your friend connections and the block and report records you create. Device location, only if you grant permission, used to find nearby theaters and show distances — we use it in the moment and don't build a location history. A push notification token, only if you grant permission, so we can send booking updates, reminders, and new-message alerts. Technical data collected automatically when the app talks to our servers: IP address, device and operating system type, app version, and timestamps, kept in server logs. Diagnostics: crash reports and error traces, including the device model, OS version, and app state at the time of the error, collected through Sentry so we can fix bugs.`,
   },
   {
     heading: "What We Don't Collect",
@@ -166,7 +166,7 @@ export const PRIVACY_SECTIONS: LegalSection[] = [
   {
     heading: "Your Rights (EEA, UK, and elsewhere)",
     body:
-      `Depending on where you live, you may have the right to: access the personal data we hold about you; correct inaccurate data; delete your data; restrict or object to certain processing; receive your data in a portable, machine-readable format; and withdraw consent you previously gave, at any time. Many of these you can exercise directly in the app — edit your profile from the Profile tab, revoke location or notification permissions in your device settings, and delete everything from Profile → Delete Account. For anything else, email ${SUPPORT_EMAIL} and we'll respond within 30 days. You won't be charged or treated differently for exercising these rights. If you're in the EEA or UK and think we've handled your data improperly, you also have the right to complain to your local data protection authority.`,
+      `Depending on where you live, you may have the right to: access the personal data we hold about you; correct inaccurate data; delete your data; restrict or object to certain processing; receive your data in a portable, machine-readable format; and withdraw consent you previously gave, at any time. Many of these you can exercise directly in the app — edit your profile from the Profile tab, revoke location or notification permissions in your device settings, and delete everything from Profile → Settings → Delete Account. For anything else, email ${SUPPORT_EMAIL} and we'll respond within 30 days. You won't be charged or treated differently for exercising these rights. If you're in the EEA or UK and think we've handled your data improperly, you also have the right to complain to your local data protection authority.`,
   },
   {
     heading: "Your California Privacy Rights",
@@ -176,7 +176,7 @@ export const PRIVACY_SECTIONS: LegalSection[] = [
   {
     heading: "Deleting Your Account and Data",
     body:
-      `You can permanently delete your account at any time from Profile → Delete Account inside the app — no email required and no waiting period. You can also request deletion by emailing ${SUPPORT_EMAIL} from your account's email address. Deleting your account removes your profile, your chat messages, your friend connections, and your push notification token, and deletes any Spaces you host — those disappear for their other members too, exactly as if you'd deleted each Space manually. Spaces you only joined stay intact for the remaining members; you're simply removed from them. Deletion takes effect immediately and cannot be undone. Backups and server logs may retain some data for up to 30 days before they cycle out, and we may keep the minimum records needed to comply with a legal obligation or to enforce a prior ban.`,
+      `You can permanently delete your account at any time from Profile → Settings → Delete Account inside the app — no email required and no waiting period. You can also request deletion by emailing ${SUPPORT_EMAIL} from your account's email address. Deleting your account removes your profile, your chat messages, your friend connections, and your push notification token, and deletes any Spaces you host — those disappear for their other members too, exactly as if you'd deleted each Space manually. Spaces you only joined stay intact for the remaining members; you're simply removed from them. Deletion takes effect immediately and cannot be undone. Backups and server logs may retain some data for up to 30 days before they cycle out, and we may keep the minimum records needed to comply with a legal obligation or to enforce a prior ban.`,
   },
   {
     heading: "Data Retention",
