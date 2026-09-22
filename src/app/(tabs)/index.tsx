@@ -18,6 +18,7 @@ import { MoviePoster } from "@/frontend/components/movie-poster";
 import { Avatar, AvatarStack } from "@/frontend/components/avatar";
 import { useProfileSheet } from "@/frontend/components/profile-sheet";
 import { useProfiles } from "@/frontend/hooks/use-profiles";
+import { useBlockedIds } from "@/frontend/hooks/use-blocked-ids";
 import { formatEventDate } from "@/frontend/utils/event-date";
 import { EVENT_CATEGORIES, eventCategoryOf } from "@/frontend/constants/event-categories";
 import { authFetch } from "@/frontend/services/api";
@@ -224,6 +225,7 @@ export default function HomeScreen() {
   // since this is purely for excluding self-overlap from the teaser below,
   // not for deciding what counts as "upcoming."
   const [myGroupIds, setMyGroupIds] = useState<Set<string>>(new Set());
+  const blockedIds = useBlockedIds();
 
   // Bumped by Retry; the effect below refetches on change. The spinner is
   // flipped on in the tap handler, so the effect itself only fetches.
@@ -281,11 +283,17 @@ export default function HomeScreen() {
   // the row look sparse/off-center with a small local feed, and this is
   // meant as a teaser, not the full list (Explore already covers that).
   const nearbySpaces = useMemo(() => {
-    const notMine = openSpacesRaw.filter((s) => !myGroupIds.has(s.id));
+    // Blocked hosts drop out of the feed the moment the block lands — the
+    // blocked set is shared module state, so this recomputes without a
+    // refetch. This feed is person-led ("Bob is seeing Mutiny"), which makes
+    // a blocked host's card the most visible thing a block has to remove.
+    const notMine = openSpacesRaw.filter(
+      (s) => !myGroupIds.has(s.id) && !blockedIds.has(s.userId),
+    );
     const t = (x: NearbySpace) =>
       x.screeningTime ? new Date(x.screeningTime).getTime() : Number.POSITIVE_INFINITY;
     return [...notMine].sort((a, b) => t(a) - t(b)).slice(0, 8);
-  }, [openSpacesRaw, myGroupIds]);
+  }, [openSpacesRaw, myGroupIds, blockedIds]);
 
   // Refetched on focus (not just mount) so a Space created or joined
   // elsewhere shows up here the moment the user lands back on Home — this is

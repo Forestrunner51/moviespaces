@@ -26,6 +26,8 @@ import {
 } from "@/frontend/services/push-notifications";
 import { clearOnboardingFlag } from "@/frontend/services/onboarding";
 import { useToast } from "@/frontend/components/toast";
+import { listBlockedUsers, unblockUser, type BlockedUser } from "@/frontend/services/moderation";
+import { Avatar } from "@/frontend/components/avatar";
 import { useSafeAreaInsets } from "react-native-safe-area-context";
 
 export default function SettingsScreen() {
@@ -47,12 +49,32 @@ export default function SettingsScreen() {
   // A Google/Apple SSO-only account has none, so offering the row would lead
   // to a re-auth step they can never satisfy.
   const [hasPasswordLogin, setHasPasswordLogin] = useState(false);
+  // App Review guideline 1.2 wants blocking to be a visible, first-class
+  // feature — not just a hidden action. This is also the only place an
+  // accidental block can be undone: every other surface hides the blocked
+  // person outright, so there'd otherwise be nothing left to tap.
+  const [blocked, setBlocked] = useState<BlockedUser[]>([]);
+  const [blockedLoading, setBlockedLoading] = useState(true);
 
   useEffect(() => {
     supabase.auth.getUser().then(({ data: { user } }) => {
       const identities = user?.identities ?? [];
       setHasPasswordLogin(identities.some((i) => i.provider === "email"));
     });
+  }, []);
+
+  useEffect(() => {
+    let cancelled = false;
+    listBlockedUsers()
+      .then((users) => {
+        if (!cancelled) setBlocked(users);
+      })
+      .finally(() => {
+        if (!cancelled) setBlockedLoading(false);
+      });
+    return () => {
+      cancelled = true;
+    };
   }, []);
 
   useEffect(() => {
@@ -217,6 +239,28 @@ export default function SettingsScreen() {
     );
   };
 
+  const handleUnblock = (user: BlockedUser) => {
+    Alert.alert(
+      `Unblock ${user.displayName}?`,
+      "You'll be able to see each other's messages and Spaces again.",
+      [
+        { text: "Cancel", style: "cancel" },
+        {
+          text: "Unblock",
+          onPress: async () => {
+            const result = await unblockUser(user.id);
+            if (!result.success) {
+              showToast(result.error || "Couldn't unblock that person. Please try again.");
+              return;
+            }
+            setBlocked((prev) => prev.filter((u) => u.id !== user.id));
+            showToast(`${user.displayName} is unblocked.`, "success");
+          },
+        },
+      ],
+    );
+  };
+
   const appVersion = Constants.expoConfig?.version;
 
   // Feedback goes through the user's own mail app — the backend has no
@@ -286,6 +330,44 @@ export default function SettingsScreen() {
               </Text>
             </View>
           </TouchableOpacity>
+        </View>
+
+        <Text style={styles.sectionLabel}>SAFETY</Text>
+        <View style={styles.card}>
+          {blockedLoading ? (
+            <View style={styles.linkRow}>
+              <Text style={styles.rowSubtitle}>Loading…</Text>
+            </View>
+          ) : blocked.length === 0 ? (
+            <View style={styles.linkRow}>
+              <Text style={styles.rowTitle}>Blocked People</Text>
+              <Text style={styles.rowSubtitle}>
+                You haven&apos;t blocked anyone. You can block or report someone from their
+                profile, a chat, or any Space.
+              </Text>
+            </View>
+          ) : (
+            blocked.map((user, i) => (
+              <View key={user.id}>
+                {i > 0 && <View style={styles.divider} />}
+                <View style={styles.row}>
+                  <Avatar uri={user.avatarUrl} name={user.displayName} size={32} />
+                  <View style={styles.blockedTextBlock}>
+                    <Text style={styles.rowTitle}>{user.displayName}</Text>
+                    {user.username && <Text style={styles.rowSubtitle}>@{user.username}</Text>}
+                  </View>
+                  <TouchableOpacity
+                    activeOpacity={0.7}
+                    onPress={() => handleUnblock(user)}
+                    accessibilityRole="button"
+                    accessibilityLabel={`Unblock ${user.displayName}`}
+                  >
+                    <Text style={styles.unblockText}>Unblock</Text>
+                  </TouchableOpacity>
+                </View>
+              </View>
+            ))
+          )}
         </View>
 
         <Text style={styles.sectionLabel}>LEGAL</Text>
@@ -433,6 +515,8 @@ const styles = StyleSheet.create({
     padding: 14,
   },
   rowTextBlock: { flex: 1, marginRight: 12 },
+  blockedTextBlock: { flex: 1, marginLeft: 12, marginRight: 12 },
+  unblockText: { ...Type.small, color: Palette.accent, fontWeight: "700" },
   rowTitle: { ...Type.body, fontWeight: "600", color: Palette.text },
   rowSubtitle: { ...Type.caption, color: Palette.textMuted, marginTop: 2 },
   linkRow: { padding: 14 },

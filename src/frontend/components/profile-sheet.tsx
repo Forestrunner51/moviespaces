@@ -1,5 +1,5 @@
 import { createContext, useCallback, useContext, useEffect, useState, type ReactNode } from "react";
-import { Modal, ScrollView, StyleSheet, TouchableOpacity, View } from "react-native";
+import { Alert, Modal, ScrollView, StyleSheet, TouchableOpacity, View } from "react-native";
 import { Text } from "@/frontend/components/scaled-text";
 import { track } from "@/frontend/services/analytics";
 import { router } from "expo-router";
@@ -9,6 +9,7 @@ import { Avatar } from "@/frontend/components/avatar";
 import { MoviePoster } from "@/frontend/components/movie-poster";
 import { useFriends } from "@/frontend/hooks/use-friends";
 import { useBlockedIds } from "@/frontend/hooks/use-blocked-ids";
+import { blockUser, reportContent } from "@/frontend/services/moderation";
 import { membershipLabel } from "@/frontend/constants/theater-memberships";
 import { SpaceStyles, Palette, Type, Display, Radius } from "@/frontend/constants/theme";
 import { useToast } from "@/frontend/components/toast";
@@ -116,6 +117,60 @@ function ProfileSheet({ userId, onClose }: { userId: string; onClose: () => void
     }
   };
 
+  // Block/report live here because this sheet is the one surface every
+  // avatar in the app opens — chat rows, crew seats, the feed, search
+  // results. Putting them only behind a chat message's long-press (where
+  // they used to live) meant the affordance was invisible unless the person
+  // had already messaged you, which is not where most abuse is first seen.
+  const handleReport = () => {
+    Alert.alert(
+      `Report ${profile?.displayName ?? "this person"}?`,
+      "Our team will review this account. Tell us what's wrong if you can.",
+      [
+        { text: "Cancel", style: "cancel" },
+        {
+          text: "Report",
+          style: "destructive",
+          onPress: async () => {
+            const result = await reportContent("user", userId, "Reported from profile");
+            showToast(
+              result.success
+                ? "Thanks — our team will review this account."
+                : result.error || "Couldn't send that report. Please try again.",
+              result.success ? "success" : "error",
+            );
+          },
+        },
+      ],
+    );
+  };
+
+  const handleBlock = () => {
+    Alert.alert(
+      `Block ${profile?.displayName ?? "this person"}?`,
+      "You won't see each other's messages, Spaces or profiles, and our team is notified.",
+      [
+        { text: "Cancel", style: "cancel" },
+        {
+          text: "Block",
+          style: "destructive",
+          onPress: async () => {
+            const result = await blockUser(userId, "Blocked from profile");
+            if (!result.success) {
+              showToast(result.error || "Couldn't block that person. Please try again.");
+              return;
+            }
+            // Close first: the sheet unmounts itself the moment the blocked
+            // set updates (see the guard above), and leaving the modal to
+            // vanish underneath the toast reads as a crash.
+            onClose();
+            showToast(`${profile?.displayName ?? "They"} won't be able to reach you.`, "success");
+          },
+        },
+      ],
+    );
+  };
+
   const tasteRow = (label: string, danger: boolean, picks: SheetProfile["favoriteMovies"]) =>
     picks.length > 0 && (
       <View style={styles.tasteRow}>
@@ -195,6 +250,31 @@ function ProfileSheet({ userId, onClose }: { userId: string; onClose: () => void
                 )}
               </View>
             )}
+
+            {!isSelf && myId != null && (
+              <View style={styles.safetyRow}>
+                <TouchableOpacity
+                  activeOpacity={0.7}
+                  style={styles.safetyAction}
+                  onPress={handleReport}
+                  accessibilityRole="button"
+                  accessibilityLabel={`Report ${profile.displayName}`}
+                >
+                  <Ionicons name="flag-outline" size={14} color={Palette.textMuted} />
+                  <Text style={styles.safetyText}>Report</Text>
+                </TouchableOpacity>
+                <TouchableOpacity
+                  activeOpacity={0.7}
+                  style={styles.safetyAction}
+                  onPress={handleBlock}
+                  accessibilityRole="button"
+                  accessibilityLabel={`Block ${profile.displayName}`}
+                >
+                  <Ionicons name="ban-outline" size={14} color={Palette.danger} />
+                  <Text style={[styles.safetyText, styles.safetyTextDanger]}>Block</Text>
+                </TouchableOpacity>
+              </View>
+            )}
           </ScrollView>
         )}
       </View>
@@ -204,6 +284,18 @@ function ProfileSheet({ userId, onClose }: { userId: string; onClose: () => void
 
 const styles = StyleSheet.create({
   backdrop: { flex: 1, backgroundColor: "rgba(0,0,0,.55)" },
+  safetyRow: {
+    flexDirection: "row",
+    justifyContent: "center",
+    gap: 28,
+    marginTop: 16,
+    paddingTop: 14,
+    borderTopWidth: 1,
+    borderTopColor: Palette.border,
+  },
+  safetyAction: { flexDirection: "row", alignItems: "center", gap: 6, paddingVertical: 6 },
+  safetyText: { ...Type.small, color: Palette.textMuted, fontWeight: "600" },
+  safetyTextDanger: { color: Palette.danger },
   sheet: {
     backgroundColor: Palette.raised,
     borderTopLeftRadius: 22,

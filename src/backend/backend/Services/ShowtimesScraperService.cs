@@ -78,6 +78,13 @@ namespace Backend.Services
         private async Task<string> FetchAsync(string url, CancellationToken ct)
         {
             var client = _httpClientFactory.CreateClient();
+            // Overrides the app-wide 10s default (Program.cs). That default
+            // is sized for calls made ON a request thread, where a hung
+            // upstream pins a Render worker; this is a 4am background job
+            // where nothing is waiting on us, and 10s was too tight for
+            // cinemaclock's directory pages — timing out there was the most
+            // common production failure.
+            client.Timeout = TimeSpan.FromSeconds(25);
             using var request = new HttpRequestMessage(HttpMethod.Get, url);
             request.Headers.TryAddWithoutValidation("User-Agent", UserAgent);
             request.Headers.TryAddWithoutValidation("Accept", "text/html");

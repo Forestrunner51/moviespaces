@@ -111,7 +111,13 @@ export function FriendsPanel() {
   // The same search box doubles as a live filter over your existing friends
   // — without this, a large friends list has no way to jump to a specific
   // person other than scrolling through an unfiltered wall of rows.
-  const visibleFriends = query.trim()
+  //
+  // Blocked people are dropped here regardless of the query. Blocking used to
+  // be reachable only from this panel, where it also removes the friendship —
+  // so a blocked friend could never still be in the list. Now that you can
+  // block from a profile sheet or a DM without touching the friendship, the
+  // list has to filter for itself or a blocked person stays sitting in it.
+  const visibleFriends = (query.trim()
     ? friends.filter((f) => {
         const q = query.trim().toLowerCase();
         return (
@@ -119,7 +125,8 @@ export function FriendsPanel() {
           (f.username ?? "").toLowerCase().includes(q)
         );
       })
-    : friends;
+    : friends
+  ).filter((f) => !blockedIds.has(f.id));
 
   // Debounced (same 300ms idiom as profile.tsx's username check) and guarded
   // against out-of-order responses: firing a request per keystroke meant the
