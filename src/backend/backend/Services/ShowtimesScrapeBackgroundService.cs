@@ -55,7 +55,7 @@ namespace Backend.Services
                         await RunScrapeAsync(stoppingToken);
                     }
                 }
-                catch (Exception ex)
+                catch (Exception ex) when (!IsShutdown(ex, stoppingToken))
                 {
                     _logger.LogError(ex, "Showtimes scrape pass failed.");
                 }
@@ -63,6 +63,20 @@ namespace Backend.Services
                 await Task.Delay(PollInterval, stoppingToken);
             }
         }
+
+        // Distinguishes a real shutdown from an HTTP timeout.
+        //
+        // HttpClient signals its own Timeout by throwing TaskCanceledException
+        // — an OperationCanceledException carrying a token that is NOT ours.
+        // The per-city and per-theater handlers below used to filter on
+        // `ex is not OperationCanceledException`, which was meant to let
+        // shutdown through untouched and instead let every 10-second fetch
+        // timeout escape as well: one slow page aborted the whole pass (every
+        // remaining city AND theater, with no scrape for another 4 hours) and
+        // logged it to Sentry as "Showtimes scrape pass failed." Only a
+        // cancellation of our own token is a shutdown.
+        private static bool IsShutdown(Exception ex, CancellationToken ct) =>
+            ex is OperationCanceledException && ct.IsCancellationRequested;
 
         // A failed run leaves yesterday's newest ScrapedAtUtc in place, which
         // made "is a scrape due" true again 15 minutes later — on a day the
@@ -118,7 +132,7 @@ namespace Backend.Services
                     _logger.LogInformation("Showtimes: {City} has {Count} theaters.", city, citySlugs.Count);
                     slugs.AddRange(citySlugs);
                 }
-                catch (Exception ex) when (ex is not OperationCanceledException)
+                catch (Exception ex) when (!IsShutdown(ex, ct))
                 {
                     // A bad/unknown city slug shouldn't sink the other metros.
                     _logger.LogWarning(ex, "Showtimes: directory fetch failed for {City}.", city);
@@ -176,7 +190,7 @@ namespace Backend.Services
                     await ReplaceTheaterRowsAsync(theater, ct);
                     succeeded++;
                 }
-                catch (Exception ex) when (ex is not OperationCanceledException)
+                catch (Exception ex) when (!IsShutdown(ex, ct))
                 {
                     failed++;
                     failedSlugs.Add(slug);

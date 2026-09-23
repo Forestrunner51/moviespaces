@@ -1,5 +1,6 @@
 import { memo, useCallback, useRef, useState } from "react";
 import {
+  Alert,
   View,
   FlatList,
   StyleSheet,
@@ -11,13 +12,14 @@ import {
 } from "react-native";
 import { Text, TextInput } from "@/frontend/components/scaled-text";
 import { FilmLoader } from "@/frontend/components/film-loader";
-import { useLocalSearchParams, Stack } from "expo-router";
+import { useLocalSearchParams, Stack, router } from "expo-router";
 import { Ionicons } from "@expo/vector-icons";
 import { useSafeAreaInsets } from "react-native-safe-area-context";
 import { Starfield } from "@/frontend/components/starfield";
 import { SpaceTheme, Palette, Type, Radius } from "@/frontend/constants/theme";
 import { useChat, Message } from "@/frontend/hooks/use-chat";
 import { useToast } from "@/frontend/components/toast";
+import { blockUser, reportContent } from "@/frontend/services/moderation";
 
 // How close to the bottom (px) still counts as "reading the latest" — new
 // messages auto-scroll only then, so someone scrolled up reading history
@@ -88,6 +90,69 @@ export default function ChatScreen() {
     if (nearBottomRef.current) listRef.current?.scrollToEnd({ animated: false });
   }, []);
 
+  // Guideline 1.2: a 1:1 DM is a user-generated-content surface, and until
+  // now it was the only one with no way out — report/block existed on group
+  // chat rows, the friends list and (now) the profile sheet, but a person
+  // messaging you abusively here had to be dealt with from somewhere else.
+  // The header "..." is the standard place people look for it.
+  const peerName = name || "this person";
+
+  const handleReport = () => {
+    Alert.alert(
+      `Report ${peerName}?`,
+      "Our team will review this conversation.",
+      [
+        { text: "Cancel", style: "cancel" },
+        {
+          text: "Report",
+          style: "destructive",
+          onPress: async () => {
+            const result = await reportContent("user", userId, "Reported from a direct message");
+            showToast(
+              result.success
+                ? "Thanks — our team will review this."
+                : result.error || "Couldn't send that report. Please try again.",
+              result.success ? "success" : "error",
+            );
+          },
+        },
+      ],
+    );
+  };
+
+  const handleBlock = () => {
+    Alert.alert(
+      `Block ${peerName}?`,
+      "You won't see each other's messages, Spaces or profiles, and our team is notified.",
+      [
+        { text: "Cancel", style: "cancel" },
+        {
+          text: "Block",
+          style: "destructive",
+          onPress: async () => {
+            const result = await blockUser(userId, "Blocked from a direct message");
+            if (!result.success) {
+              showToast(result.error || "Couldn't block that person. Please try again.");
+              return;
+            }
+            // Leave the thread rather than sit in a conversation that is now
+            // empty — useChat drops the blocked sender's messages instantly.
+            router.back();
+            showToast(`${peerName} won't be able to reach you.`, "success");
+          },
+        },
+      ],
+    );
+  };
+
+  const handleOptions = () => {
+    Alert.alert(peerName, undefined, [
+      { text: "Cancel", style: "cancel" },
+      { text: "Report", style: "destructive", onPress: handleReport },
+      { text: "Block", style: "destructive", onPress: handleBlock },
+    ]);
+  };
+
   const handleSend = async () => {
     const content = text.trim();
     if (!content || sendingRef.current) return;
@@ -124,7 +189,21 @@ export default function ChatScreen() {
         behavior={Platform.OS === "ios" ? "padding" : undefined}
         keyboardVerticalOffset={Platform.OS === "ios" ? headerHeight : 0}
       >
-        <Stack.Screen options={{ title: name || "Chat" }} />
+        <Stack.Screen
+          options={{
+            title: name || "Chat",
+            headerRight: () => (
+              <TouchableOpacity
+                onPress={handleOptions}
+                hitSlop={12}
+                accessibilityRole="button"
+                accessibilityLabel={`Report or block ${peerName}`}
+              >
+                <Ionicons name="ellipsis-horizontal" size={20} color={Palette.text} />
+              </TouchableOpacity>
+            ),
+          }}
+        />
         {loading && messages.length === 0 ? (
           <FilmLoader full />
         ) : (

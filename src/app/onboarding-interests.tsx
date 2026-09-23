@@ -1,8 +1,9 @@
 import { useState } from "react";
-import { View, TouchableOpacity, StyleSheet } from "react-native";
+import { View, TouchableOpacity, StyleSheet, ScrollView } from "react-native";
 import { Text } from "@/frontend/components/scaled-text";
 import { router } from "expo-router";
 import { Ionicons } from "@expo/vector-icons";
+import { useSafeAreaInsets } from "react-native-safe-area-context";
 import { Starfield } from "@/frontend/components/starfield";
 import { SpaceStyles, Palette, Type, Radius } from "@/frontend/constants/theme";
 import { completeOnboarding } from "@/frontend/services/onboarding";
@@ -34,6 +35,7 @@ const GENRES = [
 // explicit choice, not something that happens silently on your behalf.
 export default function OnboardingInterestsScreen() {
   const [selected, setSelected] = useState<string[]>([]);
+  const insets = useSafeAreaInsets();
 
   const toggle = (genre: string) => {
     setSelected((prev) => (prev.includes(genre) ? prev.filter((g) => g !== genre) : [...prev, genre]));
@@ -47,54 +49,83 @@ export default function OnboardingInterestsScreen() {
 
   return (
     <Starfield>
-      <View style={styles.container}>
-        <Ionicons name="film-outline" size={40} color={Palette.accent} />
-        <Text style={styles.title}>What do you like to watch?</Text>
-        <Text style={styles.subtitle}>
-          Pick a few genres to find Community Spaces with people who watch the same stuff —
-          instant leaderboards, no friends required yet.
-        </Text>
+      {/* Scrollable, not a fixed flex column. App Review rejected 1.0 (37)
+          under guideline 4 because "Find My Spaces" and "Skip all" were off
+          screen on an iPad Air: this was the only onboarding screen with no
+          ScrollView, so 12 genre pills plus a 90px top pad simply ran past
+          the bottom in a short window (iPadOS windowed apps can be far
+          shorter than a full screen, and larger Dynamic Type makes it worse
+          on phones too). flexGrow keeps the short-content case centred.
+          The maxWidth column stops the pills stretching into one long line
+          on a wide iPad. */}
+      <ScrollView
+        contentContainerStyle={[
+          styles.scrollContent,
+          { paddingBottom: 32 + insets.bottom },
+        ]}
+        showsVerticalScrollIndicator={false}
+      >
+        <View style={styles.container}>
+          <Ionicons name="film-outline" size={40} color={Palette.accent} />
+          <Text style={styles.title}>What do you like to watch?</Text>
+          <Text style={styles.subtitle}>
+            Pick a few genres to find Community Spaces with people who watch the same stuff —
+            instant leaderboards, no friends required yet.
+          </Text>
 
-        <View style={styles.pillRow}>
-          {GENRES.map(({ key, label, icon }) => {
-            const active = selected.includes(key);
-            return (
-              <TouchableOpacity
-                key={key}
-                activeOpacity={0.8}
-                style={[styles.pill, active && styles.pillActive]}
-                onPress={() => toggle(key)}
-              >
-                <Ionicons
-                  name={icon}
-                  size={14}
-                  color={active ? Palette.base : Palette.textMuted}
-                />
-                <Text style={[styles.pillText, active && styles.pillTextActive]}>{label}</Text>
-              </TouchableOpacity>
-            );
-          })}
+          <View style={styles.pillRow}>
+            {GENRES.map(({ key, label, icon }) => {
+              const active = selected.includes(key);
+              return (
+                <TouchableOpacity
+                  key={key}
+                  activeOpacity={0.8}
+                  style={[styles.pill, active && styles.pillActive]}
+                  onPress={() => toggle(key)}
+                >
+                  <Ionicons
+                    name={icon}
+                    size={14}
+                    color={active ? Palette.base : Palette.textMuted}
+                  />
+                  <Text style={[styles.pillText, active && styles.pillTextActive]}>{label}</Text>
+                </TouchableOpacity>
+              );
+            })}
+          </View>
+
+          <TouchableOpacity
+            activeOpacity={0.85}
+            style={[styles.button, selected.length === 0 && styles.buttonDisabled]}
+            onPress={handleFindSpaces}
+            disabled={selected.length === 0}
+          >
+            <Text style={styles.buttonText}>Find My Spaces</Text>
+          </TouchableOpacity>
+
+          <TouchableOpacity activeOpacity={0.7} onPress={completeOnboarding}>
+            <Text style={styles.skipText}>Skip all — jump straight in</Text>
+          </TouchableOpacity>
         </View>
-
-        <TouchableOpacity
-          activeOpacity={0.85}
-          style={[styles.button, selected.length === 0 && styles.buttonDisabled]}
-          onPress={handleFindSpaces}
-          disabled={selected.length === 0}
-        >
-          <Text style={styles.buttonText}>Find My Spaces</Text>
-        </TouchableOpacity>
-
-        <TouchableOpacity activeOpacity={0.7} onPress={completeOnboarding}>
-          <Text style={styles.skipText}>Skip all — jump straight in</Text>
-        </TouchableOpacity>
-      </View>
+      </ScrollView>
     </Starfield>
   );
 }
 
 const styles = StyleSheet.create({
-  container: { flex: 1, alignItems: "center", padding: 24, paddingTop: 90, gap: 6 },
+  scrollContent: { flexGrow: 1, justifyContent: "center", alignItems: "center" },
+  container: {
+    width: "100%",
+    // Caps the column on a wide iPad so the pills stay a readable block.
+    maxWidth: 520,
+    alignItems: "center",
+    padding: 24,
+    // Half the old 90px: the rest of the vertical centring is now done by
+    // the scroll container, which adapts to the window height instead of
+    // assuming a phone's.
+    paddingTop: 48,
+    gap: 6,
+  },
   title: {
     ...Type.title,
     fontWeight: "700",
@@ -128,7 +159,20 @@ const styles = StyleSheet.create({
     paddingVertical: 15,
     alignItems: "center",
   },
-  buttonDisabled: { opacity: 0.4 },
+  // 0.4 on a dark ground made the primary CTA read as absent rather than
+  // disabled — one plausible reading of App Review's "was not visible", and
+  // cheap insurance either way. Still clearly inert, still legible.
+  buttonDisabled: { opacity: 0.55 },
   buttonText: { ...Type.body, color: Palette.base, fontWeight: "700" },
-  skipText: { ...Type.small, color: Palette.textMuted, marginTop: 18, textDecorationLine: "underline" },
+  // Full-strength text, not textMuted: this is the escape hatch out of
+  // onboarding, so it has to read as a control rather than as fine print.
+  skipText: {
+    ...Type.small,
+    color: Palette.text,
+    fontWeight: "600",
+    marginTop: 18,
+    paddingVertical: 8,
+    paddingHorizontal: 16,
+    textDecorationLine: "underline",
+  },
 });

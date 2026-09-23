@@ -1715,7 +1715,10 @@ namespace Backend.Controllers
             await _pushNotificationService.NotifyMembersAsync(
                 _db, id, $"💬 {senderName}", preview,
                 excludeUserId: senderId,
-                data: PushRules.GroupMessageData(id));
+                data: PushRules.GroupMessageData(id),
+                // The only fan-out whose entire payload is one member's own
+                // words, so the only one a block has to suppress.
+                respectBlocks: true);
             return Ok();
         }
 
