@@ -32,7 +32,10 @@ namespace Backend.Services
         //
         // `data` is the routing payload the app reads on tap (see PushRules
         // for the builders); null falls back to {type:"group"}.
-        public async Task NotifyMembersAsync(AppDbContext db, Guid groupId, string title, string body, string? excludeUserId = null, Dictionary<string, object>? data = null)
+        // respectBlocks: suppress this notification for anyone with a block
+        // against excludeUserId. OFF by default, and deliberately opt-in —
+        // see the filter below for why a blanket rule would be wrong.
+        public async Task NotifyMembersAsync(AppDbContext db, Guid groupId, string title, string body, string? excludeUserId = null, Dictionary<string, object>? data = null, bool respectBlocks = false)
         {
             try
             {
@@ -47,13 +50,20 @@ namespace Backend.Services
                 // Blocks cut both ways, and they don't remove anyone from the
                 // Space — so two people who have blocked each other stay in the
                 // same crew and keep triggering each other's notifications.
-                // Postgres RLS already hides the message itself from both of
-                // them; this is the one delivery path that never touches
-                // Postgres, so the preview would otherwise still land on the
-                // lock screen. excludeUserId is the person who caused the
-                // notification (the sender, the joiner), so it's the id the
-                // blocks are relative to.
-                if (!string.IsNullOrEmpty(excludeUserId))
+                // Postgres RLS already hides a blocked person's MESSAGES from
+                // both of them; push is the one delivery path that never
+                // touches Postgres, so the preview would otherwise still land
+                // on the lock screen.
+                //
+                // Opt-in per call site, NOT blanket, because most callers here
+                // are logistics rather than content: "Space cancelled",
+                // "Showtime updated", "Your Space is booked". Those are facts
+                // about a plan the recipient has committed to, and blocking
+                // the host must not stop them arriving — silently swallowing a
+                // cancellation would send someone to a theater for a screening
+                // that isn't happening. A block silences what a person SAYS,
+                // not what happens to your evening.
+                if (respectBlocks && !string.IsNullOrEmpty(excludeUserId))
                 {
                     var blockedPeers = await _blocks.BlockedPeerIdsAsync(excludeUserId);
                     if (blockedPeers.Count > 0)
