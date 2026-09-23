@@ -49,71 +49,89 @@ export default function OnboardingInterestsScreen() {
 
   return (
     <Starfield>
-      {/* Scrollable, not a fixed flex column. App Review rejected 1.0 (37)
-          under guideline 4 because "Find My Spaces" and "Skip all" were off
-          screen on an iPad Air: this was the only onboarding screen with no
-          ScrollView, so 12 genre pills plus a 90px top pad simply ran past
-          the bottom in a short window (iPadOS windowed apps can be far
-          shorter than a full screen, and larger Dynamic Type makes it worse
-          on phones too). flexGrow keeps the short-content case centred.
-          The maxWidth column stops the pills stretching into one long line
-          on a wide iPad. */}
-      <ScrollView
-        contentContainerStyle={[
-          styles.scrollContent,
-          { paddingBottom: 32 + insets.bottom },
-        ]}
-        showsVerticalScrollIndicator={false}
-      >
-        <View style={styles.container}>
-          <Ionicons name="film-outline" size={40} color={Palette.accent} />
-          <Text style={styles.title}>What do you like to watch?</Text>
-          <Text style={styles.subtitle}>
-            Pick a few genres to find Community Spaces with people who watch the same stuff —
-            instant leaderboards, no friends required yet.
-          </Text>
+      {/* Scrolling pills, PINNED controls. App Review rejected 1.0 (37)
+          under guideline 4: on an iPad Air, "Find My Spaces" and "Skip all"
+          were below the fold — 12 genre pills at two per row plus a 90px top
+          pad ran past the bottom of the window (an iPhone-compat window on
+          iPadOS is resizable and can be far shorter than any phone; large
+          Dynamic Type does the same on a phone).
 
-          <View style={styles.pillRow}>
-            {GENRES.map(({ key, label, icon }) => {
-              const active = selected.includes(key);
-              return (
-                <TouchableOpacity
-                  key={key}
-                  activeOpacity={0.8}
-                  style={[styles.pill, active && styles.pillActive]}
-                  onPress={() => toggle(key)}
-                >
-                  <Ionicons
-                    name={icon}
-                    size={14}
-                    color={active ? Palette.base : Palette.textMuted}
-                  />
-                  <Text style={[styles.pillText, active && styles.pillTextActive]}>{label}</Text>
-                </TouchableOpacity>
-              );
-            })}
+          A plain ScrollView would make them reachable but still not VISIBLE,
+          and "not visible" is the exact wording of the rejection — a reviewer
+          repeating the test sees the same first screenful. So only the pills
+          scroll; both controls live in a fixed footer and are on screen at
+          every window size. */}
+      <View style={styles.flex}>
+        <ScrollView
+          contentContainerStyle={styles.scrollContent}
+          showsVerticalScrollIndicator={false}
+        >
+          <View style={styles.container}>
+            <Ionicons name="film-outline" size={40} color={Palette.accent} />
+            <Text style={styles.title}>What do you like to watch?</Text>
+            <Text style={styles.subtitle}>
+              Pick a few genres to find Community Spaces with people who watch the same stuff —
+              instant leaderboards, no friends required yet.
+            </Text>
+
+            <View style={styles.pillRow}>
+              {GENRES.map(({ key, label, icon }) => {
+                const active = selected.includes(key);
+                return (
+                  <TouchableOpacity
+                    key={key}
+                    activeOpacity={0.8}
+                    style={[styles.pill, active && styles.pillActive]}
+                    onPress={() => toggle(key)}
+                  >
+                    <Ionicons
+                      name={icon}
+                      size={14}
+                      color={active ? Palette.base : Palette.textMuted}
+                    />
+                    <Text style={[styles.pillText, active && styles.pillTextActive]}>{label}</Text>
+                  </TouchableOpacity>
+                );
+              })}
+            </View>
           </View>
+        </ScrollView>
 
-          <TouchableOpacity
-            activeOpacity={0.85}
-            style={[styles.button, selected.length === 0 && styles.buttonDisabled]}
-            onPress={handleFindSpaces}
-            disabled={selected.length === 0}
-          >
-            <Text style={styles.buttonText}>Find My Spaces</Text>
-          </TouchableOpacity>
+        <View style={[styles.footer, { paddingBottom: 16 + insets.bottom }]}>
+          <View style={styles.footerColumn}>
+            <TouchableOpacity
+              activeOpacity={0.85}
+              style={[styles.button, selected.length === 0 && styles.buttonDisabled]}
+              onPress={handleFindSpaces}
+              disabled={selected.length === 0}
+            >
+              <Text style={styles.buttonText}>Find My Spaces</Text>
+            </TouchableOpacity>
 
-          <TouchableOpacity activeOpacity={0.7} onPress={completeOnboarding}>
-            <Text style={styles.skipText}>Skip all — jump straight in</Text>
-          </TouchableOpacity>
+            <TouchableOpacity activeOpacity={0.7} onPress={completeOnboarding}>
+              <Text style={styles.skipText}>Skip all — jump straight in</Text>
+            </TouchableOpacity>
+          </View>
         </View>
-      </ScrollView>
+      </View>
     </Starfield>
   );
 }
 
 const styles = StyleSheet.create({
+  flex: { flex: 1 },
   scrollContent: { flexGrow: 1, justifyContent: "center", alignItems: "center" },
+  // Sits above the scroll area, always on screen. Bordered so it reads as a
+  // deliberate action bar rather than content that happens to be last.
+  footer: {
+    borderTopWidth: 1,
+    borderTopColor: Palette.border,
+    backgroundColor: Palette.base,
+    paddingHorizontal: 24,
+    paddingTop: 14,
+    alignItems: "center",
+  },
+  footerColumn: { width: "100%", maxWidth: 520, alignItems: "center" },
   container: {
     width: "100%",
     // Caps the column on a wide iPad so the pills stay a readable block.
@@ -139,7 +157,7 @@ const styles = StyleSheet.create({
     textAlign: "center",
     marginBottom: 28,
   },
-  pillRow: { flexDirection: "row", flexWrap: "wrap", gap: 10, justifyContent: "center", marginBottom: 32 },
+  pillRow: { flexDirection: "row", flexWrap: "wrap", gap: 10, justifyContent: "center", marginBottom: 8 },
   pill: {
     ...SpaceStyles.field,
     flexDirection: "row",
