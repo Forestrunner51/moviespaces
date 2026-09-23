@@ -12,11 +12,16 @@ namespace Backend.Services
     public class PushNotificationService
     {
         private readonly IHttpClientFactory _httpClientFactory;
+        private readonly SupabaseBlockService _blocks;
         private readonly ILogger<PushNotificationService> _logger;
 
-        public PushNotificationService(IHttpClientFactory httpClientFactory, ILogger<PushNotificationService> logger)
+        public PushNotificationService(
+            IHttpClientFactory httpClientFactory,
+            SupabaseBlockService blocks,
+            ILogger<PushNotificationService> logger)
         {
             _httpClientFactory = httpClientFactory;
+            _blocks = blocks;
             _logger = logger;
         }
 
@@ -38,6 +43,25 @@ namespace Backend.Services
                     .ToListAsync();
 
                 if (memberUserIds.Count == 0) return;
+
+                // Blocks cut both ways, and they don't remove anyone from the
+                // Space — so two people who have blocked each other stay in the
+                // same crew and keep triggering each other's notifications.
+                // Postgres RLS already hides the message itself from both of
+                // them; this is the one delivery path that never touches
+                // Postgres, so the preview would otherwise still land on the
+                // lock screen. excludeUserId is the person who caused the
+                // notification (the sender, the joiner), so it's the id the
+                // blocks are relative to.
+                if (!string.IsNullOrEmpty(excludeUserId))
+                {
+                    var blockedPeers = await _blocks.BlockedPeerIdsAsync(excludeUserId);
+                    if (blockedPeers.Count > 0)
+                    {
+                        memberUserIds = memberUserIds.Where(uid => !blockedPeers.Contains(uid)).ToList();
+                        if (memberUserIds.Count == 0) return;
+                    }
+                }
 
                 var tokens = await db.PushTokens
                     .Where(t => memberUserIds.Contains(t.UserId))

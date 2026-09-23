@@ -34,6 +34,10 @@ builder.Services.AddHttpClient();
 builder.Services.ConfigureHttpClientDefaults(http =>
     http.ConfigureHttpClient(client => client.Timeout = TimeSpan.FromSeconds(10)));
 builder.Services.AddMemoryCache();
+// Registered before PushNotificationService because that service takes it as
+// a dependency: notifications are filtered against Supabase's blocks table,
+// which lives in a different database than the EF tables.
+builder.Services.AddSingleton<SupabaseBlockService>();
 builder.Services.AddSingleton<PushNotificationService>();
 builder.Services.AddSingleton<OmdbClient>();
 builder.Services.AddSingleton<IProfanityFilterService, ProfanityFilterService>();

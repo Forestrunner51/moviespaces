@@ -24,11 +24,15 @@ import { distanceMiles } from "@/frontend/utils/distance";
 import { MoviePoster } from "@/frontend/components/movie-poster";
 import { EVENT_CATEGORIES, eventCategoryOf, type EventCategory } from "@/frontend/constants/event-categories";
 import { reportContent } from "@/frontend/services/moderation";
+import { useBlockedIds } from "@/frontend/hooks/use-blocked-ids";
 import { useToast } from "@/frontend/components/toast";
 
 // Matches the Group shape returned by GET /api/group/open
 interface OpenSpace {
   id: string;
+  // The host's user id, blanked by the API for unauthenticated callers. Only
+  // used to keep a blocked host's Spaces out of the list.
+  userId: string;
   hostName: string;
   filmName: string;
   cinemaName: string;
@@ -131,6 +135,7 @@ export default function ExploreScreen() {
   const [filtersOpen, setFiltersOpen] = useState(false);
 
   const [refreshing, setRefreshing] = useState(false);
+  const blockedIds = useBlockedIds();
 
   const fetchOpenSpaces = async () => {
     try {
@@ -224,6 +229,10 @@ export default function ExploreScreen() {
   };
 
   const filteredSpaces = openSpaces.filter((space) => {
+    // A blocked host's Spaces leave the listing immediately — same rule as
+    // the Home feed. Without it, blocking someone silenced their messages
+    // but left their events sitting in the main browse surface.
+    if (space.userId && blockedIds.has(space.userId)) return false;
     if (
       movieNameFilter.trim() &&
       !space.filmName.toLowerCase().includes(movieNameFilter.trim().toLowerCase())

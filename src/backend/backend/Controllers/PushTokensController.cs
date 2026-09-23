@@ -19,6 +19,7 @@ namespace Backend.Controllers
         private readonly IHttpClientFactory _httpClientFactory;
         private readonly IConfiguration _configuration;
         private readonly PushNotificationService _pushNotificationService;
+        private readonly SupabaseBlockService _blocks;
         private readonly ILogger<PushTokensController> _logger;
 
         public PushTokensController(
@@ -26,12 +27,14 @@ namespace Backend.Controllers
             IHttpClientFactory httpClientFactory,
             IConfiguration configuration,
             PushNotificationService pushNotificationService,
+            SupabaseBlockService blocks,
             ILogger<PushTokensController> logger)
         {
             _db = db;
             _httpClientFactory = httpClientFactory;
             _configuration = configuration;
             _pushNotificationService = pushNotificationService;
+            _blocks = blocks;
             _logger = logger;
         }
 
@@ -135,6 +138,18 @@ namespace Backend.Controllers
 
             var isFriend = await AreFriendsAsync(senderId, recipientUserId);
             if (!isFriend) return Forbid();
+
+            // A block doesn't end a friendship, so a blocked pair can still be
+            // "friends" here while RLS hides every message they send each
+            // other. Without this the DM's text would still arrive as a push.
+            //
+            // 200, not 403: the response goes back to the SENDER, and a
+            // distinguishable status would tell them they've been blocked.
+            // The push is simply not sent.
+            if (await _blocks.IsBlockedEitherWayAsync(senderId, recipientUserId))
+            {
+                return Ok();
+            }
 
             // The sender's display name lives in Supabase (profiles), which
             // this DB can't see — so it comes from the client, capped to the
