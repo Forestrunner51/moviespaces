@@ -62,7 +62,10 @@
 
   .hero{display:grid;grid-template-columns:1.15fr .85fr;gap:48px;align-items:center;padding:60px 0 72px}
   .kicker{font-family:'Bebas Neue',sans-serif;letter-spacing:3px;font-size:15px;color:var(--accent);margin-bottom:14px}
-  h1{font-weight:700;font-size:clamp(38px,5.4vw,60px);line-height:1.06;letter-spacing:-1px}
+  /* Sized for the current headline, which is a sentence rather than two
+     words. At the old 60px ceiling it wrapped to four ragged lines in this
+     column. */
+  h1{font-weight:700;font-size:clamp(32px,4.3vw,48px);line-height:1.08;letter-spacing:-.8px}
   h1 em{font-style:normal;color:var(--accent)}
   .slogan{font-style:italic;color:var(--accent);font-size:18px;margin-top:16px}
   .sub{color:var(--muted);font-size:17.5px;max-width:440px;margin-top:14px}
@@ -221,7 +224,7 @@
     nav .links a{margin-left:0;font-size:14px}
     .wrap{padding:0 18px}
     .hero{gap:36px;padding-top:22px}
-    h1{font-size:clamp(33px,10vw,44px)}
+    h1{font-size:clamp(29px,8.4vw,38px)}
     .sub{font-size:16.5px}
     /* full-width CTA reads as a button, not a pill lost in space */
     .cta-row{flex-direction:column;align-items:stretch;gap:10px}
@@ -260,10 +263,10 @@
     <div class="hero-wrap">
     <div class="hero">
       <div>
-        <div class="kicker">MOVIE NIGHTS, WITH PEOPLE</div>
-        <h1>Good movie.<br><em>Better company.</em></h1>
+        <div class="kicker">FOR EVERYONE WITH NOBODY TO TELL</div>
+        <h1>You just watched something incredible.<br><em>Who do you tell?</em></h1>
         <p class="slogan">We believe movies are a social event.</p>
-        <p class="sub">Pick a real showing near you and get grouped with up to five other people going to it. Or host your own movie night, at a theater, your place, anywhere with a screen.</p>
+        <p class="sub">MovieSpaces puts you in a room with people who watched it too. Join a club for the films you're into, or pick a real showing near you and go with up to five other people who picked the same one.</p>
         <div class="cta-row">
           <a class="cta" href="#how">
             <svg width="18" height="18" viewBox="0 0 24 24" fill="none"><path d="M12 2C6.5 2 2 6.5 2 12s4.5 10 10 10 10-4.5 10-10S17.5 2 12 2Zm-2 14.5v-9l7 4.5-7 4.5Z" fill="currentColor"/></svg>
@@ -370,22 +373,26 @@
 
     <section id="inside">
       <div class="sec-kick">WHAT'S INSIDE</div>
-      <h2>Built for going out, not scrolling</h2>
+      <h2>Built for talking about films, not scrolling past them</h2>
       <div class="stubs">
+        <div class="stub"><div class="tear"><b>NOW SHOWING</b></div><div class="body">
+          <div class="adm">01 &middot; CLUBS</div><h3>Find your room</h3>
+          <p>A room per genre, full of people who watch what you watch. Say what you just saw and get an actual conversation back, whether or not anyone was sitting next to you.</p>
+        </div></div>
         <div class="stub"><div class="tear"><b>ADMIT SIX</b></div><div class="body">
-          <div class="adm">01 &middot; MOVIE CREW</div><h3>Get grouped</h3>
+          <div class="adm">02 &middot; MOVIE CREW</div><h3>Get grouped</h3>
           <p>Groups cap at six people who picked the same showing. Big enough to feel like a night out, small enough that everyone actually talks.</p>
         </div></div>
         <div class="stub"><div class="tear"><b>YOUR PLACE</b></div><div class="body">
-          <div class="adm">02 &middot; SPACES</div><h3>Host a night</h3>
+          <div class="adm">03 &middot; SPACES</div><h3>Host a night</h3>
           <p>A screening or a watch party, at a theater, your place, anywhere with a screen. Friends or anyone nearby can join, RSVP, split the cost, and chat.</p>
         </div></div>
         <div class="stub"><div class="tear"><b>AFTER 10PM</b></div><div class="body">
-          <div class="adm">03 &middot; HANGOUT</div><h3>Don't end at the credits</h3>
+          <div class="adm">04 &middot; HANGOUT</div><h3>Don't end at the credits</h3>
           <p>Everyone votes one thing they're up for after, so the night has somewhere to go instead of ending in the parking lot.</p>
         </div></div>
         <div class="stub"><div class="tear"><b>DAILY</b></div><div class="body">
-          <div class="adm">04 &middot; CINEMIND</div><h3>One puzzle a day</h3>
+          <div class="adm">05 &middot; CINEMIND</div><h3>One puzzle a day</h3>
           <p>A daily movie puzzle with streaks and leaderboards, for you and your friends and whichever club you're in.</p>
         </div></div>
       </div>
