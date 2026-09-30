@@ -57,11 +57,19 @@
   article p strong{color:var(--text)}
   article p em{color:var(--accent);font-style:italic}
   .pull{border-left:3px solid var(--accent);padding:6px 0 6px 20px;margin:30px 0;font-style:italic;font-size:20px;color:var(--text);line-height:1.5}
-  .stats{display:grid;grid-template-columns:1fr 1fr;gap:18px;margin:30px 0}
-  .stat{background:var(--surface,rgba(247,240,232,.04));border:1px solid var(--border);border-radius:14px;padding:20px}
+  /* Full-width rows, not two columns. This page's reading column is 640px,
+     so side-by-side cards left each figure about 260px of text: six wrapped
+     lines against four, and a ragged gap under the shorter one. Across the
+     full width the number reads as a figure and the sentence as a sentence. */
+  .stats{display:grid;gap:14px;margin:30px 0}
+  .stat{
+    display:grid;grid-template-columns:auto 1fr;gap:22px;align-items:baseline;
+    background:var(--surface,rgba(247,240,232,.04));border:1px solid var(--border);
+    border-radius:14px;padding:22px 24px;
+  }
   /* Bebas for the figure, the same face the app uses for dates and numbers. */
-  .stat .n{font-family:'Bebas Neue',sans-serif;font-size:42px;line-height:1;color:var(--accent);letter-spacing:1px}
-  .stat p{color:var(--muted);font-size:15px;margin-top:8px}
+  .stat .n{font-family:'Bebas Neue',sans-serif;font-size:46px;line-height:.9;color:var(--accent);letter-spacing:1px}
+  .stat p{color:var(--muted);font-size:15.5px}
   /* Attribution sits on the figure it belongs to, not in a footnote. Small
      and plain on purpose: a citation that shouts is doing PR, while the
      point of showing a source is that the reader can go and check it. */
@@ -84,7 +92,8 @@
     article{padding:30px 0 12px}
     article p{font-size:16.5px;margin-bottom:19px}
     .pull{font-size:18px;padding-left:16px;margin:24px 0}
-    .stats{grid-template-columns:1fr;gap:12px}
+    .stat{grid-template-columns:1fr;gap:6px}
+    .stat .n{font-size:40px}
     .cta{display:block;text-align:center;margin-top:26px}
     footer{margin-top:44px;flex-direction:column;align-items:flex-start;gap:12px}
   }
@@ -114,13 +123,17 @@
       <div class="stats">
         <div class="stat">
           <div class="n">87%</div>
-          <p>of Gen Z went to the cinema in 2025, against 58% of boomers — 6.1 trips each, more than any other generation, and about 40% of everyone in a North American theatre.</p>
-          <cite><a href="https://cinemaunited.org/2025/12/17/cinema-united-releases-strength-of-theatrical-exhibition-2025-update-spotlighting-important-movie-theatre-industry-metrics/" rel="noopener">Cinema United, <em>Strength of Theatrical Exhibition</em>, 2025</a></cite>
+          <div class="body">
+            <p>of Gen Z went to the cinema in 2025, against 58% of boomers. 6.1 trips each, more than any other generation.</p>
+            <cite><a href="https://cinemaunited.org/2025/12/17/cinema-united-releases-strength-of-theatrical-exhibition-2025-update-spotlighting-important-movie-theatre-industry-metrics/" rel="noopener">Cinema United, <em>Strength of Theatrical Exhibition</em>, 2025</a></cite>
+          </div>
         </div>
         <div class="stat">
           <div class="n">67%</div>
-          <p>of Gen Z adults say they feel lonely — the loneliest of any generation, every time the survey has run since 2018.</p>
-          <cite><a href="https://newsroom.thecignagroup.com/vitality-research-new-insight-into-five-years-of-loneliness" rel="noopener">Cigna Group, loneliness research, 2025</a></cite>
+          <div class="body">
+            <p>of Gen Z adults say they feel lonely. The loneliest of any generation, every time the survey has run since 2018.</p>
+            <cite><a href="https://newsroom.thecignagroup.com/vitality-research-new-insight-into-five-years-of-loneliness" rel="noopener">Cigna Group, loneliness research, 2025</a></cite>
+          </div>
         </div>
       </div>
 
