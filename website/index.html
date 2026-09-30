@@ -77,8 +77,12 @@
   .notify-line{color:var(--muted);font-size:15px;margin-bottom:10px}
   .notify-line b{color:var(--text)}
   .notify-row{display:flex;gap:8px}
-  .notify-row input[type=email]{flex:1;min-width:0;background:var(--raised);border:1px solid var(--border2);border-radius:999px;color:var(--text);font-family:Karla,sans-serif;font-size:15px;padding:12px 18px}
-  .notify-row input[type=email]:focus{outline:none;border-color:var(--accent-border)}
+  .notify-row input[type=email],.notify-row input[type=text].city{flex:1;min-width:0;background:var(--raised);border:1px solid var(--border2);border-radius:999px;color:var(--text);font-family:Karla,sans-serif;font-size:15px;padding:12px 18px}
+  .notify-row input[type=email]:focus,.notify-row input[type=text].city:focus{outline:none;border-color:var(--accent-border)}
+  /* Second line, not a third box crammed into the first row: on a phone the
+     email field is already the full width. */
+  .notify-row.second{margin-top:8px}
+  .notify-why{color:var(--faint);font-size:13px;margin-top:8px}
   .notify-row button{background:var(--accent);color:var(--base);border:0;border-radius:999px;font-family:Karla,sans-serif;font-weight:700;font-size:15px;padding:12px 20px;cursor:pointer;white-space:nowrap}
   .notify-row button:disabled{opacity:.6;cursor:default}
   .notify-done{color:var(--positive);font-size:14.5px;font-weight:700;margin-top:10px}
@@ -283,6 +287,11 @@
                    style="position:absolute;left:-9999px" placeholder="website">
             <button type="submit" id="notifyBtn">Notify me</button>
           </div>
+          <div class="notify-row second">
+            <input type="text" class="city" id="notifyCity" name="city" placeholder="Your city (optional)"
+                   autocomplete="address-level2" maxlength="120" aria-label="Your city, optional">
+          </div>
+          <p class="notify-why">A crew is people going to the same showing, so we start where there are enough of us. Tell us your city and we'll start there.</p>
           <p class="notify-done" id="notifyDone" hidden>🎬 You&rsquo;re on the list — see you opening night.</p>
         </form>
       </div>
@@ -440,11 +449,16 @@
       btn.disabled=true;btn.textContent="Adding\u2026";
       fetch("https://moviespaces.onrender.com/api/site/notify",{
         method:"POST",headers:{"Content-Type":"application/json"},
-        body:JSON.stringify({email:email,website:document.getElementById("notifyWebsite").value})
+        body:JSON.stringify({
+          email:email,
+          city:document.getElementById("notifyCity").value.trim(),
+          website:document.getElementById("notifyWebsite").value
+        })
       }).then(function(r){
         if(!r.ok)throw new Error("status "+r.status);
         document.getElementById("notifyDone").hidden=false;
-        form.querySelector(".notify-row").hidden=true;
+        form.querySelectorAll(".notify-row").forEach(function(r){r.hidden=true});
+        form.querySelector(".notify-why").hidden=true;
         document.querySelector(".notify-line").hidden=true;
       }).catch(function(){
         btn.disabled=false;btn.textContent="Notify me";

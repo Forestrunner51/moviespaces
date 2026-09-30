@@ -71,7 +71,7 @@ namespace Backend.Controllers
             return Ok(new { count = row?.Count ?? taps });
         }
 
-        public record NotifyRequest(string? Email, string? Website);
+        public record NotifyRequest(string? Email, string? City, string? Website);
 
         // POST /api/site/notify — the landing page's "get the link first"
         // box. Anonymous by nature; defenses are the guest-join IP limit,
@@ -88,9 +88,27 @@ namespace Backend.Controllers
             if (email.Length is < 6 or > 320 || !email.Contains('@') || !email.Contains('.') || email.Contains(' '))
                 return BadRequest(new { error = "That doesn't look like an email." });
 
-            if (!await _db.LaunchSignups.AnyAsync(x => x.Email == email))
+            // Optional, and capped to the column width rather than rejected:
+            // someone mistyping their city should never cost us the email.
+            var city = (req.City ?? "").Trim();
+            if (city.Length > 120) city = city[..120];
+
+            var existing = await _db.LaunchSignups.FirstOrDefaultAsync(x => x.Email == email);
+            if (existing == null)
             {
-                _db.LaunchSignups.Add(new LaunchSignup { Email = email });
+                _db.LaunchSignups.Add(new LaunchSignup
+                {
+                    Email = email,
+                    City = city.Length == 0 ? null : city,
+                });
+                await _db.SaveChangesAsync();
+            }
+            else if (city.Length > 0 && string.IsNullOrWhiteSpace(existing.City))
+            {
+                // Signed up before this field existed, and has now told us
+                // where they are. Only fills a blank — a resubmission never
+                // overwrites a city we already have.
+                existing.City = city;
                 await _db.SaveChangesAsync();
             }
             return Ok(new { ok = true });
@@ -110,8 +128,16 @@ namespace Backend.Controllers
                     System.Text.Encoding.UTF8.GetBytes(expected)))
                 return Unauthorized(new { error = "Unauthorized" });
             var rows = await _db.LaunchSignups.OrderBy(x => x.CreatedAt)
-                .Select(x => new { x.Email, x.CreatedAt }).ToListAsync();
-            return Ok(new { count = rows.Count, rows });
+                .Select(x => new { x.Email, x.City, x.CreatedAt }).ToListAsync();
+            // Grouped too: the export exists to answer "where can a crew
+            // actually fill on launch weekend", and that's a count per city,
+            // not a list of emails.
+            var byCity = rows
+                .GroupBy(r => string.IsNullOrWhiteSpace(r.City) ? "(not given)" : r.City!.Trim())
+                .Select(g => new { city = g.Key, count = g.Count() })
+                .OrderByDescending(g => g.count)
+                .ToList();
+            return Ok(new { count = rows.Count, byCity, rows });
         }
 
         // POST /api/site/report-hook — Supabase Database Webhook target for
