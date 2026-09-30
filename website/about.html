@@ -57,6 +57,18 @@
   article p strong{color:var(--text)}
   article p em{color:var(--accent);font-style:italic}
   .pull{border-left:3px solid var(--accent);padding:6px 0 6px 20px;margin:30px 0;font-style:italic;font-size:20px;color:var(--text);line-height:1.5}
+  .stats{display:grid;grid-template-columns:1fr 1fr;gap:18px;margin:30px 0}
+  .stat{background:var(--surface,rgba(247,240,232,.04));border:1px solid var(--border);border-radius:14px;padding:20px}
+  /* Bebas for the figure, the same face the app uses for dates and numbers. */
+  .stat .n{font-family:'Bebas Neue',sans-serif;font-size:42px;line-height:1;color:var(--accent);letter-spacing:1px}
+  .stat p{color:var(--muted);font-size:15px;margin-top:8px}
+  /* Attribution sits on the figure it belongs to, not in a footnote. Small
+     and plain on purpose: a citation that shouts is doing PR, while the
+     point of showing a source is that the reader can go and check it. */
+  .stat cite{display:block;font-style:normal;font-size:12.5px;color:var(--faint);margin-top:10px;line-height:1.4}
+  .stat cite a{color:var(--faint);text-decoration:none;border-bottom:1px solid var(--border2)}
+  .stat cite a:hover{color:var(--accent);border-bottom-color:var(--accent-border)}
+  .stat cite em{font-style:italic}
   .sign{margin-top:34px;color:var(--text)}
   .sign .name{font-family:'Bebas Neue',sans-serif;letter-spacing:2px;font-size:19px}
   .sign .role{color:var(--faint);font-size:14px}
@@ -72,6 +84,7 @@
     article{padding:30px 0 12px}
     article p{font-size:16.5px;margin-bottom:19px}
     .pull{font-size:18px;padding-left:16px;margin:24px 0}
+    .stats{grid-template-columns:1fr;gap:12px}
     .cta{display:block;text-align:center;margin-top:26px}
     footer{margin-top:44px;flex-direction:column;align-items:flex-start;gap:12px}
   }
@@ -93,6 +106,25 @@
       <p>I spent a long time trying to recapture that, and kept running into the same wall. Not the movies. The <em>logistics</em>. Getting friends to commit to a showing takes a group chat and a small miracle. Finding people who want to see the same film you do, at the same theater, on the same night? There was no way to do it at all. And when I looked into renting a theater for a private screening, the process was so opaque it felt like it was designed to make you give up.</p>
 
       <p class="pull">The best part of the movies was never the screen. It was the room.</p>
+
+      <!-- Two figures that sit oddly next to each other, cited rather than
+           asserted. Moviegoing specifically, not screen time: by total hours
+           in front of a screen Gen Z is the LOWEST of any generation, which
+           is a different measure and not the one that matters here. -->
+      <div class="stats">
+        <div class="stat">
+          <div class="n">87%</div>
+          <p>of Gen Z went to the cinema in 2025, against 58% of boomers — 6.1 trips each, more than any other generation, and about 40% of everyone in a North American theatre.</p>
+          <cite><a href="https://cinemaunited.org/2025/12/17/cinema-united-releases-strength-of-theatrical-exhibition-2025-update-spotlighting-important-movie-theatre-industry-metrics/" rel="noopener">Cinema United, <em>Strength of Theatrical Exhibition</em>, 2025</a></cite>
+        </div>
+        <div class="stat">
+          <div class="n">67%</div>
+          <p>of Gen Z adults say they feel lonely — the loneliest of any generation, every time the survey has run since 2018.</p>
+          <cite><a href="https://newsroom.thecignagroup.com/vitality-research-new-insight-into-five-years-of-loneliness" rel="noopener">Cigna Group, loneliness research, 2025</a></cite>
+        </div>
+      </div>
+
+      <p>We are the generation that goes to the cinema most, and the loneliest one anybody has measured. Both of those are true at once, which tells you the problem was never that people stopped wanting to sit in a dark room together. The room is full of us. We just arrive alone, and leave without having said a word to anybody in it.</p>
 
       <p>So I built the thing I kept wishing existed. An app where you pick a real showing near you and get grouped with a handful of people going to it. Where hosting a movie night — at a theater, at your place, anywhere with a screen — takes a minute instead of a week of planning. Where the night doesn't end at the credits, because everyone's already said what they're up for after.</p>
 
