@@ -1038,6 +1038,17 @@ namespace Backend.Controllers
                 group.MembersHidden = true;
             }
 
+            // "How was it?" state, for insiders only — someone who wasn't in
+            // the Space has nothing to answer and shouldn't be asked.
+            if (isInsider && group.ScreeningTime != null && group.ScreeningTime <= DateTime.UtcNow)
+            {
+                group.DebriefDue = true;
+                group.MyDebriefAttended = await _db.EventResponses
+                    .Where(r => r.GroupId == group.Id && r.UserId == userId)
+                    .Select(r => (bool?)r.Attended)
+                    .FirstOrDefaultAsync();
+            }
+
             return Ok(group);
         }
 
@@ -1658,6 +1669,61 @@ namespace Backend.Controllers
             await _db.SaveChangesAsync();
 
             return Ok(new { showtimeReportCount = group.ShowtimeReportCount });
+        }
+
+        public record DebriefRequest(bool Attended);
+
+        // POST /api/group/{id}/debrief — the answer to "how was it?", asked
+        // once the showtime has passed (see DebriefBackgroundService).
+        //
+        // Two things at once, and the order matters: the prompt is about the
+        // film, and the attendance flag is what falls out of answering it.
+        // Asking "did everyone turn up?" is a question nobody enjoys being
+        // asked; asking "how was it?" is the product.
+        [HttpPost("{id}/debrief")]
+        [EnableRateLimiting("write-heavy")]
+        public async Task<IActionResult> SubmitDebrief(Guid id, [FromBody] DebriefRequest req)
+        {
+            var userId = GetUserId();
+            if (string.IsNullOrEmpty(userId)) return Unauthorized(new { error = "Unauthorized" });
+
+            var group = await _db.Groups
+                .Include(g => g.Members)
+                .FirstOrDefaultAsync(g => g.Id == id);
+            if (group == null) return NotFound();
+
+            // Members only, same gate as report-showtime: this is a record of
+            // who was in the room, so someone who was never in the Space can't
+            // write one.
+            var isMember = group.UserId == userId || group.Members.Any(m => m.UserId == userId);
+            if (!isMember) return Forbid();
+
+            // Before the night has happened there is nothing to answer, and a
+            // client that asks early is a bug rather than something to record.
+            if (group.ScreeningTime == null || group.ScreeningTime > DateTime.UtcNow)
+                return BadRequest(new { error = "This Space hasn't happened yet." });
+
+            var existing = await _db.EventResponses
+                .FirstOrDefaultAsync(r => r.GroupId == id && r.UserId == userId);
+            if (existing == null)
+            {
+                _db.EventResponses.Add(new EventResponse
+                {
+                    GroupId = id,
+                    UserId = userId,
+                    Attended = req.Attended,
+                });
+            }
+            else
+            {
+                // Changing your answer is allowed — the unique index makes a
+                // second submission an update rather than a duplicate.
+                existing.Attended = req.Attended;
+            }
+            await _db.SaveChangesAsync();
+
+            var attended = await _db.EventResponses.CountAsync(r => r.GroupId == id && r.Attended);
+            return Ok(new { attended = req.Attended, attendedCount = attended });
         }
 
         // Group chat itself lives in Supabase (group_messages), not this

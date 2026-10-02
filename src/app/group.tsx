@@ -97,6 +97,10 @@ interface Group {
   postActivities: string | null;
   hangoutNotes: string | null;
   showtimeReportCount: number;
+  // Set by the server only for members, and only once the showtime has
+  // passed. myDebriefAttended is null until this person answers.
+  debriefDue?: boolean;
+  myDebriefAttended?: boolean | null;
   seasonEpisodeInfo: string | null;
   posterPath: string | null;
   eventCategory: string | null;
@@ -453,6 +457,20 @@ export default function GroupScreen() {
   };
 
   const [reporting, setReporting] = useState(false);
+
+  // "How was it?" — the night is over, so the question is about the film,
+  // not about who turned up. The attendance flag the server stores is the
+  // byproduct; see SubmitDebrief for why it's framed this way round.
+  const [debriefBusy, setDebriefBusy] = useState(false);
+  const submitDebrief = async (attended: boolean) => {
+    if (debriefBusy) return;
+    setDebriefBusy(true);
+    const ok = await runGroupAction("/debrief", {
+      body: JSON.stringify({ attended }),
+    });
+    if (ok) await fetchGroup();
+    setDebriefBusy(false);
+  };
 
   const handleReportShowtime = () => {
     Alert.alert(
@@ -1372,6 +1390,33 @@ export default function GroupScreen() {
           </Text>
         )}
 
+        {group.debriefDue && isMember && group.myDebriefAttended == null && (
+          <View style={styles.debriefCard}>
+            <Text style={styles.debriefTitle}>How was {group.filmName}?</Text>
+            <Text style={styles.debriefSub}>
+              Say something in the chat before everyone forgets it.
+            </Text>
+            <View style={styles.debriefRow}>
+              <TouchableOpacity
+                activeOpacity={0.85}
+                style={[styles.debriefButton, styles.debriefPrimary]}
+                onPress={() => submitDebrief(true)}
+                disabled={debriefBusy}
+              >
+                <Text style={styles.debriefPrimaryText}>I was there</Text>
+              </TouchableOpacity>
+              <TouchableOpacity
+                activeOpacity={0.85}
+                style={styles.debriefButton}
+                onPress={() => submitDebrief(false)}
+                disabled={debriefBusy}
+              >
+                <Text style={styles.debriefButtonText}>I missed it</Text>
+              </TouchableOpacity>
+            </View>
+          </View>
+        )}
+
         {/* Actions live directly under the when/where — Invite, Directions,
             Chat, Calendar are what someone opens this screen to do; they were
             buried below the member list. Space code rides just beneath. */}
@@ -2240,6 +2285,28 @@ const styles = StyleSheet.create({
     marginBottom: 4,
   },
   manualBadge: { ...Type.caption, color: SpaceTheme.mutedOrbit, fontWeight: "600" },
+  debriefCard: {
+    backgroundColor: Palette.surface,
+    borderWidth: 1,
+    borderColor: Palette.accent,
+    borderRadius: Radius.medium,
+    padding: 16,
+    marginBottom: 16,
+  },
+  debriefTitle: { ...Type.body, color: Palette.text, fontWeight: "700" },
+  debriefSub: { ...Type.caption, color: Palette.textMuted, marginTop: 3 },
+  debriefRow: { flexDirection: "row", gap: 10, marginTop: 14 },
+  debriefButton: {
+    flex: 1,
+    borderWidth: 1,
+    borderColor: Palette.border,
+    borderRadius: Radius.pill,
+    paddingVertical: 10,
+    alignItems: "center",
+  },
+  debriefPrimary: { backgroundColor: Palette.accent, borderColor: Palette.accent },
+  debriefPrimaryText: { ...Type.small, color: Palette.base, fontWeight: "700" },
+  debriefButtonText: { ...Type.small, color: Palette.textMuted, fontWeight: "600" },
   reportRow: { flexDirection: "row", alignItems: "center", gap: 4 },
   reportLink: { ...Type.caption, color: SpaceTheme.mutedOrbit, fontWeight: "700" },
   reportCountText: { ...Type.caption, color: Palette.danger, marginBottom: 12 },
