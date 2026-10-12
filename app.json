@@ -2,12 +2,12 @@
   "expo": {
     "name": "MovieSpaces",
     "slug": "Moviespaces",
-    "version": "1.0.0",
+    "version": "1.0.1",
     "orientation": "portrait",
     "icon": "./assets/images/icon.png",
     "scheme": "moviespaces",
     "userInterfaceStyle": "dark",
-    "ios": {our
+    "ios": {
       "bundleIdentifier": "com.newfahrenheit45.Moviespaces",
       "usesAppleSignIn": true,
       "infoPlist": {
