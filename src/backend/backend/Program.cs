@@ -44,6 +44,9 @@ builder.Services.AddSingleton<IProfanityFilterService, ProfanityFilterService>()
 builder.Services.AddSingleton<IDailyPuzzleService, DailyPuzzleService>();
 builder.Services.AddSingleton<CineMindCatalogService>();
 builder.Services.AddHostedService<ReminderBackgroundService>();
+// Asks "how was it?" after the showtime, the counterpart to the reminder
+// that goes out before it.
+builder.Services.AddHostedService<DebriefBackgroundService>();
 builder.Services.AddHostedService<CineMindReminderService>();
 builder.Services.AddSingleton<ShowtimesScraperService>();
 // Registered as a singleton AND a hosted service so ShowtimesController can

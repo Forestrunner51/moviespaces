@@ -33,6 +33,7 @@ public class AppDbContext : DbContext
     public DbSet<SiteCounter> SiteCounters => Set<SiteCounter>();
     public DbSet<GroupBan> GroupBans => Set<GroupBan>();
     public DbSet<AppEvent> AppEvents => Set<AppEvent>();
+    public DbSet<EventResponse> EventResponses => Set<EventResponse>();
     public DbSet<LaunchSignup> LaunchSignups => Set<LaunchSignup>();
 
     // Nightly-scraped showtimes cache (see ShowtimesScraperService). Wiped and
@@ -98,6 +99,13 @@ public class AppDbContext : DbContext
         // fail outright.
         builder.Entity<UserDailyProgress>()
             .HasIndex(p => new { p.UserId, p.PuzzleDate })
+            .IsUnique();
+
+        // One answer per person per Space. The endpoint updates in place on a
+        // second submission (people change their mind, or tap twice), so this
+        // is what makes that an update rather than a duplicate row.
+        builder.Entity<EventResponse>()
+            .HasIndex(r => new { r.GroupId, r.UserId })
             .IsUnique();
 
         // Serves the per-day leaderboard and percentile queries.

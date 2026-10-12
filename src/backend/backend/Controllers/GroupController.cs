@@ -309,6 +309,9 @@ namespace Backend.Controllers
         [AllowAnonymous]
         public async Task<IActionResult> ResolveSpaceCode(string code)
         {
+            if (!TryConsumeCodeLookup())
+                return StatusCode(StatusCodes.Status429TooManyRequests, new { error = "Too many code lookups. Try again in a minute." });
+
             var normalized = code.Trim().ToUpperInvariant();
             var group = await _db.Groups.FirstOrDefaultAsync(g => g.SpaceCode == normalized);
             if (group == null) return NotFound(new { error = "No Space found with that code." });
@@ -336,8 +339,54 @@ namespace Backend.Controllers
             var bySlug = await _db.Groups.AsNoTracking().Include(g => g.Members).FirstOrDefaultAsync(g => g.Slug == id);
             if (bySlug != null) return bySlug;
 
+            // Throttled like ResolveSpaceCode: a code-shaped id makes GetGroup
+            // and /space/{id} the same "does this code exist" oracle. Reads
+            // as not-found when over budget. The app only resolves by code
+            // once per link (space/[id].tsx swaps in the Guid), so polling
+            // never lands here.
+            if (!TryConsumeCodeLookup()) return null;
+
             var normalizedCode = id.Trim().ToUpperInvariant();
             return await _db.Groups.AsNoTracking().Include(g => g.Members).FirstOrDefaultAsync(g => g.SpaceCode == normalizedCode);
+        }
+
+        private const string CustomVenuePlaceholder = "Sign in to see the location";
+
+        // Only a venue picked from Google Places (or a catalog cinema) is
+        // known to be a public business. Everything else could be typed-in
+        // free text, a home address included. A theater chosen through the
+        // showtimes picker also lands here (it stores no place id), so
+        // signed-out visitors don't see those names either: the safe side.
+        private static bool IsCustomVenue(Group g) =>
+            g.SpaceType == "private_rental" || (g.GooglePlaceId == null && g.CinemaId == null);
+
+        private static string FirstNameOnly(string? name)
+        {
+            var trimmed = (name ?? "").Trim();
+            var space = trimmed.IndexOf(' ');
+            return space > 0 ? trimmed[..space] : trimmed;
+        }
+
+        // SECURITY: a SpaceCode is the only credential on a private Space, and
+        // the code space is 31^6 (~890M). The global limiter (300/min/IP)
+        // would let one IP try ~430k codes a day across every endpoint that
+        // looks a group up by code, which stops being negligible as private
+        // Spaces add up. One shared budget across all of them, per IP: a
+        // person types or opens a code a handful of times, not 20 a minute.
+        private static readonly System.Threading.RateLimiting.PartitionedRateLimiter<string> CodeLookups =
+            System.Threading.RateLimiting.PartitionedRateLimiter.Create<string, string>(ip =>
+                System.Threading.RateLimiting.RateLimitPartition.GetFixedWindowLimiter(ip, _ =>
+                    new System.Threading.RateLimiting.FixedWindowRateLimiterOptions
+                    {
+                        PermitLimit = 20,
+                        Window = TimeSpan.FromMinutes(1),
+                    }));
+
+        private bool TryConsumeCodeLookup()
+        {
+            var ip = HttpContext.Connection.RemoteIpAddress?.ToString() ?? "unknown";
+            using var lease = CodeLookups.AttemptAcquire(ip);
+            return lease.IsAcquired;
         }
 
         // POST /api/group/community-spaces/seed
@@ -1038,6 +1087,17 @@ namespace Backend.Controllers
                 group.MembersHidden = true;
             }
 
+            // "How was it?" state, for insiders only — someone who wasn't in
+            // the Space has nothing to answer and shouldn't be asked.
+            if (isInsider && group.ScreeningTime != null && group.ScreeningTime <= DateTime.UtcNow)
+            {
+                group.DebriefDue = true;
+                group.MyDebriefAttended = await _db.EventResponses
+                    .Where(r => r.GroupId == group.Id && r.UserId == userId)
+                    .Select(r => (bool?)r.Attended)
+                    .FirstOrDefaultAsync();
+            }
+
             return Ok(group);
         }
 
@@ -1346,7 +1406,28 @@ namespace Backend.Controllers
                 foreach (var space in spaces)
                 {
                     space.UserId = "";
-                    foreach (var m in space.Members) m.UserId = "";
+                    foreach (var m in space.Members)
+                    {
+                        m.UserId = "";
+                        m.Name = FirstNameOnly(m.Name);
+                    }
+                    space.HostName = FirstNameOnly(space.HostName);
+
+                    // SECURITY: a watch party's venue is free text ("Sarah's
+                    // Apartment, Unit 4B") plus geocoded coordinates, and this
+                    // feed needs no account. Anyone on the internet could read
+                    // where and when a stranger would be home hosting. A real
+                    // theater is public knowledge; a custom venue is only
+                    // shown to signed-in users.
+                    if (IsCustomVenue(space))
+                    {
+                        space.CinemaName = CustomVenuePlaceholder;
+                        space.TheaterLatitude = null;
+                        space.TheaterLongitude = null;
+                        space.GooglePlaceId = null;
+                        space.HangoutNotes = null;
+                        space.BookingUrl = "";
+                    }
                 }
             }
 
@@ -1658,6 +1739,61 @@ namespace Backend.Controllers
             await _db.SaveChangesAsync();
 
             return Ok(new { showtimeReportCount = group.ShowtimeReportCount });
+        }
+
+        public record DebriefRequest(bool Attended);
+
+        // POST /api/group/{id}/debrief — the answer to "how was it?", asked
+        // once the showtime has passed (see DebriefBackgroundService).
+        //
+        // Two things at once, and the order matters: the prompt is about the
+        // film, and the attendance flag is what falls out of answering it.
+        // Asking "did everyone turn up?" is a question nobody enjoys being
+        // asked; asking "how was it?" is the product.
+        [HttpPost("{id}/debrief")]
+        [EnableRateLimiting("write-heavy")]
+        public async Task<IActionResult> SubmitDebrief(Guid id, [FromBody] DebriefRequest req)
+        {
+            var userId = GetUserId();
+            if (string.IsNullOrEmpty(userId)) return Unauthorized(new { error = "Unauthorized" });
+
+            var group = await _db.Groups
+                .Include(g => g.Members)
+                .FirstOrDefaultAsync(g => g.Id == id);
+            if (group == null) return NotFound();
+
+            // Members only, same gate as report-showtime: this is a record of
+            // who was in the room, so someone who was never in the Space can't
+            // write one.
+            var isMember = group.UserId == userId || group.Members.Any(m => m.UserId == userId);
+            if (!isMember) return Forbid();
+
+            // Before the night has happened there is nothing to answer, and a
+            // client that asks early is a bug rather than something to record.
+            if (group.ScreeningTime == null || group.ScreeningTime > DateTime.UtcNow)
+                return BadRequest(new { error = "This Space hasn't happened yet." });
+
+            var existing = await _db.EventResponses
+                .FirstOrDefaultAsync(r => r.GroupId == id && r.UserId == userId);
+            if (existing == null)
+            {
+                _db.EventResponses.Add(new EventResponse
+                {
+                    GroupId = id,
+                    UserId = userId,
+                    Attended = req.Attended,
+                });
+            }
+            else
+            {
+                // Changing your answer is allowed — the unique index makes a
+                // second submission an update rather than a duplicate.
+                existing.Attended = req.Attended;
+            }
+            await _db.SaveChangesAsync();
+
+            var attended = await _db.EventResponses.CountAsync(r => r.GroupId == id && r.Attended);
+            return Ok(new { attended = req.Attended, attendedCount = attended });
         }
 
         // Group chat itself lives in Supabase (group_messages), not this

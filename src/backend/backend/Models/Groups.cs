@@ -221,8 +221,23 @@ namespace Backend.Models
         [Column("reminder_sent")]
         public bool ReminderSent { get; set; } = false;
 
+        // Same idea as ReminderSent, for the "how was it?" push that goes out
+        // after the showtime rather than before it.
+        [Column("debrief_sent")]
+        public bool DebriefSent { get; set; } = false;
+
         public DateTime CreatedAt { get; set; } = DateTime.UtcNow;
         public List<GroupMember> Members { get; set; } = new();
+
+        // Not persisted — set by GetGroup so the client knows whether to show
+        // the "how was it?" card. Null means the viewer hasn't answered;
+        // DebriefDue is false until the showtime has actually passed, so the
+        // card can't appear on a Space that hasn't happened.
+        [NotMapped]
+        public bool DebriefDue { get; set; }
+
+        [NotMapped]
+        public bool? MyDebriefAttended { get; set; }
 
         // Not persisted — set by GetGroup when a private Space is fetched by
         // someone who is neither host nor member and didn't present the invite

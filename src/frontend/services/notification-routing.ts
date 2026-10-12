@@ -19,6 +19,7 @@ export function configureNotificationHandler() {
 // with the fields missing) just opens the app wherever it already is.
 type NotificationData =
   | { type: "group_message"; groupId?: string; title?: string }
+  | { type: "group_debrief"; groupId?: string }
   | { type: "dm"; userId?: string; name?: string };
 
 function routeFor(data: unknown): Parameters<typeof router.push>[0] | null {
@@ -29,6 +30,11 @@ function routeFor(data: unknown): Parameters<typeof router.push>[0] | null {
       pathname: "/group-chat/[id]",
       params: { id: d.groupId, type: "group", ...(typeof d.title === "string" ? { title: d.title } : {}) },
     };
+  }
+  // The "how was it?" push lands on the Space, not the chat: the card with
+  // the answer buttons lives there, and it points on to the chat itself.
+  if (d.type === "group_debrief" && typeof d.groupId === "string" && d.groupId) {
+    return { pathname: "/group", params: { groupId: d.groupId } };
   }
   if (d.type === "dm" && typeof d.userId === "string" && d.userId) {
     return {

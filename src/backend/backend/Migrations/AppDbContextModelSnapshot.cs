@@ -231,6 +231,36 @@ namespace backend.Migrations
                     b.ToTable("daily_puzzles");
                 });
 
+            modelBuilder.Entity("Backend.Models.EventResponse", b =>
+                {
+                    b.Property<long>("Id")
+                        .ValueGeneratedOnAdd()
+                        .HasColumnType("bigint");
+
+                    NpgsqlPropertyBuilderExtensions.UseIdentityByDefaultColumn(b.Property<long>("Id"));
+
+                    b.Property<bool>("Attended")
+                        .HasColumnType("boolean");
+
+                    b.Property<DateTime>("CreatedAt")
+                        .HasColumnType("timestamp with time zone");
+
+                    b.Property<Guid>("GroupId")
+                        .HasColumnType("uuid");
+
+                    b.Property<string>("UserId")
+                        .IsRequired()
+                        .HasMaxLength(100)
+                        .HasColumnType("character varying(100)");
+
+                    b.HasKey("Id");
+
+                    b.HasIndex("GroupId", "UserId")
+                        .IsUnique();
+
+                    b.ToTable("EventResponses");
+                });
+
             modelBuilder.Entity("Backend.Models.Group", b =>
                 {
                     b.Property<Guid>("Id")
@@ -252,6 +282,10 @@ namespace backend.Migrations
 
                     b.Property<DateTime>("CreatedAt")
                         .HasColumnType("timestamp with time zone");
+
+                    b.Property<bool>("DebriefSent")
+                        .HasColumnType("boolean")
+                        .HasColumnName("debrief_sent");
 
                     b.Property<string>("EventCategory")
                         .HasColumnType("text")

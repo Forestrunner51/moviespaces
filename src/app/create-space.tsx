@@ -759,6 +759,10 @@ export default function CreateSpaceScreen() {
                 style={[styles.afterChip, venueMode === "home" && styles.afterChipActive]}
                 onPress={() => {
                   setVenueMode("home");
+                  // Someone's home defaults to invite-only: a public Space
+                  // lists its venue and time to every signed-in stranger.
+                  // Still a checkbox at the bottom, so the host can undo it.
+                  setIsPrivate(true);
                   setTheaterLocked(false);
                   setTheaterName("");
                   setTheaterPlaceId(null);
