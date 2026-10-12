@@ -20,7 +20,7 @@ https://docs.expo.dev/versions/v56.0.0/ over training knowledge.
   right and wasn't. Don't report something as working because it looks like it
   should.
 - **`npm run check` before considering any change done** — tsc + eslint +
-  `dotnet test` (80 pure-logic tests in `backend.Tests`, plus 11 integration
+  `dotnet test` (80 pure-logic tests in `backend.Tests`, plus 29 integration
   tests in `backend.IntegrationTests`). Needs no live infrastructure: the
   integration tests use a throwaway Postgres container when a Docker daemon
   is reachable (or the server in `MOVIESPACES_TEST_PG`) and are SKIPPED

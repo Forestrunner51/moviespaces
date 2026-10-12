@@ -558,9 +558,9 @@ export default function ProfileScreen() {
           <View style={styles.followRow}>
             {(
               [
-                { icon: "logo-instagram", label: "Instagram", url: "https://instagram.com/moviespacesapp" },
-                { icon: "logo-tiktok", label: "TikTok", url: "https://www.tiktok.com/@moviespacesapp" },
-                { icon: "logo-youtube", label: "YouTube", url: "https://www.youtube.com/@moviespacesapp" },
+                { icon: "logo-instagram", label: "Instagram", url: "https://www.instagram.com/moviespacestudios/" },
+                { icon: "logo-tiktok", label: "TikTok", url: "https://www.tiktok.com/@moviespacestudios" },
+                { icon: "logo-youtube", label: "YouTube", url: "https://www.youtube.com/channel/UC5j0C8PzElphIs6jqwQYP6w" },
                 { icon: "globe-outline", label: "Website", url: "https://moviespaces.org" },
               ] as const
             ).map((social) => (

@@ -151,13 +151,34 @@ namespace Backend.Controllers
                 return Ok();
             }
 
-            // The sender's display name lives in Supabase (profiles), which
-            // this DB can't see — so it comes from the client, capped to the
-            // same ceiling as every other name so it can't be used to ship a
-            // request-sized blob into someone's notification tray. Preview
-            // is null-safe for the same reason (both come off the body).
-            var senderName = PushRules.CapSenderName(req.SenderName);
-            var rawPreview = req.Preview ?? "";
+            // SECURITY: the name and text come from Supabase, never the body.
+            // req.SenderName/req.Preview used to be pushed as-is, so any friend
+            // could put arbitrary text under any name in someone's
+            // notification tray. The app inserts the message before calling
+            // this, so the newest message from sender to recipient IS the
+            // preview; with no recent one there is nothing to notify about.
+            // (The body fields are still accepted, and ignored, so builds
+            // already in the App Store keep working.)
+            var latest = await SupabaseGetArrayAsync(
+                $"messages?select=content,created_at&sender_id=eq.{senderId}&receiver_id=eq.{recipientUserId}" +
+                "&order=created_at.desc&limit=1");
+            if (latest is not { } rows || rows.GetArrayLength() == 0) return Ok();
+            var message = rows[0];
+            if (!message.TryGetProperty("created_at", out var createdAt)
+                || !createdAt.TryGetDateTimeOffset(out var sentAt)
+                || DateTimeOffset.UtcNow - sentAt > DmNotifyWindow)
+            {
+                return Ok();
+            }
+
+            var profile = await SupabaseGetArrayAsync($"profiles?select=display_name&id=eq.{senderId}");
+            var displayName = profile is { } p && p.GetArrayLength() > 0
+                && p[0].TryGetProperty("display_name", out var dn) && dn.ValueKind == JsonValueKind.String
+                ? dn.GetString()
+                : null;
+
+            var senderName = PushRules.CapSenderName(displayName);
+            var rawPreview = message.TryGetProperty("content", out var c) ? c.GetString() ?? "" : "";
             var preview = rawPreview.Length > 120 ? rawPreview.Substring(0, 120) + "…" : rawPreview;
             await _pushNotificationService.NotifyUserAsync(
                 _db, recipientUserId, $"💬 {senderName}", preview,
@@ -178,33 +199,48 @@ namespace Backend.Controllers
                 return false;
             }
 
+            var filter =
+                $"or=(and(requester_id.eq.{userIdA},receiver_id.eq.{userIdB}),and(requester_id.eq.{userIdB},receiver_id.eq.{userIdA}))";
+            var rows = await SupabaseGetArrayAsync($"friendships?select=id&status=eq.accepted&{filter}");
+            return rows is { } r && r.GetArrayLength() > 0;
+        }
+
+        // How old the newest DM may be and still count as "the message this
+        // notify call is about". The app calls notify right after its insert
+        // returns, so seconds is normal; the slack covers a slow network.
+        private static readonly TimeSpan DmNotifyWindow = TimeSpan.FromMinutes(2);
+
+        // GET {Supabase}/rest/v1/{pathAndQuery} with the service role key
+        // (bypasses RLS). Returns the JSON array, or null on any failure.
+        // Same caveat as AreFriendsAsync: every id interpolated into
+        // pathAndQuery must already be a validated GUID.
+        private async Task<JsonElement?> SupabaseGetArrayAsync(string pathAndQuery)
+        {
             var supabaseUrl = _configuration["Supabase:Url"];
             var serviceRoleKey = _configuration["Supabase:ServiceRoleKey"];
             if (string.IsNullOrEmpty(supabaseUrl) || string.IsNullOrEmpty(serviceRoleKey))
             {
-                _logger.LogError("Cannot verify friendship: Supabase:ServiceRoleKey is not configured.");
-                return false;
+                _logger.LogError("Cannot query Supabase: Supabase:ServiceRoleKey is not configured.");
+                return null;
             }
 
             var authorityUrl = supabaseUrl.EndsWith("/") ? supabaseUrl : $"{supabaseUrl}/";
-            var filter =
-                $"or=(and(requester_id.eq.{userIdA},receiver_id.eq.{userIdB}),and(requester_id.eq.{userIdB},receiver_id.eq.{userIdA}))";
-            var url = $"{authorityUrl}rest/v1/friendships?select=id&status=eq.accepted&{filter}";
-
             var client = _httpClientFactory.CreateClient();
-            var request = new HttpRequestMessage(HttpMethod.Get, url);
+            var request = new HttpRequestMessage(HttpMethod.Get, $"{authorityUrl}rest/v1/{pathAndQuery}");
             request.Headers.Add("apikey", serviceRoleKey);
             request.Headers.Add("Authorization", $"Bearer {serviceRoleKey}");
 
             var response = await client.SendAsync(request);
-            if (!response.IsSuccessStatusCode) return false;
+            if (!response.IsSuccessStatusCode) return null;
 
             var body = await response.Content.ReadAsStringAsync();
             using var doc = JsonDocument.Parse(body);
-            return doc.RootElement.ValueKind == JsonValueKind.Array && doc.RootElement.GetArrayLength() > 0;
+            return doc.RootElement.ValueKind == JsonValueKind.Array ? doc.RootElement.Clone() : null;
         }
     }
 
     public record RegisterPushTokenRequest(string Token);
-    public record NotifyDmRequest(string RecipientUserId, string SenderName, string Preview);
+    // SenderName and Preview are ignored (read from Supabase instead) but still
+    // accepted: shipped app builds send them.
+    public record NotifyDmRequest(string RecipientUserId, string? SenderName = null, string? Preview = null);
 }

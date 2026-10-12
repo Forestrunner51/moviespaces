@@ -309,6 +309,9 @@ namespace Backend.Controllers
         [AllowAnonymous]
         public async Task<IActionResult> ResolveSpaceCode(string code)
         {
+            if (!TryConsumeCodeLookup())
+                return StatusCode(StatusCodes.Status429TooManyRequests, new { error = "Too many code lookups. Try again in a minute." });
+
             var normalized = code.Trim().ToUpperInvariant();
             var group = await _db.Groups.FirstOrDefaultAsync(g => g.SpaceCode == normalized);
             if (group == null) return NotFound(new { error = "No Space found with that code." });
@@ -336,8 +339,54 @@ namespace Backend.Controllers
             var bySlug = await _db.Groups.AsNoTracking().Include(g => g.Members).FirstOrDefaultAsync(g => g.Slug == id);
             if (bySlug != null) return bySlug;
 
+            // Throttled like ResolveSpaceCode: a code-shaped id makes GetGroup
+            // and /space/{id} the same "does this code exist" oracle. Reads
+            // as not-found when over budget. The app only resolves by code
+            // once per link (space/[id].tsx swaps in the Guid), so polling
+            // never lands here.
+            if (!TryConsumeCodeLookup()) return null;
+
             var normalizedCode = id.Trim().ToUpperInvariant();
             return await _db.Groups.AsNoTracking().Include(g => g.Members).FirstOrDefaultAsync(g => g.SpaceCode == normalizedCode);
+        }
+
+        private const string CustomVenuePlaceholder = "Sign in to see the location";
+
+        // Only a venue picked from Google Places (or a catalog cinema) is
+        // known to be a public business. Everything else could be typed-in
+        // free text, a home address included. A theater chosen through the
+        // showtimes picker also lands here (it stores no place id), so
+        // signed-out visitors don't see those names either: the safe side.
+        private static bool IsCustomVenue(Group g) =>
+            g.SpaceType == "private_rental" || (g.GooglePlaceId == null && g.CinemaId == null);
+
+        private static string FirstNameOnly(string? name)
+        {
+            var trimmed = (name ?? "").Trim();
+            var space = trimmed.IndexOf(' ');
+            return space > 0 ? trimmed[..space] : trimmed;
+        }
+
+        // SECURITY: a SpaceCode is the only credential on a private Space, and
+        // the code space is 31^6 (~890M). The global limiter (300/min/IP)
+        // would let one IP try ~430k codes a day across every endpoint that
+        // looks a group up by code, which stops being negligible as private
+        // Spaces add up. One shared budget across all of them, per IP: a
+        // person types or opens a code a handful of times, not 20 a minute.
+        private static readonly System.Threading.RateLimiting.PartitionedRateLimiter<string> CodeLookups =
+            System.Threading.RateLimiting.PartitionedRateLimiter.Create<string, string>(ip =>
+                System.Threading.RateLimiting.RateLimitPartition.GetFixedWindowLimiter(ip, _ =>
+                    new System.Threading.RateLimiting.FixedWindowRateLimiterOptions
+                    {
+                        PermitLimit = 20,
+                        Window = TimeSpan.FromMinutes(1),
+                    }));
+
+        private bool TryConsumeCodeLookup()
+        {
+            var ip = HttpContext.Connection.RemoteIpAddress?.ToString() ?? "unknown";
+            using var lease = CodeLookups.AttemptAcquire(ip);
+            return lease.IsAcquired;
         }
 
         // POST /api/group/community-spaces/seed
@@ -1357,7 +1406,28 @@ namespace Backend.Controllers
                 foreach (var space in spaces)
                 {
                     space.UserId = "";
-                    foreach (var m in space.Members) m.UserId = "";
+                    foreach (var m in space.Members)
+                    {
+                        m.UserId = "";
+                        m.Name = FirstNameOnly(m.Name);
+                    }
+                    space.HostName = FirstNameOnly(space.HostName);
+
+                    // SECURITY: a watch party's venue is free text ("Sarah's
+                    // Apartment, Unit 4B") plus geocoded coordinates, and this
+                    // feed needs no account. Anyone on the internet could read
+                    // where and when a stranger would be home hosting. A real
+                    // theater is public knowledge; a custom venue is only
+                    // shown to signed-in users.
+                    if (IsCustomVenue(space))
+                    {
+                        space.CinemaName = CustomVenuePlaceholder;
+                        space.TheaterLatitude = null;
+                        space.TheaterLongitude = null;
+                        space.GooglePlaceId = null;
+                        space.HangoutNotes = null;
+                        space.BookingUrl = "";
+                    }
                 }
             }
 
