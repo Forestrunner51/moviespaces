@@ -141,6 +141,8 @@ export default function ProfileScreen() {
     }, [load, loadMySpaces]),
   );
 
+  const editTaste = () => router.push({ pathname: "/onboarding-taste", params: { edit: "1" } });
+
   const startEditing = () => {
     setNameInput(profile?.displayName ?? "");
     setUsernameInput(profile?.username ?? "");
@@ -471,26 +473,42 @@ export default function ProfileScreen() {
         </View>
 
         {/* Top 3 from onboarding — taste as identity, next to the numbers. */}
+        {/* Tapping either row reopens the taste step in edit mode. */}
         {!editing && profile && profile.favoriteMovies.length > 0 && (
-          <View style={styles.topThreeRow}>
+          <TouchableOpacity activeOpacity={0.8} style={styles.topThreeRow} onPress={editTaste} accessibilityLabel="Edit your top 3">
             <Text style={styles.topThreeLabel}>TOP 3</Text>
             {profile.favoriteMovies.slice(0, 3).map((m) => (
               <MoviePoster key={m.imdbId} uri={m.posterPath} width={52} />
             ))}
-          </View>
+            <Ionicons name="pencil" size={14} color={Palette.textFaint} style={styles.tasteEditIcon} />
+          </TouchableOpacity>
         )}
 
         {/* The other half of the taste step — "three you couldn't stand".
             Same row treatment: hating Morbius is as much identity as loving
             Heat. */}
         {!editing && profile && profile.leastFavoriteMovies.length > 0 && (
-          <View style={styles.topThreeRow}>
+          <TouchableOpacity activeOpacity={0.8} style={styles.topThreeRow} onPress={editTaste} accessibilityLabel="Edit your bottom 3">
             <Text style={[styles.topThreeLabel, styles.bottomThreeLabel]}>BOTTOM 3</Text>
             {profile.leastFavoriteMovies.slice(0, 3).map((m) => (
               <MoviePoster key={m.imdbId} uri={m.posterPath} width={52} />
             ))}
-          </View>
+            <Ionicons name="pencil" size={14} color={Palette.textFaint} style={styles.tasteEditIcon} />
+          </TouchableOpacity>
         )}
+
+        {/* Skipped the taste step at onboarding: without this the rows above
+            simply never appear and there's no way back to it. */}
+        {!editing &&
+          profile &&
+          profile.favoriteMovies.length === 0 &&
+          profile.leastFavoriteMovies.length === 0 && (
+            <TouchableOpacity activeOpacity={0.8} style={styles.topThreeRow} onPress={editTaste} accessibilityRole="button">
+              <Ionicons name="film-outline" size={18} color={Palette.accent} />
+              <Text style={styles.tasteAddText}>Add your Top 3 and Bottom 3</Text>
+              <Ionicons name="chevron-forward" size={16} color={Palette.textFaint} style={styles.tasteEditIcon} />
+            </TouchableOpacity>
+          )}
 
         {/* Identity in numbers — what Strava's totals and Kaya's send count do
             for a profile. Films seen = Spaces that have passed; crews = Movie
@@ -626,6 +644,8 @@ const styles = StyleSheet.create({
   // posters started at different x positions.
   topThreeLabel: { ...Display.section, fontSize: 14, lineHeight: 17, color: Palette.textFaint, width: 62 },
   bottomThreeLabel: { color: Palette.danger },
+  tasteEditIcon: { marginLeft: "auto" },
+  tasteAddText: { ...Type.small, fontFamily: Font.semibold, color: Palette.text },
   statRow: {
     ...SpaceStyles.glassCard,
     flexDirection: "row",

@@ -1,5 +1,6 @@
-import { useRef, useState } from "react";
+import { useEffect, useRef, useState } from "react";
 import {
+  Alert,
   View,
   TouchableOpacity,
   StyleSheet,
@@ -151,10 +152,60 @@ function TastePicker({
 }
 
 export default function OnboardingTasteScreen() {
-  const { genres } = useLocalSearchParams<{ genres?: string }>();
+  // edit=1: opened from the profile, not onboarding. Skipping this step used
+  // to be permanent — nothing else in the app could set the top-3s — so the
+  // profile reuses this screen, preloaded, and comes back to itself on save.
+  const { genres, edit } = useLocalSearchParams<{ genres?: string; edit?: string }>();
+  const editing = edit === "1";
   const [loves, setLoves] = useState<Pick[]>([]);
   const [hates, setHates] = useState<Pick[]>([]);
   const [saving, setSaving] = useState(false);
+  const [loaded, setLoaded] = useState(!editing);
+
+  useEffect(() => {
+    if (!editing) return;
+    (async () => {
+      const {
+        data: { user },
+      } = await supabase.auth.getUser();
+      if (user) {
+        const { data } = await supabase
+          .from("profiles")
+          .select("favorite_movies, least_favorite_movies")
+          .eq("id", user.id)
+          .single();
+        if (Array.isArray(data?.favorite_movies)) setLoves(data.favorite_movies.slice(0, MAX));
+        if (Array.isArray(data?.least_favorite_movies)) setHates(data.least_favorite_movies.slice(0, MAX));
+      }
+      setLoaded(true);
+    })().catch(() => setLoaded(true));
+  }, [editing]);
+
+  // Editing can clear both lists, so unlike onboarding an empty save is a
+  // real write, and a failure has to be said out loud rather than skipped.
+  const saveEdits = async () => {
+    if (saving) return;
+    setSaving(true);
+    try {
+      const {
+        data: { user },
+      } = await supabase.auth.getUser();
+      if (!user) throw new Error("not signed in");
+      const { error } = await supabase
+        .from("profiles")
+        .update({
+          favorite_movies: loves.length > 0 ? loves : null,
+          least_favorite_movies: hates.length > 0 ? hates : null,
+        })
+        .eq("id", user.id);
+      if (error) throw error;
+      router.back();
+    } catch {
+      Alert.alert("Couldn't save", "Check your connection and try again.");
+    } finally {
+      setSaving(false);
+    }
+  };
 
   // Tour BEFORE the clubs/crews join screen: testers hit "join a club or
   // crew" without knowing what either was. The 60-second tour is the
@@ -226,22 +277,45 @@ export default function OnboardingTasteScreen() {
           onSearchFocus={scrollSectionUp}
         />
 
-        <TouchableOpacity
-          activeOpacity={0.85}
-          style={[styles.button, !hasAny && styles.buttonDisabled]}
-          onPress={saveAndContinue}
-          disabled={!hasAny || saving}
-          accessibilityRole="button"
-        >
-          {saving ? (
-            <ActivityIndicator color={Palette.base} />
-          ) : (
-            <Text style={styles.buttonText}>Save and continue</Text>
-          )}
-        </TouchableOpacity>
-        <TouchableOpacity activeOpacity={0.7} onPress={next} accessibilityRole="button">
-          <Text style={styles.skipText}>Skip</Text>
-        </TouchableOpacity>
+        {editing ? (
+          <>
+            <TouchableOpacity
+              activeOpacity={0.85}
+              style={[styles.button, !loaded && styles.buttonDisabled]}
+              onPress={saveEdits}
+              disabled={!loaded || saving}
+              accessibilityRole="button"
+            >
+              {saving ? (
+                <ActivityIndicator color={Palette.base} />
+              ) : (
+                <Text style={styles.buttonText}>Save</Text>
+              )}
+            </TouchableOpacity>
+            <TouchableOpacity activeOpacity={0.7} onPress={() => router.back()} accessibilityRole="button">
+              <Text style={styles.skipText}>Cancel</Text>
+            </TouchableOpacity>
+          </>
+        ) : (
+          <>
+            <TouchableOpacity
+              activeOpacity={0.85}
+              style={[styles.button, !hasAny && styles.buttonDisabled]}
+              onPress={saveAndContinue}
+              disabled={!hasAny || saving}
+              accessibilityRole="button"
+            >
+              {saving ? (
+                <ActivityIndicator color={Palette.base} />
+              ) : (
+                <Text style={styles.buttonText}>Save and continue</Text>
+              )}
+            </TouchableOpacity>
+            <TouchableOpacity activeOpacity={0.7} onPress={next} accessibilityRole="button">
+              <Text style={styles.skipText}>Skip</Text>
+            </TouchableOpacity>
+          </>
+        )}
       </ScrollView>
       </KeyboardAvoidingView>
     </Starfield>
