@@ -3,3 +3,5 @@
 /privacy   https://moviespaces.onrender.com/legal/privacy  302
 /terms     https://moviespaces.onrender.com/legal/terms    302
 /support   https://moviespaces.onrender.com/support        302
+# The home page is the project index now; the app's page moved to /moviespaces.
+/projects  /  301

@@ -4,137 +4,59 @@
 <meta charset="utf-8">
 <meta name="viewport" content="width=device-width, initial-scale=1">
 <meta name="theme-color" content="#16100D">
-<title>About — MovieSpaces</title>
-<meta name="description" content="Why MovieSpaces exists: one night at the movies in October 2025, and everything that came after.">
+<title>About — MovieSpaces Studios</title>
+<meta name="description" content="How MovieSpaces Studios started: one night at the movies in October 2025, and everything that came after.">
 <link rel="canonical" href="https://moviespaces.org/about">
 <link rel="icon" href="/favicon.svg" type="image/svg+xml">
 <link rel="apple-touch-icon" href="/apple-touch-icon.png">
 <meta property="og:type" content="website">
-<meta property="og:site_name" content="MovieSpaces">
+<meta property="og:site_name" content="MovieSpaces Studios">
 <meta property="og:url" content="https://moviespaces.org/about">
-<meta property="og:title" content="About MovieSpaces">
-<meta property="og:description" content="It started with one night in October 2025. Why MovieSpaces exists, from the founder.">
-<meta property="og:image" content="https://moviespaces.org/og.png">
-<meta property="og:image:width" content="1200">
-<meta property="og:image:height" content="630">
-<meta name="twitter:card" content="summary_large_image">
-<meta name="twitter:title" content="About MovieSpaces">
-<meta name="twitter:description" content="It started with one night in October 2025. Why MovieSpaces exists, from the founder.">
-<meta name="twitter:image" content="https://moviespaces.org/og.png">
+<meta property="og:title" content="About MovieSpaces Studios">
+<meta property="og:description" content="It started with one night at the movies in October 2025.">
+<meta name="twitter:card" content="summary">
 <link rel="preconnect" href="https://fonts.googleapis.com">
 <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
 <link href="https://fonts.googleapis.com/css2?family=Bebas+Neue&family=Karla:ital,wght@0,400;0,600;0,700;1,400&display=swap" rel="stylesheet">
-<style>
-  :root{
-    --base:#16100D; --raised:#221913; --surface:#2B201A;
-    --text:#F7F0E8; --muted:#B3A296; --faint:#7D6D61;
-    --accent:#EF8A3C; --accent-dim:rgba(239,138,60,.13); --accent-border:rgba(239,138,60,.35);
-    --border:rgba(247,240,232,.10);
-  }
-  *{margin:0;padding:0;box-sizing:border-box}
-  body{
-    background:var(--base);color:var(--text);
-    font-family:Karla,system-ui,sans-serif;line-height:1.75;-webkit-font-smoothing:antialiased;
-    background-image:
-      radial-gradient(900px 460px at 75% -80px, rgba(239,138,60,.08), transparent 60%),
-      radial-gradient(1.2px 1.2px at 14% 22%, rgba(247,240,232,.25), transparent 100%),
-      radial-gradient(1px 1px at 62% 48%, rgba(247,240,232,.16), transparent 100%),
-      radial-gradient(1.3px 1.3px at 88% 16%, rgba(247,240,232,.22), transparent 100%);
-    background-repeat:no-repeat,repeat,repeat,repeat;
-    background-size:auto, 880px 700px, 1000px 780px, 920px 720px;
-  }
-  .wrap{max-width:640px;margin:0 auto;padding:0 24px}
-  nav{display:flex;align-items:center;justify-content:space-between;padding:26px 0}
-  .wordmark{font-family:'Bebas Neue',sans-serif;font-size:22px;letter-spacing:4px;color:var(--text);text-decoration:none}
-  .wordmark span{color:var(--accent)}
-  nav a.back{color:var(--muted);text-decoration:none;font-size:15px;font-weight:600}
-  nav a.back:hover{color:var(--accent)}
-
-  article{padding:44px 0 20px}
-  .kicker{font-family:'Bebas Neue',sans-serif;letter-spacing:3px;font-size:15px;color:var(--accent);margin-bottom:12px}
-  h1{font-weight:700;font-size:clamp(32px,5vw,44px);line-height:1.12;letter-spacing:-.6px;margin-bottom:26px}
-  article p{color:var(--muted);font-size:17.5px;margin-bottom:22px}
-  article p strong{color:var(--text)}
-  article p em{color:var(--accent);font-style:italic}
-  .pull{border-left:3px solid var(--accent);padding:6px 0 6px 20px;margin:30px 0;font-style:italic;font-size:20px;color:var(--text);line-height:1.5}
-  /* Full-width rows, not two columns. This page's reading column is 640px,
-     so side-by-side cards left each figure about 260px of text: six wrapped
-     lines against four, and a ragged gap under the shorter one. Across the
-     full width the number reads as a figure and the sentence as a sentence. */
-  .stats{display:grid;gap:14px;margin:30px 0}
-  .stat{
-    display:grid;grid-template-columns:auto 1fr;gap:22px;align-items:baseline;
-    background:var(--surface,rgba(247,240,232,.04));border:1px solid var(--border);
-    border-radius:14px;padding:22px 24px;
-  }
-  /* Bebas for the figure, the same face the app uses for dates and numbers. */
-  .stat .n{font-family:'Bebas Neue',sans-serif;font-size:46px;line-height:.9;color:var(--accent);letter-spacing:1px}
-  .stat p{color:var(--muted);font-size:15.5px}
-  /* Attribution sits on the figure it belongs to, not in a footnote. Small
-     and plain on purpose: a citation that shouts is doing PR, while the
-     point of showing a source is that the reader can go and check it. */
-  .stat cite{display:block;font-style:normal;font-size:12.5px;color:var(--faint);margin-top:10px;line-height:1.4}
-  .stat cite a{color:var(--faint);text-decoration:none;border-bottom:1px solid var(--border2)}
-  .stat cite a:hover{color:var(--accent);border-bottom-color:var(--accent-border)}
-  .stat cite em{font-style:italic}
-  .sign{margin-top:34px;color:var(--text)}
-  .sign .name{font-family:'Bebas Neue',sans-serif;letter-spacing:2px;font-size:19px}
-  .sign .role{color:var(--faint);font-size:14px}
-  .cta{display:inline-block;margin-top:30px;background:var(--accent);color:var(--base);font-weight:700;font-size:16px;padding:13px 26px;border-radius:999px;text-decoration:none}
-  footer{margin-top:56px;border-top:1px solid var(--border);padding:26px 0 48px;display:flex;justify-content:space-between;gap:14px;flex-wrap:wrap}
-  footer a{color:var(--muted);text-decoration:none;margin-right:20px;font-size:14.5px}
-  footer a:hover{color:var(--accent)}
-  footer .fine{color:var(--faint);font-size:13.5px}
-
-  @media (max-width:560px){
-    .wrap{padding:0 18px}
-    nav{padding:20px 0}
-    article{padding:30px 0 12px}
-    article p{font-size:16.5px;margin-bottom:19px}
-    .pull{font-size:18px;padding-left:16px;margin:24px 0}
-    .stat{grid-template-columns:1fr;gap:6px}
-    .stat .n{font-size:40px}
-    .cta{display:block;text-align:center;margin-top:26px}
-    footer{margin-top:44px;flex-direction:column;align-items:flex-start;gap:12px}
-  }
-  /* Social links, same set as the home page footer. */
-  .socials{display:flex;gap:14px;align-items:center;margin-top:12px}
-  .socials a{color:var(--muted);display:flex;margin-right:0;padding:2px}
-  .socials a:hover{color:var(--accent)}
-</style>
+<link rel="stylesheet" href="/site.css">
 </head>
 <body>
   <div class="wrap">
-    <nav>
-      <a class="wordmark" href="/">MOVIE<span>SPACES</span></a>
-      <a class="back" href="/">&larr; Home</a>
-    </nav>
+    <header>
+      <a class="wordmark" href="/">MovieSpaces<span>Studios</span></a>
+      <nav>
+        <a href="/">Work</a>
+        <a href="/about" aria-current="page">About</a>
+        <a href="mailto:support@moviespaces.org">Contact</a>
+      </nav>
+    </header>
 
-    <article>
-      <div class="kicker">ABOUT</div>
+    <div class="intro">
       <h1>It started with one night in October 2025.</h1>
+      <p class="lede">MovieSpaces Studios makes games and apps. This is how the first one came about.</p>
+    </div>
 
+    <div class="prose">
       <p>On October 24th, 2025 I went to see Chainsaw Man, not expecting much, and walked out different. The movie itself mattered, but what stayed with me was everything around it: a dark room full of strangers gasping at the same moment, the conversation spilling out into the parking lot, the feeling that for two hours a room of people who'd never met were <strong>somewhere together</strong>.</p>
 
-      <p>I spent a long time trying to recapture that, and kept running into the same wall. Not the movies. The <em>logistics</em>. Getting friends to commit to a showing takes a group chat and a small miracle. Finding people who want to see the same film you do, at the same theater, on the same night? There was no way to do it at all. And when I looked into renting a theater for a private screening, the process was so opaque it felt like it was designed to make you give up.</p>
+      <p>I spent a long time trying to recapture that, and kept running into the same wall. Not the movies. The logistics. Getting friends to commit to a showing takes a group chat and a small miracle. Finding people who want to see the same film you do, at the same theater, on the same night? There was no way to do it at all. And when I looked into renting a theater for a private screening, the process was so opaque it felt like it was designed to make you give up.</p>
 
-      <p class="pull">The best part of the movies was never the screen. It was the room.</p>
+      <blockquote>The best part of the movies was never the screen. It was the room.</blockquote>
 
-      <!-- Two figures that sit oddly next to each other, cited rather than
-           asserted. Moviegoing specifically, not screen time: by total hours
-           in front of a screen Gen Z is the LOWEST of any generation, which
-           is a different measure and not the one that matters here. -->
-      <div class="stats">
-        <div class="stat">
+      <!-- Moviegoing specifically, not screen time: by total hours in front
+           of a screen Gen Z is the LOWEST of any generation, which is a
+           different measure and not the one that matters here. -->
+      <div class="figures">
+        <div class="figure">
           <div class="n">87%</div>
-          <div class="body">
+          <div>
             <p>of Gen Z went to the cinema in 2025, against 58% of boomers. 6.1 trips each, more than any other generation.</p>
             <cite><a href="https://cinemaunited.org/2025/12/17/cinema-united-releases-strength-of-theatrical-exhibition-2025-update-spotlighting-important-movie-theatre-industry-metrics/" rel="noopener">Cinema United, <em>Strength of Theatrical Exhibition</em>, 2025</a></cite>
           </div>
         </div>
-        <div class="stat">
+        <div class="figure">
           <div class="n">67%</div>
-          <div class="body">
+          <div>
             <p>of Gen Z adults say they feel lonely. The loneliest of any generation, every time the survey has run since 2018.</p>
             <cite><a href="https://newsroom.thecignagroup.com/vitality-research-new-insight-into-five-years-of-loneliness" rel="noopener">Cigna Group, loneliness research, 2025</a></cite>
           </div>
@@ -143,36 +65,20 @@
 
       <p>We are the generation that goes to the cinema most, and the loneliest one anybody has measured. Both of those are true at once, which tells you the problem was never that people stopped wanting to sit in a dark room together. The room is full of us. We just arrive alone, and leave without having said a word to anybody in it.</p>
 
-      <p>So I built the thing I kept wishing existed. An app where you pick a real showing near you and get grouped with a handful of people going to it. Where hosting a movie night — at a theater, at your place, anywhere with a screen — takes a minute instead of a week of planning. Where the night doesn't end at the credits, because everyone's already said what they're up for after.</p>
+      <p>So I built the thing I kept wishing existed. An app where you pick a real showing near you and get grouped with a handful of people going to it. Where hosting a movie night, at a theater, at your place, anywhere with a screen, takes a minute instead of a week of planning. Where the night doesn't end at the credits, because everyone's already said what they're up for after.</p>
 
-      <p>And thus <strong>MovieSpaces</strong> was born. We believe movies are a social event — that they're better in a room, with people, with somewhere to go afterwards. If one night at the movies can change your year, imagine what a habit of them can do.</p>
+      <p>That became <a href="/moviespaces">MovieSpaces</a>, and it's on the App Store now. Next, we're making games.</p>
 
-      <div class="sign">
-        <div class="name">MOVIESPACES STUDIOS</div>
-        <div class="role">Makers of MovieSpaces</div>
-      </div>
-
-      <a class="cta" href="/#how">See how it works</a>
-    </article>
+      <p class="sign">MovieSpaces Studios<small>Texas, 2026</small></p>
+    </div>
 
     <footer>
+      <div>&copy; 2026 MovieSpaces Studios</div>
       <div>
         <a href="/privacy">Privacy</a>
         <a href="/terms">Terms</a>
         <a href="/support">Support</a>
       </div>
-      <div class="socials">
-        <a href="https://www.instagram.com/moviespacestudios/" aria-label="MovieSpaces on Instagram" target="_blank" rel="noopener">
-          <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><rect x="2.5" y="2.5" width="19" height="19" rx="5.5"/><circle cx="12" cy="12" r="4.5"/><circle cx="17.6" cy="6.4" r="1.3" fill="currentColor" stroke="none"/></svg>
-        </a>
-        <a href="https://www.tiktok.com/@moviespacestudios" aria-label="MovieSpaces on TikTok" target="_blank" rel="noopener">
-          <svg width="18" height="18" viewBox="0 0 24 24" fill="currentColor"><path d="M16.6 3c.4 2.1 1.8 3.6 3.9 3.9v3c-1.5 0-2.9-.5-3.9-1.3v6.6c0 3.4-2.7 6-6 6-3.3 0-6-2.6-6-6 0-3.3 2.7-6 6-6 .3 0 .7 0 1 .1v3.1c-.3-.1-.7-.2-1-.2-1.6 0-3 1.4-3 3 0 1.7 1.4 3 3 3s3-1.3 3-3V3h3z"/></svg>
-        </a>
-        <a href="https://www.youtube.com/channel/UC5j0C8PzElphIs6jqwQYP6w" aria-label="MovieSpaces on YouTube" target="_blank" rel="noopener">
-          <svg width="19" height="19" viewBox="0 0 24 24" fill="currentColor"><path d="M22.5 7.2a2.8 2.8 0 0 0-2-2C18.9 4.8 12 4.8 12 4.8s-6.9 0-8.5.4a2.8 2.8 0 0 0-2 2C1.1 8.8 1.1 12 1.1 12s0 3.2.4 4.8a2.8 2.8 0 0 0 2 2c1.6.4 8.5.4 8.5.4s6.9 0 8.5-.4a2.8 2.8 0 0 0 2-2c.4-1.6.4-4.8.4-4.8s0-3.2-.4-4.8zM9.8 15.3V8.7l5.8 3.3-5.8 3.3z"/></svg>
-        </a>
-      </div>
-      <div class="fine">&copy; 2026 MovieSpaces Studios &middot; support@moviespaces.org</div>
     </footer>
   </div>
 </body>
