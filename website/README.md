@@ -15,3 +15,14 @@ on Cloudflare):
 
 Also: add `support@moviespaces.org` in Cloudflare → Email → Email Routing →
 Custom addresses, forwarding to the owner inbox — the legal pages name it.
+
+## Layout
+
+- `/` — MovieSpaces Studios: project index + contact (`index.html`)
+- `/moviespaces` — the app's landing page (was `/`)
+- `/about` — studio about / founding story
+- `/clap`, `/test` — The Intermission toy, beta checklist
+- `/projects` 301s to `/`
+
+`site.css` is shared by `/`, `/about`, and the 404. To add a project, copy a
+`.project` row in `index.html`.

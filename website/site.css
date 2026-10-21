@@ -1,0 +1,83 @@
+/* Shared by the studio pages (/, /about, 404). The app page (/moviespaces)
+   and the toys (/clap, /test) keep their own inline styles because they have
+   layouts nothing else uses.
+
+   Deliberately plain: flat background, one accent used for links and status
+   only, no gradients, glows, or grain. The work is the decoration. */
+:root{
+  --base:#16100D; --raised:#1E1712;
+  --text:#F2EBE3; --muted:#A8978A; --faint:#75665B;
+  --accent:#EF8A3C; --positive:#7FB77E;
+  --rule:rgba(242,235,227,.12);
+  --mono:ui-monospace,"SF Mono",Menlo,Consolas,monospace;
+}
+*{margin:0;padding:0;box-sizing:border-box}
+body{background:var(--base);color:var(--text);font-family:Karla,system-ui,sans-serif;font-size:17px;line-height:1.6;-webkit-font-smoothing:antialiased}
+a{color:inherit}
+a:focus-visible{outline:2px solid var(--accent);outline-offset:3px}
+.wrap{max-width:880px;margin:0 auto;padding:0 24px}
+
+/* --- header --- */
+header{display:flex;align-items:baseline;justify-content:space-between;gap:16px;padding:28px 0;border-bottom:1px solid var(--rule)}
+.wordmark{font-family:'Bebas Neue',sans-serif;font-size:22px;letter-spacing:3px;text-decoration:none;white-space:nowrap}
+.wordmark span{color:var(--faint);margin-left:6px}
+header nav a{color:var(--muted);text-decoration:none;font-size:15px;margin-left:24px}
+header nav a:hover,header nav a[aria-current]{color:var(--text)}
+
+/* --- type --- */
+.intro{padding:72px 0 64px}
+h1{font-size:clamp(30px,4.6vw,44px);font-weight:700;line-height:1.12;letter-spacing:-.02em;max-width:18ch}
+.lede{color:var(--muted);font-size:19px;max-width:34em;margin-top:20px}
+.lede a,.prose a{color:var(--text);text-decoration:underline;text-decoration-color:var(--faint);text-underline-offset:3px}
+.lede a:hover,.prose a:hover{text-decoration-color:var(--accent)}
+h2{font-family:var(--mono);font-size:13px;font-weight:400;color:var(--faint);letter-spacing:.04em;text-transform:uppercase;margin-bottom:8px}
+
+/* --- project index: a ruled list, like a credits sheet --- */
+.work{border-top:1px solid var(--rule)}
+.project{display:grid;grid-template-columns:3ch 1fr auto;gap:0 24px;padding:26px 0;border-bottom:1px solid var(--rule);text-decoration:none}
+.project .no{font-family:var(--mono);font-size:13px;color:var(--faint);padding-top:5px}
+.project h3{font-size:22px;font-weight:700;letter-spacing:-.01em;line-height:1.3}
+.project p{color:var(--muted);margin-top:4px;max-width:36em}
+.project .kind{font-family:var(--mono);font-size:13px;color:var(--faint);margin-top:10px}
+.project .status{font-family:var(--mono);font-size:13px;color:var(--muted);white-space:nowrap;padding-top:5px}
+.project .status::before{content:"";display:inline-block;width:7px;height:7px;border-radius:50%;background:var(--faint);margin-right:8px;vertical-align:1px}
+.project .status.live::before{background:var(--positive)}
+.project .status.wip::before{background:var(--accent)}
+a.project:hover h3{text-decoration:underline;text-decoration-color:var(--accent);text-underline-offset:4px;text-decoration-thickness:2px}
+.project.pending h3{color:var(--muted)}
+
+section{padding:56px 0 0}
+.prose{max-width:34em}
+.prose p{color:var(--muted);margin-bottom:18px}
+.prose p strong{color:var(--text);font-weight:600}
+.prose blockquote{color:var(--text);font-size:21px;line-height:1.45;margin:30px 0;padding-left:20px;border-left:2px solid var(--accent)}
+.sign{color:var(--text);margin-top:28px}
+.sign small{display:block;color:var(--faint);font-size:14px}
+
+/* Figures with their source attached, not in a footnote. */
+.figures{margin:30px 0;border-top:1px solid var(--rule)}
+.figure{display:grid;grid-template-columns:5ch 1fr;gap:20px;padding:20px 0;border-bottom:1px solid var(--rule)}
+.figure .n{font-family:'Bebas Neue',sans-serif;font-size:40px;line-height:1;color:var(--text)}
+.figure p{color:var(--muted);font-size:16px;margin:0}
+.figure cite{display:block;font-style:normal;font-size:13px;color:var(--faint);margin-top:6px}
+.figure cite a{color:inherit}
+
+/* --- footer --- */
+footer{margin-top:96px;padding:28px 0 56px;border-top:1px solid var(--rule);display:flex;flex-wrap:wrap;justify-content:space-between;gap:16px 32px;font-size:14px;color:var(--faint)}
+footer a{color:var(--muted);text-decoration:none;margin-right:20px}
+footer a:last-child{margin-right:0}
+footer a:hover{color:var(--text)}
+
+@media (max-width:600px){
+  body{font-size:16px}
+  .wrap{padding:0 18px}
+  header{flex-direction:column;gap:10px;padding:22px 0}
+  header nav a{margin:0 20px 0 0}
+  .intro{padding:48px 0 44px}
+  .lede{font-size:17px}
+  .project{grid-template-columns:1fr;padding:22px 0}
+  .project .no{display:none}
+  .project .status{order:-1;padding:0 0 6px}
+  .figure{grid-template-columns:1fr;gap:4px}
+  footer{flex-direction:column;margin-top:64px}
+}

@@ -4,99 +4,38 @@
 <meta charset="utf-8">
 <meta name="viewport" content="width=device-width, initial-scale=1">
 <meta name="theme-color" content="#16100D">
-<title>Not found — MovieSpaces</title>
+<title>Not found — MovieSpaces Studios</title>
 <meta name="robots" content="noindex">
+<link rel="icon" href="/favicon.svg" type="image/svg+xml">
+<link rel="apple-touch-icon" href="/apple-touch-icon.png">
 <link rel="preconnect" href="https://fonts.googleapis.com">
 <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
 <link href="https://fonts.googleapis.com/css2?family=Bebas+Neue&family=Karla:ital,wght@0,400;0,600;0,700;1,400&display=swap" rel="stylesheet">
-<style>
-  :root{
-    --base:#16100D; --raised:#221913; --surface:#2B201A;
-    --text:#F7F0E8; --muted:#B3A296; --faint:#7D6D61;
-    --accent:#EF8A3C; --accent-dim:rgba(239,138,60,.13); --accent-border:rgba(239,138,60,.35);
-    --border:rgba(247,240,232,.10);
-  }
-  *{margin:0;padding:0;box-sizing:border-box}
-  body{
-    background:var(--base);color:var(--text);
-    font-family:Karla,system-ui,sans-serif;line-height:1.75;-webkit-font-smoothing:antialiased;
-    background-image:
-      radial-gradient(900px 460px at 75% -80px, rgba(239,138,60,.08), transparent 60%),
-      radial-gradient(1.2px 1.2px at 14% 22%, rgba(247,240,232,.25), transparent 100%),
-      radial-gradient(1px 1px at 62% 48%, rgba(247,240,232,.16), transparent 100%),
-      radial-gradient(1.3px 1.3px at 88% 16%, rgba(247,240,232,.22), transparent 100%);
-    background-repeat:no-repeat,repeat,repeat,repeat;
-    background-size:auto, 880px 700px, 1000px 780px, 920px 720px;
-  }
-  .wrap{max-width:640px;margin:0 auto;padding:0 24px}
-  nav{display:flex;align-items:center;justify-content:space-between;padding:26px 0}
-  .wordmark{font-family:'Bebas Neue',sans-serif;font-size:22px;letter-spacing:4px;color:var(--text);text-decoration:none}
-  .wordmark span{color:var(--accent)}
-  nav a.back{color:var(--muted);text-decoration:none;font-size:15px;font-weight:600}
-  nav a.back:hover{color:var(--accent)}
-
-  article{padding:44px 0 20px}
-  .kicker{font-family:'Bebas Neue',sans-serif;letter-spacing:3px;font-size:15px;color:var(--accent);margin-bottom:12px}
-  h1{font-weight:700;font-size:clamp(32px,5vw,44px);line-height:1.12;letter-spacing:-.6px;margin-bottom:26px}
-  article p{color:var(--muted);font-size:17.5px;margin-bottom:22px}
-  article p strong{color:var(--text)}
-  article p em{color:var(--accent);font-style:italic}
-  .pull{border-left:3px solid var(--accent);padding:6px 0 6px 20px;margin:30px 0;font-style:italic;font-size:20px;color:var(--text);line-height:1.5}
-  .sign{margin-top:34px;color:var(--text)}
-  .sign .name{font-family:'Bebas Neue',sans-serif;letter-spacing:2px;font-size:19px}
-  .sign .role{color:var(--faint);font-size:14px}
-  .cta{display:inline-block;margin-top:30px;background:var(--accent);color:var(--base);font-weight:700;font-size:16px;padding:13px 26px;border-radius:999px;text-decoration:none}
-  footer{margin-top:56px;border-top:1px solid var(--border);padding:26px 0 48px;display:flex;justify-content:space-between;gap:14px;flex-wrap:wrap}
-  footer a{color:var(--muted);text-decoration:none;margin-right:20px;font-size:14.5px}
-  footer a:hover{color:var(--accent)}
-  footer .fine{color:var(--faint);font-size:13.5px}
-
-  @media (max-width:560px){
-    .wrap{padding:0 18px}
-    nav{padding:20px 0}
-    article{padding:30px 0 12px}
-    article p{font-size:16.5px;margin-bottom:19px}
-    .pull{font-size:18px;padding-left:16px;margin:24px 0}
-    .cta{display:block;text-align:center;margin-top:26px}
-    footer{margin-top:44px;flex-direction:column;align-items:flex-start;gap:12px}
-  }
-  /* Social links, same set as the home page footer. */
-  .socials{display:flex;gap:14px;align-items:center;margin-top:12px}
-  .socials a{color:var(--muted);display:flex;margin-right:0;padding:2px}
-  .socials a:hover{color:var(--accent)}
-</style>
+<link rel="stylesheet" href="/site.css">
 </head>
 <body>
   <div class="wrap">
-    <nav>
-      <a class="wordmark" href="/">MOVIE<span>SPACES</span></a>
-      <a class="back" href="/">&larr; Home</a>
-    </nav>
-    <article>
-      <div class="kicker">404</div>
-      <h1>This showing doesn't exist.</h1>
-      <p>Wrong theater, wrong night, or the link's just old. Nothing's playing at this address.</p>
-      <a class="cta" href="/">Back to the lobby</a>
-    </article>
-    <footer>
-      <div>
+    <header>
+      <a class="wordmark" href="/">MovieSpaces<span>Studios</span></a>
+      <nav>
+        <a href="/">Work</a>
         <a href="/about">About</a>
+        <a href="mailto:support@moviespaces.org">Contact</a>
+      </nav>
+    </header>
+
+    <div class="intro">
+      <h1>Nothing&rsquo;s playing at this address.</h1>
+      <p class="lede">The link is old or mistyped. <a href="/">Back to the studio</a>, or <a href="/moviespaces">MovieSpaces</a> if that&rsquo;s what you were after.</p>
+    </div>
+
+    <footer>
+      <div>&copy; 2026 MovieSpaces Studios</div>
+      <div>
         <a href="/privacy">Privacy</a>
         <a href="/terms">Terms</a>
         <a href="/support">Support</a>
       </div>
-      <div class="socials">
-        <a href="https://www.instagram.com/moviespacestudios/" aria-label="MovieSpaces on Instagram" target="_blank" rel="noopener">
-          <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><rect x="2.5" y="2.5" width="19" height="19" rx="5.5"/><circle cx="12" cy="12" r="4.5"/><circle cx="17.6" cy="6.4" r="1.3" fill="currentColor" stroke="none"/></svg>
-        </a>
-        <a href="https://www.tiktok.com/@moviespacestudios" aria-label="MovieSpaces on TikTok" target="_blank" rel="noopener">
-          <svg width="18" height="18" viewBox="0 0 24 24" fill="currentColor"><path d="M16.6 3c.4 2.1 1.8 3.6 3.9 3.9v3c-1.5 0-2.9-.5-3.9-1.3v6.6c0 3.4-2.7 6-6 6-3.3 0-6-2.6-6-6 0-3.3 2.7-6 6-6 .3 0 .7 0 1 .1v3.1c-.3-.1-.7-.2-1-.2-1.6 0-3 1.4-3 3 0 1.7 1.4 3 3 3s3-1.3 3-3V3h3z"/></svg>
-        </a>
-        <a href="https://www.youtube.com/channel/UC5j0C8PzElphIs6jqwQYP6w" aria-label="MovieSpaces on YouTube" target="_blank" rel="noopener">
-          <svg width="19" height="19" viewBox="0 0 24 24" fill="currentColor"><path d="M22.5 7.2a2.8 2.8 0 0 0-2-2C18.9 4.8 12 4.8 12 4.8s-6.9 0-8.5.4a2.8 2.8 0 0 0-2 2C1.1 8.8 1.1 12 1.1 12s0 3.2.4 4.8a2.8 2.8 0 0 0 2 2c1.6.4 8.5.4 8.5.4s6.9 0 8.5-.4a2.8 2.8 0 0 0 2-2c.4-1.6.4-4.8.4-4.8s0-3.2-.4-4.8zM9.8 15.3V8.7l5.8 3.3-5.8 3.3z"/></svg>
-        </a>
-      </div>
-      <div class="fine">&copy; 2026 MovieSpaces Studios</div>
     </footer>
   </div>
 </body>
